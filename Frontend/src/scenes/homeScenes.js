@@ -470,8 +470,8 @@ export default class HomeScenes extends Phaser.Scene {
 
         const playBotBtn = node.querySelector('#play-bot');
         if (playBotBtn) playBotBtn.addEventListener('click', () => {
-            console.log('Iniciando partida contra Bot...');
-            this.scene.start('GameScene', { playerData: this.playerData, vsBot: true });
+            console.log('Seleccionando dificultad de Bot...');
+            this.scene.start('DifficultySelectScene', { playerData: this.playerData });
         });
 
         // Responsive resize handler

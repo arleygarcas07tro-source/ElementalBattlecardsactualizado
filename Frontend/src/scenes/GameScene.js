@@ -59,7 +59,7 @@ export default class GameScene extends Phaser.Scene {
      * @param {object} data - Datos pasados desde la escena anterior.
      */
     init(data) {
-        // data puede contener: playerData, socket, isLAN, roomCode, vsBot, playerRole, gameStartData
+        // data puede contener: playerData, socket, isLAN, roomCode, vsBot, playerRole, gameStartData, botDifficulty
         this.playerData = data.playerData || data;
         this.socket = data.socket || null;
         this.isLAN = !!data.isLAN;
@@ -67,8 +67,10 @@ export default class GameScene extends Phaser.Scene {
         this.playerRole = data.playerRole || null;
         this.gameStartData = data.gameStartData || null;
         this.vsBot = !!data.vsBot;
+        this.botDifficulty = data.botDifficulty || 3; // 1-10, default: Normal (3)
         console.log('GameScene iniciada con los datos del jugador:', this.playerData);
         console.log('Modo LAN:', this.isLAN, 'Rol:', this.playerRole);
+        console.log('Dificultad del bot:', this.botDifficulty, '(1=Muy Fácil, 10=Mito)');
     }
 
     preload() {
@@ -673,11 +675,12 @@ export default class GameScene extends Phaser.Scene {
         // 🤖 MODO BOT: Ejecutar IA del oponente
         console.log('[GameScene] IA del oponente evaluando acciones (BOT)', { turnNumber: this.opponentTurnNumber });
 
-        this.time.delayedCall(800, () => {
+        this.time.delayedCall(this.getBotActionDelay(), () => {
             let acted = false;
 
             // 1) Intentar fusionar (campo o mano) para avanzar hacia 6 tipos / llenar esencias
-            if (!acted && !this.opponentMustAttackThisTurn) {
+            const shouldAttemptFusion = this.shouldBotAttemptFusion();
+            if (!acted && shouldAttemptFusion && !this.opponentMustAttackThisTurn) {
                 const fusionPlan = this.findBestFusion();
                 if (fusionPlan && fusionPlan.kind === 'field') {
                     if (this.debugSync) console.log('[GameScene][debug] Oponente BOT fusionando campo', { indices: fusionPlan.indices, timestamp: Date.now() });
@@ -791,8 +794,9 @@ export default class GameScene extends Phaser.Scene {
                     }
                 }
 
-                // Si no obligado, atacar solo si score alto
-                if (!this.opponentMustAttackThisTurn && bestAttack && bestAttack.score >= 5) {
+                // Si no obligado, atacar solo si score cumple el threshold de dificultad
+                const attackThreshold = this.getBotAttackThreshold();
+                if (!this.opponentMustAttackThisTurn && bestAttack && bestAttack.score >= attackThreshold) {
                     if (this.debugSync) console.log('[GameScene][debug] Oponente BOT ataque calculado (opcional)', { attackerIndex: bestAttack.attacker.index, defenderIndex: bestAttack.defender.index, score: bestAttack.score, timestamp: Date.now() });
                     const attackerObj = this.children.list.find(c => c.getData('isOpponentCard') && c.getData('fieldIndex') === bestAttack.attacker.index);
                     const defenderObj = this.children.list.find(c => !c.getData('isOpponentCard') && c.getData('fieldIndex') === bestAttack.defender.index);
@@ -923,6 +927,9 @@ export default class GameScene extends Phaser.Scene {
                     currentScore -= 10;
                     if (result.loser === 'attacker') currentScore -= attacker.card.level * 3;
                 }
+
+                // Aplicar modificador de dificultad
+                currentScore += this.getBotAttackScoreModifier();
 
                 if (currentScore > bestAttack.score) {
                     bestAttack = { attacker, defender, score: currentScore };
@@ -2256,6 +2263,134 @@ export default class GameScene extends Phaser.Scene {
             this.pendingTurnChange = null; // Limpiamos el flag
             if (nextTurn === 'player') this.endOpponentTurn();
             else if (nextTurn === 'opponent') this.endPlayerTurn();
+        }
+    }
+
+    /**
+     * --- SISTEMA DE DIFICULTAD DEL BOT ---
+     * Determina si el bot debe intentar fusionar según su nivel de dificultad.
+     * @returns {boolean}
+     */
+    shouldBotAttemptFusion() {
+        switch (this.botDifficulty) {
+            case 1: // Muy Fácil - Nunca fusiona
+                return false;
+            case 2: // Fácil - 20% de probabilidad
+                return Math.random() < 0.2;
+            case 3: // Normal - 40% de probabilidad
+                return Math.random() < 0.4;
+            case 4: // Difícil - 80% de probabilidad
+                return Math.random() < 0.8;
+            case 5: // Muy Difícil - Siempre intenta fusionar
+                return true;
+            case 6: // Experto - Siempre fusiona + bonus estratégico
+                return true;
+            case 7: // Maestro - Siempre fusiona + predicción
+                return true;
+            case 8: // Gran Maestro - Siempre fusiona + contrajuego
+                return true;
+            case 9: // Leyenda - Siempre fusiona + perfección
+                return true;
+            case 10: // Mito - Siempre fusiona + omnisciencia
+                return true;
+            default:
+                return Math.random() < 0.4;
+        }
+    }
+
+    /**
+     * Determina el threshold de puntuación de ataque según la dificultad del bot.
+     * Cuanto más bajo el threshold, más fácilmente el bot decide atacar.
+     * @returns {number}
+     */
+    getBotAttackThreshold() {
+        switch (this.botDifficulty) {
+            case 6: // Experto - Ataca si score >= -1 (muy agresivo)
+                return -1;
+            case 7: // Maestro - Ataca si score >= -2 (extremadamente agresivo)
+                return -2;
+            case 8: // Gran Maestro - Ataca si score >= -3 (riesgoso pero preciso)
+                return -3;
+            case 9: // Leyenda - Ataca si score >= -5 (juega con pérdidas calculadas)
+                return -5;
+            case 10: // Mito - Ataca siempre (sin threshold)
+                return -10;
+            case 1: // Muy Fácil - Ataca solo si score >= 10 (muy restrictivo)
+                return 10;
+            case 2: // Fácil - Ataca si score >= 7
+                return 7;
+            case 3: // Normal - Ataca si score >= 5
+                return 5;
+            case 4: // Difícil - Ataca si score >= 3
+                return 3;
+            case 5: // Muy Difícil - Ataca si score >= 0 (casi siempre)
+                return 0;
+            default:
+                return 5;
+        }
+    }
+
+    /**
+     * Determina si el bot debe colocar cartas estratégicamente según su nivel.
+     * Devuelve el tiempo de espera (delay) antes de ejecutar la acción.
+     * @returns {number} Delay en milisegundos
+     */
+    getBotActionDelay() {
+        switch (this.botDifficulty) {
+            case 6: // Experto - Delay muy corto pero variable (parece pensativo)
+                return Phaser.Math.Between(200, 400);
+            case 7: // Maestro - Delay mínimo (decisiones rápidas)
+                return Phaser.Math.Between(150, 300);
+            case 8: // Gran Maestro - Delay casi instantáneo
+                return Phaser.Math.Between(100, 200);
+            case 9: // Leyenda - Delay instantáneo (decisiones perfectas)
+                return 50;
+            case 10: // Mito - Sin delay (omnisciente)
+                return 0;
+            case 1: // Muy Fácil - Delay largo (parece lento/indeciso)
+                return Phaser.Math.Between(1500, 2500);
+            case 2: // Fácil - Delay medio-largo
+                return Phaser.Math.Between(1000, 1800);
+            case 3: // Normal - Delay medio
+                return 800;
+            case 4: // Difícil - Delay corto (rápido)
+                return Phaser.Math.Between(400, 700);
+            case 5: // Muy Difícil - Delay muy corto (casi inmediato)
+                return 300;
+            default:
+                return 800;
+        }
+    }
+
+    /**
+     * Obtiene un modificador de puntuación de ataque según la dificultad.
+     * Algunos niveles pueden hacer errores estratégicos.
+     * @returns {number}
+     */
+    getBotAttackScoreModifier() {
+        switch (this.botDifficulty) {
+            case 6: // Experto - Bonus estratégico pequeño
+                return Phaser.Math.Between(1, 3);
+            case 7: // Maestro - Bonus estratégico medio
+                return Phaser.Math.Between(2, 5);
+            case 8: // Gran Maestro - Bonus estratégico alto
+                return Phaser.Math.Between(3, 7);
+            case 9: // Leyenda - Bonus estratégico muy alto
+                return Phaser.Math.Between(5, 10);
+            case 10: // Mito - Bonus máximo (perfecto)
+                return 10;
+            case 1: // Muy Fácil - Agrega ruido aleatorio al score (puede atacar mal)
+                return Phaser.Math.Between(-15, -5);
+            case 2: // Fácil - Pequeño ruido negativo
+                return Phaser.Math.Between(-3, 0);
+            case 3: // Normal - Sin modificador
+                return 0;
+            case 4: // Difícil - Pequeño modificador positivo
+                return Phaser.Math.Between(0, 2);
+            case 5: // Muy Difícil - Sin modificador (juego perfecto)
+                return 0;
+            default:
+                return 0;
         }
     }
 }

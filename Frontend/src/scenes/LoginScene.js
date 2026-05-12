@@ -1,7 +1,10 @@
 import Phaser from 'phaser';
 
-// URL del backend real
-const scriptURL = "https://elemental-battlecards.onrender.com/api/auth/login";
+// URL del backend - Ajusta esto según donde esté tu servidor
+// Para desarrollo local:
+const scriptURL = "http://localhost:3001/api/auth/login";
+// Para jugar en LAN (reemplaza 192.168.x.x con la IP del servidor):
+// const scriptURL = "http://192.168.x.x:3001/api/auth/login";
 
 export default class LoginScene extends Phaser.Scene {
     constructor() {

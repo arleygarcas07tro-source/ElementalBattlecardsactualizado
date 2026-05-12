@@ -6,6 +6,7 @@ const cors = require('cors');
 
 // Importar módulos
 const db = require('./config/db'); // ahora importamos el objeto
+const models = require('./models'); // Importar modelos
 const socketManager = require('./socketManager');
 const { displayNetworkInfo } = require('./show-network-info');
 
@@ -24,6 +25,12 @@ const startServer = async () => {
             console.log('DB conectado y SSL:', !!process.env.DB_REQUIRE_SSL);
         } else {
             console.log('No hay configuración de base de datos disponible');
+        }
+
+        // Sincronizar modelos con la base de datos
+        if (sequelize) {
+            await sequelize.sync({ alter: true });
+            console.log('✓ Modelos sincronizados con la BD');
         }
     } catch (err) {
         console.error('No se pudo conectar a la BD:', err.message || err);

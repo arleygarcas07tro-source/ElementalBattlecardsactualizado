@@ -1,4 +1,5 @@
 require('dotenv').config();
+const path = require('path');
 const { Sequelize } = require('sequelize');
 
 const useSqlite = (process.env.DB_USE_SQLITE || 'false').toLowerCase() === 'true';
@@ -7,7 +8,7 @@ let sequelize;
 if (useSqlite) {
     sequelize = new Sequelize({
         dialect: 'sqlite',
-        storage: ':memory:',
+        storage: path.resolve(__dirname, '../database.sqlite'),
         logging: false,
     });
 } else {
