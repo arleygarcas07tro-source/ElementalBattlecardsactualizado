@@ -113,7 +113,23 @@ export default class CreateRoomScene extends Phaser.Scene {
                 color: white;
                 cursor: pointer;
                 margin-top: 10px;
+                transition: transform 180ms cubic-bezier(.2,.8,.2,1), box-shadow 180ms, filter 180ms;
+                will-change: transform;
             }
+
+            /* Button animations */
+            @keyframes subtle-pulse {
+                0% { transform: scale(1); }
+                50% { transform: scale(1.02); }
+                100% { transform: scale(1); }
+            }
+            .btn-primary.pulse { animation: subtle-pulse 3.8s ease-in-out infinite; }
+            .btn-primary.animated, .btn-exit.animated, .btn-close.animated { backface-visibility: hidden; }
+            .btn-primary:hover, .btn-exit:hover, .btn-close:hover {
+                transform: translateY(-4px) scale(1.03);
+                box-shadow: 0 8px 20px rgba(0,0,0,0.35);
+            }
+            .btn-primary:active, .btn-exit:active, .btn-close:active { transform: translateY(0) scale(0.98); }
         </style>
 
         <div class="wrap">
@@ -167,6 +183,23 @@ export default class CreateRoomScene extends Phaser.Scene {
         node.style.top = 0;
         node.style.width = width + "px";
         node.style.height = height + "px";
+
+        // Añadir clases de animación y manejadores de interacción a los botones
+        try {
+            const animatedBtns = node.querySelectorAll('.btn-primary, .btn-exit, .btn-close');
+            animatedBtns.forEach((b, i) => {
+                b.classList.add('animated');
+                if (b.classList && b.classList.contains('btn-primary')) {
+                    b.classList.add('pulse');
+                    b.style.animationDelay = (Math.random() * 2) + 's';
+                }
+                b.addEventListener('pointerdown', () => { b.style.transform = 'translateY(0) scale(0.98)'; });
+                b.addEventListener('pointerup', () => { b.style.transform = ''; });
+                b.addEventListener('pointerleave', () => { b.style.transform = ''; });
+            });
+        } catch (e) {
+            console.warn('No se pudieron inicializar animaciones de botones', e);
+        }
 
         // BUTTONS
         const exitBtn = node.querySelector(".btn-exit");

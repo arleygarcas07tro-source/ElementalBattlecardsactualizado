@@ -12,6 +12,11 @@ export default class PreloaderScene extends Phaser.Scene {
     preload() {
         this.createLoadingBar();
 
+        // Asegurar como fallback que el fondo y logo de carga estén disponibles
+        // (BootScene debería cargarlos, pero algunos flujos pueden saltarlo).
+        this.load.image('loading-background', '/assets/images/pantalla de carga/pantalla de carga.jpeg');
+        this.load.image('loading-logo', '/assets/images/Logotipoletras.png');
+
         // --- Carga de Recursos ---
 
         // Ruta pública desde donde se sirven los assets (raíz del servidor)
@@ -30,14 +35,14 @@ export default class PreloaderScene extends Phaser.Scene {
         this.load.image('card_back', `${assetPath}abajo.png`);
 
         // 2. Cargar todas las imágenes de las caras de las cartas
-        // Los archivos en la carpeta siguen el patrón: 'carta <tipo>.png', 'carta <tipo> 2.png', 'carta <tipo> 3.png'
+        // Los archivos en la carpeta siguen el patrón: 'carta <tipo>.jpeg', 'carta <tipo> 2.jpeg', 'carta <tipo> 3.jpeg'
         const types = Object.values(CardTypes);
         for (const type of types) {
             for (let level = 1; level <= 3; level++) {
                 const key = `${type}_${level}`; // Ej: 'fuego_1'
                 // Levanta el nombre correcto según el nivel
-                const fileName = level === 1 ? `carta ${type}.png` : `carta-${type}-${level}.png`;
-                const url = `${assetPath}${fileName}`; // Ej: '/assets/images/cartas/carta fuego 2.png'
+                const fileName = level === 1 ? `carta ${type}.jpeg` : `carta-${type}-${level}.jpeg`;
+                const url = `${assetPath}${fileName}`; // Ej: '/assets/images/cartas/carta fuego 2.jpeg'
                 this.load.image(key, url);
             }
         }

@@ -81,28 +81,28 @@ export default class GameScene extends Phaser.Scene {
         this.load.image('slot', '/assets/images/cartas/Espacio vacio.png');
 
         // Cartas nivel 1
-        this.load.image('card-fuego-1', '/assets/images/cartas/carta-fuego-1.png');
-        this.load.image('card-agua-1', '/assets/images/cartas/carta-agua-1.png');
-        this.load.image('card-planta-1', '/assets/images/cartas/carta-planta-1.png');
-        this.load.image('card-luz-1', '/assets/images/cartas/carta-luz-1.png');
-        this.load.image('card-sombra-1', '/assets/images/cartas/carta-sombra-1.png');
-        this.load.image('card-espiritu-1', '/assets/images/cartas/carta-espiritu-1.png');
+        this.load.image('card-fuego-1', '/assets/images/cartas/carta-fuego-1.jpeg');
+        this.load.image('card-agua-1', '/assets/images/cartas/carta-agua-1.jpeg');
+        this.load.image('card-planta-1', '/assets/images/cartas/carta-planta-1.jpeg');
+        this.load.image('card-luz-1', '/assets/images/cartas/carta-luz-1.jpeg');
+        this.load.image('card-sombra-1', '/assets/images/cartas/carta-sombra-1.jpeg');
+        this.load.image('card-espiritu-1', '/assets/images/cartas/carta-espiritu-1.jpeg');
 
         //cartas nivel 2
-        this.load.image('card-fuego-2', '/assets/images/cartas/carta-fuego-2.png');
-        this.load.image('card-agua-2', '/assets/images/cartas/carta-agua-2.png');
-        this.load.image('card-planta-2', '/assets/images/cartas/carta-planta-2.png');
-        this.load.image('card-luz-2', '/assets/images/cartas/carta-luz-2.png');
-        this.load.image('card-sombra-2', '/assets/images/cartas/carta-sombra-2.png');
-        this.load.image('card-espiritu-2', '/assets/images/cartas/carta-espiritu-2.png');
+        this.load.image('card-fuego-2', '/assets/images/cartas/carta-fuego-2.jpeg');
+        this.load.image('card-agua-2', '/assets/images/cartas/carta-agua-2.jpeg');
+        this.load.image('card-planta-2', '/assets/images/cartas/carta-planta-2.jpeg');
+        this.load.image('card-luz-2', '/assets/images/cartas/carta-luz-2.jpeg');
+        this.load.image('card-sombra-2', '/assets/images/cartas/carta-sombra-2.jpeg');
+        this.load.image('card-espiritu-2', '/assets/images/cartas/carta-espiritu-2.jpeg');
         
         //cartas nivel 3
-        this.load.image('card-fuego-3', '/assets/images/cartas/carta-fuego-3.png');
-        this.load.image('card-agua-3', '/assets/images/cartas/carta-agua-3.png');
-        this.load.image('card-planta-3', '/assets/images/cartas/carta-planta-3.png');
-        this.load.image('card-luz-3', '/assets/images/cartas/carta-luz-3.png');
-        this.load.image('card-sombra-3', '/assets/images/cartas/carta-sombra-3.png');
-        this.load.image('card-espiritu-3', '/assets/images/cartas/carta-espiritu-3.png');
+        this.load.image('card-fuego-3', '/assets/images/cartas/carta-fuego-3.jpeg');
+        this.load.image('card-agua-3', '/assets/images/cartas/carta-agua-3.jpeg');
+        this.load.image('card-planta-3', '/assets/images/cartas/carta-planta-3.jpeg');
+        this.load.image('card-luz-3', '/assets/images/cartas/carta-luz-3.jpeg');
+        this.load.image('card-sombra-3', '/assets/images/cartas/carta-sombra-3.jpeg');
+        this.load.image('card-espiritu-3', '/assets/images/cartas/carta-espiritu-3.jpeg');
         
         //mazo reverso
         this.load.image('card-back-opponent', '/assets/images/cartas/baraja-oponente.png');

@@ -65,6 +65,8 @@ export default class RegisterSceneUpdated extends Phaser.Scene {
                     border: 1px solid #ffd77a;
                     cursor: pointer;
                     font-weight: 600;
+                    transition: transform 180ms cubic-bezier(.2,.8,.2,1), box-shadow 180ms, filter 180ms;
+                    will-change: transform;
                 }
                 .btn-create {
                     background-color: #0b6c64;
@@ -74,6 +76,13 @@ export default class RegisterSceneUpdated extends Phaser.Scene {
                         0 0 12px rgba(0, 0, 0);
                     color: #ffd77a;
                     text-shadow: 0 1px 0 rgba(0,0,0,0.6);
+                    transition: transform 180ms cubic-bezier(.2,.8,.2,1), box-shadow 180ms, filter 180ms;
+                }
+                @keyframes subtle-pulse { 0% { transform: scale(1);} 50% { transform: scale(1.02);} 100% { transform: scale(1);} }
+                .btn-create.pulse { animation: subtle-pulse 3.8s ease-in-out infinite; }
+                .btn-create.animated { backface-visibility: hidden; }
+                .register-ui button:hover { transform: translateY(-4px) scale(1.03); box-shadow: 0 8px 20px rgba(0,0,0,0.35); }
+                .register-ui button:active { transform: translateY(0) scale(0.98); }
                 }
                 .register-link {
                     display: block;
@@ -159,6 +168,19 @@ export default class RegisterSceneUpdated extends Phaser.Scene {
                 createBtn.textContent = prevText;
             }
         });
+
+        // Inicializar animaciones en el botón de crear cuenta
+        try {
+            if (createBtn) {
+                createBtn.classList.add('animated', 'pulse');
+                createBtn.style.animationDelay = (Math.random() * 2) + 's';
+                createBtn.addEventListener('pointerdown', () => { createBtn.style.transform = 'translateY(0) scale(0.98)'; });
+                createBtn.addEventListener('pointerup', () => { createBtn.style.transform = ''; });
+                createBtn.addEventListener('pointerleave', () => { createBtn.style.transform = ''; });
+            }
+        } catch (e) {
+            console.warn('No se pudieron inicializar animaciones en RegisterScene', e);
+        }
 
         const loginLink = this.formElement.node.querySelector('#login-link');
         loginLink.addEventListener('click', (e) => { e.preventDefault(); this.scene.start('LoginScene'); });

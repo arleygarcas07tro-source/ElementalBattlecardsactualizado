@@ -84,6 +84,8 @@ export default class LoginScene extends Phaser.Scene {
                         0 0 12px rgba(0, 0, 0) inset,
                         0 0 24px rgba(0, 0, 0) inset,
                         0 0 12px rgba(0, 0, 0);
+                    transition: transform 180ms cubic-bezier(.2,.8,.2,1), box-shadow 180ms, filter 180ms;
+                    will-change: transform;
                 }
 
                 .btn-login {
@@ -121,7 +123,19 @@ export default class LoginScene extends Phaser.Scene {
                     cursor: pointer;
                     text-align: center;
                     font-weight: 500;
+                    transition: transform 180ms cubic-bezier(.2,.8,.2,1), box-shadow 180ms, filter 180ms;
+                    will-change: transform;
                 }
+                /* Button animations */
+                @keyframes subtle-pulse {
+                    0% { transform: scale(1); }
+                    50% { transform: scale(1.02); }
+                    100% { transform: scale(1); }
+                }
+                .btn-login.pulse, .left-buttons button.pulse { animation: subtle-pulse 3.8s ease-in-out infinite; }
+                .btn-login.animated, .left-buttons button.animated { backface-visibility: hidden; }
+                .login-ui button:hover, .left-buttons button:hover { transform: translateY(-4px) scale(1.03); box-shadow: 0 8px 20px rgba(0,0,0,0.35); }
+                .login-ui button:active, .left-buttons button:active { transform: translateY(0) scale(0.98); }
             </style>
 
                 <div class="login-ui">
@@ -143,6 +157,21 @@ export default class LoginScene extends Phaser.Scene {
 
         this.formElement = this.add.dom(width / 2, height / 2).createFromHTML(formHTML);
 
+        // Inicializar animaciones en botones del formulario
+        try {
+            const formNode = this.formElement.node;
+            const loginBtn = formNode.querySelector('.btn-login');
+            if (loginBtn) {
+                loginBtn.classList.add('animated', 'pulse');
+                loginBtn.style.animationDelay = (Math.random() * 2) + 's';
+                loginBtn.addEventListener('pointerdown', () => { loginBtn.style.transform = 'translateY(0) scale(0.98)'; });
+                loginBtn.addEventListener('pointerup', () => { loginBtn.style.transform = ''; });
+                loginBtn.addEventListener('pointerleave', () => { loginBtn.style.transform = ''; });
+            }
+        } catch (e) {
+            console.warn('No se pudo inicializar animaciones en LoginScene', e);
+        }
+
         const loginButton = this.formElement.node.querySelector('.btn-login');
         const usernameInput = this.formElement.getChildByName('username') || this.formElement.node.querySelector('input[name="username"]');
         const passwordInput = this.formElement.getChildByName('password') || this.formElement.node.querySelector('input[name="password"]');
@@ -161,57 +190,46 @@ export default class LoginScene extends Phaser.Scene {
             loginButton.textContent = 'Entrando...';
 
             try {
-                const res = await fetch(scriptURL, {
+                const response = await fetch(scriptURL, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
                     body: JSON.stringify({ username, password })
                 });
 
-                const json = await res.json();
+                const data = await response.json();
 
-                if (res.ok && json.token) {
-                    console.log('Login exitoso:', json);
-                    localStorage.setItem('token', json.token); // guardar token
-                    this.scene.start('HomeScenes');
-                    return;
+                if (response.ok) {
+                    // Guardar el token en localStorage
+                    localStorage.setItem('token', data.token);
+                    localStorage.setItem('user', JSON.stringify(data.user));
+                    
+                    // Transicionar a la pantalla de carga
+                    this.scene.start('LoadingScene', { playerData: data.user });
+                } else {
+                    alert(data.message || 'Error al iniciar sesión');
+                    loginButton.disabled = false;
+                    loginButton.style.opacity = '1';
+                    loginButton.textContent = 'Iniciar sesión';
                 }
-
-                alert('Error al iniciar sesión: ' + (json.message || 'Credenciales incorrectas'));
             } catch (error) {
-                console.error('Error de conexión/login', error);
-                alert('Error de conexión. Revisa la consola.');
-            } finally {
+                console.error('Error:', error);
+                alert('Error de conexión con el servidor: ' + error.message);
                 loginButton.disabled = false;
-                loginButton.style.opacity = '';
+                loginButton.style.opacity = '1';
                 loginButton.textContent = 'Iniciar sesión';
             }
         });
 
-        // Crear botones laterales fijos a la izquierda, abajo
-        const leftButtonsHTML = `
-            <div class="left-buttons">
-                <button id="news-btn">Noticias</button>
-                <button id="credits-btn">Créditos</button>
-                <button id="contact-btn">Contacto</button>
-            </div>
-        `;
-
-        this.leftButtonsElement = this.add.dom(120, this.scale.height - 180).createFromHTML(leftButtonsHTML);
-
-        const newsBtn = this.leftButtonsElement.node.querySelector('#news-btn');
-        const creditsBtn = this.leftButtonsElement.node.querySelector('#credits-btn');
-        const contactBtn = this.leftButtonsElement.node.querySelector('#contact-btn');
-
-        if (newsBtn) newsBtn.addEventListener('click', () => alert('Noticias - próximamente'));
-        if (creditsBtn) creditsBtn.addEventListener('click', () => alert('Créditos - próximamente'));
-        if (contactBtn) contactBtn.addEventListener('click', () => alert('Contacto - próximamente'));
-
-
+        // Event listener para el link de crear cuenta
         const registerLink = this.formElement.node.querySelector('#register-link');
-        registerLink.addEventListener('click', (event) => {
-            event.preventDefault();
-            this.scene.start('RegisterScene');
-        });
+        if (registerLink) {
+            registerLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.scene.start('RegisterScene');
+            });
+        }
 
         // Logo arriba
         this.logoImage = this.add.image(this.scale.width / 2, this.scale.height * 0.08, 'logo').setOrigin(0.5).setDepth(1);

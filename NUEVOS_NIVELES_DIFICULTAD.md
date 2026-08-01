@@ -1,4 +1,4 @@
-# 🎯 NUEVOS NIVELES DE DIFICULTAD (6-10)
+# NUEVOS NIVELES DE DIFICULTAD (6-10)
 
 ## Resumen de Cambios
 
@@ -16,7 +16,7 @@ Se han implementado **5 niveles adicionales de dificultad** (del 6 al 10) para p
 
 ---
 
-## 📊 Parámetros de Dificultad
+## Parámetros de Dificultad
 
 ### Probabilidad de Fusión
 - **Niveles 1-5**: Mantiene la lógica anterior
@@ -45,7 +45,7 @@ Se han implementado **5 niveles adicionales de dificultad** (del 6 al 10) para p
 
 ---
 
-## 🎨 Diseño Visual
+## Diseño Visual
 
 ### Colores de los Nuevos Niveles
 - **Nivel 6 (Experto)**: Púrpura claro (#cc00ff)
@@ -61,7 +61,7 @@ Se han implementado **5 niveles adicionales de dificultad** (del 6 al 10) para p
 
 ---
 
-## 🔧 Implementación Técnica
+## Implementación Técnica
 
 ### Archivos Modificados
 
@@ -83,7 +83,7 @@ Se han implementado **5 niveles adicionales de dificultad** (del 6 al 10) para p
 
 ---
 
-## 🎮 Recomendaciones de Juego
+## Recomendaciones de Juego
 
 ### Para Principiantes
 - Empieza con **Nivel 1-3** para aprender mecánicas básicas
@@ -102,7 +102,7 @@ Se han implementado **5 niveles adicionales de dificultad** (del 6 al 10) para p
 
 ---
 
-## 🐛 Testing y Debugging
+## Testing y Debugging
 
 ### Verificar Implementación
 1. Abre la escena de selección de dificultad
@@ -120,7 +120,7 @@ Se han implementado **5 niveles adicionales de dificultad** (del 6 al 10) para p
 
 ---
 
-## 🚀 Próximos Desarrollos
+## Próximos Desarrollos
 
 Posibles mejoras futuras:
 - **Niveles dinámicos**: Dificultad que se ajusta según el rendimiento del jugador
@@ -130,5 +130,5 @@ Posibles mejoras futuras:
 
 ---
 
-¡Los nuevos niveles de dificultad están listos! 🎉 Ahora tienes un desafío que va desde principiante hasta prácticamente imbatible.</content>
+</content>
 <parameter name="filePath">c:\Users\USUARIO\Desktop\elemental-battlecards\NUEVOS_NIVELES_DIFICULTAD.md

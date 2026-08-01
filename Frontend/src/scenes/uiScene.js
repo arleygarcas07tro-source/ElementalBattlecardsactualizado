@@ -16,12 +16,12 @@ export default class UIScene extends Phaser.Scene {
     preload() {
         // Cargamos aquí los assets de la UI para mantener el código organizado
         console.log('[UIScene] Cargando assets de UI...');
-        this.load.image('orb-fuego', '/assets/images/iconos/fuego.png');
-        this.load.image('orb-agua', '/assets/images/iconos/agua.png');
-        this.load.image('orb-planta', '/assets/images/iconos/planta.png');
-        this.load.image('orb-luz', '/assets/images/iconos/luz.png');
-        this.load.image('orb-espiritu', '/assets/images/iconos/espiritu.png');
-        this.load.image('orb-sombra', '/assets/images/iconos/sombra.png');
+        this.load.image('orb-fuego', '/assets/images/iconos/fuego.jpeg');
+        this.load.image('orb-agua', '/assets/images/iconos/agua.jpeg');
+        this.load.image('orb-planta', '/assets/images/iconos/planta.jpeg');
+        this.load.image('orb-luz', '/assets/images/iconos/luz.jpeg');
+        this.load.image('orb-espiritu', '/assets/images/iconos/espiritu.jpeg');
+        this.load.image('orb-sombra', '/assets/images/iconos/sombra.jpeg');
     }
 
     create(data) {
@@ -40,25 +40,27 @@ export default class UIScene extends Phaser.Scene {
         // ---------- BARRA SUPERIOR ----------
         const topBarY = 50; // Eje vertical central para los elementos superiores
 
-        // --- MENU HAMBURGUESA (se mantiene a la izquierda) ---
-        const hamSize = 36;
-        const hamX = 16, hamY = 14;
-        const menuBg = this.add.rectangle(hamX + 6, hamY + 6, 180, 120, 0x000000, 0.75).setOrigin(0).setDepth(1000);
-        menuBg.setVisible(false);
-        const hamburger = this.add.text(hamX, hamY + 20, '☰', { fontSize: `${hamSize}px`, color: '#fff' }).setInteractive({ useHandCursor: true }).setDepth(1000);
-        const settingsButton = this.add.text(hamX + 12, hamY + 40, '⚙ Configuración', { fontSize: '14px', color: '#fff' }).setDepth(1001).setInteractive({ useHandCursor: true }).setVisible(false);
-        const surrenderButton = this.add.text(hamX + 12, hamY + 70, '🏳 Rendirse', { fontSize: '14px', color: '#fff' }).setDepth(1001).setInteractive({ useHandCursor: true }).setVisible(false);
-
-        hamburger.on('pointerdown', () => {
-            const visible = !menuBg.visible;
-            menuBg.setVisible(visible);
-            settingsButton.setVisible(visible);
-            surrenderButton.setVisible(visible);
+        // --- BOTÓN DE PAUSA (esquina superior izquierda) ---
+        const pauseBtn = this.add.text(30, 30, '⏸', { 
+            fontSize: '40px', 
+            color: '#fff',
+            fontStyle: 'bold'
+        })
+        .setInteractive({ useHandCursor: true })
+        .setDepth(1000)
+        .on('pointerdown', () => {
+            this.scene.pause('GameScene');
+            this.scene.pause('UIScene');
+            this.scene.launch('PauseScene');
+        })
+        .on('pointerover', () => {
+            pauseBtn.setScale(1.15);
+            pauseBtn.setColor('#ffd700');
+        })
+        .on('pointerout', () => {
+            pauseBtn.setScale(1);
+            pauseBtn.setColor('#fff');
         });
-
-        // botones son placeholders por ahora
-        settingsButton.on('pointerdown', () => { /* placeholder */ });
-        surrenderButton.on('pointerdown', () => { /* placeholder */ });
 
         // --- Panel central (TU vs OPONENTE) ---
         const barWidth = 360;

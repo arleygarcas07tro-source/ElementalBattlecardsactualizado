@@ -30,7 +30,11 @@ export default class DifficultySelectScene extends Phaser.Scene {
                 color: white;
                 font-family: Poppins, Arial;
                 overflow: hidden;
-                background: linear-gradient(135deg, rgba(10,10,30,0.9) 0%, rgba(20,10,40,0.9) 100%);
+                /* Background image with a translucent gradient overlay */
+                background-image: linear-gradient(135deg, rgba(10,10,30,0.35) 0%, rgba(20,10,40,0.35) 100%), url('/assets/images/levels/background%20levels.jpeg');
+                background-size: cover;
+                background-position: center;
+                background-repeat: no-repeat;
             }
 
             /* HEADER */
@@ -102,7 +106,7 @@ export default class DifficultySelectScene extends Phaser.Scene {
             }
 
             .difficulty-level {
-                font-size: 11px;
+                font-size: 14px;
                 color: #aaa;
                 font-weight: 600;
                 text-transform: uppercase;
@@ -219,6 +223,15 @@ RESPONSIVE DESIGN */
                 background: #8a00ff;
                 border-color: #8a00ff;
             }
+            .back-button {
+                transition: transform 180ms cubic-bezier(.2,.8,.2,1), box-shadow 180ms, filter 180ms;
+                will-change: transform;
+            }
+            @keyframes subtle-pulse { 0% { transform: scale(1);} 50% { transform: scale(1.02);} 100% { transform: scale(1);} }
+            .back-button.pulse { animation: subtle-pulse 3.8s ease-in-out infinite; }
+            .back-button.animated { backface-visibility: hidden; }
+            .back-button:hover { transform: translateY(-4px) scale(1.03); box-shadow: 0 8px 20px rgba(0,0,0,0.35); }
+            .back-button:active { transform: translateY(0) scale(0.98); }
         </style>
 
         <div class="wrap">
@@ -238,7 +251,7 @@ RESPONSIVE DESIGN */
                     <div class="difficulty-card difficulty-1" data-level="1">
                         <div class="difficulty-level">Nivel 1</div>
                         <div class="difficulty-name">Muy Fácil</div>
-                        <div class="difficulty-stars">⭐</div>
+                        <div class="difficulty-stars"></div>
                         <div class="difficulty-description">El bot comete errores, no fusiona cartas.</div>
                     </div>
 
@@ -246,7 +259,7 @@ RESPONSIVE DESIGN */
                     <div class="difficulty-card difficulty-2" data-level="2">
                         <div class="difficulty-level">Nivel 2</div>
                         <div class="difficulty-name">Fácil</div>
-                        <div class="difficulty-stars">⭐⭐</div>
+                        <div class="difficulty-stars"></div>
                         <div class="difficulty-description">El bot juega con decisiones predecibles.</div>
                     </div>
 
@@ -254,7 +267,7 @@ RESPONSIVE DESIGN */
                     <div class="difficulty-card difficulty-3" data-level="3">
                         <div class="difficulty-level">Nivel 3</div>
                         <div class="difficulty-name">Normal</div>
-                        <div class="difficulty-stars">⭐⭐⭐</div>
+                        <div class="difficulty-stars"></div>
                         <div class="difficulty-description">El bot juega bien y utiliza fusiones.</div>
                     </div>
 
@@ -262,7 +275,7 @@ RESPONSIVE DESIGN */
                     <div class="difficulty-card difficulty-4" data-level="4">
                         <div class="difficulty-level">Nivel 4</div>
                         <div class="difficulty-name">Difícil</div>
-                        <div class="difficulty-stars">⭐⭐⭐⭐</div>
+                        <div class="difficulty-stars"></div>
                         <div class="difficulty-description">El bot juega óptimamente con estrategia.</div>
                     </div>
 
@@ -270,7 +283,7 @@ RESPONSIVE DESIGN */
                     <div class="difficulty-card difficulty-5" data-level="5">
                         <div class="difficulty-level">Nivel 5</div>
                         <div class="difficulty-name">Muy Difícil</div>
-                        <div class="difficulty-stars">⭐⭐⭐⭐⭐</div>
+                        <div class="difficulty-stars"></div>
                         <div class="difficulty-description">El bot juega de forma casi perfecta.</div>
                     </div>
 
@@ -279,7 +292,7 @@ RESPONSIVE DESIGN */
                     <div class="difficulty-card difficulty-6" data-level="6">
                         <div class="difficulty-level">Nivel 6</div>
                         <div class="difficulty-name">Experto</div>
-                        <div class="difficulty-stars">⭐⭐⭐⭐⭐⭐</div>
+                        <div class="difficulty-stars"></div>
                         <div class="difficulty-description">El bot predice movimientos y juega agresivamente.</div>
                     </div>
 
@@ -287,7 +300,7 @@ RESPONSIVE DESIGN */
                     <div class="difficulty-card difficulty-7" data-level="7">
                         <div class="difficulty-level">Nivel 7</div>
                         <div class="difficulty-name">Maestro</div>
-                        <div class="difficulty-stars">⭐⭐⭐⭐⭐⭐⭐</div>
+                        <div class="difficulty-stars"></div>
                         <div class="difficulty-description">El bot usa estrategias avanzadas y contrajuega.</div>
                     </div>
 
@@ -295,7 +308,7 @@ RESPONSIVE DESIGN */
                     <div class="difficulty-card difficulty-8" data-level="8">
                         <div class="difficulty-level">Nivel 8</div>
                         <div class="difficulty-name">Gran Maestro</div>
-                        <div class="difficulty-stars">⭐⭐⭐⭐⭐⭐⭐⭐</div>
+                        <div class="difficulty-stars"></div>
                         <div class="difficulty-description">El bot juega con precisión quirúrgica.</div>
                     </div>
 
@@ -303,7 +316,7 @@ RESPONSIVE DESIGN */
                     <div class="difficulty-card difficulty-9" data-level="9">
                         <div class="difficulty-level">Nivel 9</div>
                         <div class="difficulty-name">Leyenda</div>
-                        <div class="difficulty-stars">⭐⭐⭐⭐⭐⭐⭐⭐⭐</div>
+                        <div class="difficulty-stars"></div>
                         <div class="difficulty-description">El bot es prácticamente imbatible.</div>
                     </div>
 
@@ -311,7 +324,7 @@ RESPONSIVE DESIGN */
                     <div class="difficulty-card difficulty-10" data-level="10">
                         <div class="difficulty-level">Nivel 10</div>
                         <div class="difficulty-name">Mito</div>
-                        <div class="difficulty-stars">⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐</div>
+                        <div class="difficulty-stars"></div>
                         <div class="difficulty-description">El bot juega como una deidad del juego.</div>
                     </div>
                 </div>
@@ -337,6 +350,15 @@ RESPONSIVE DESIGN */
             backBtn.addEventListener('click', () => {
                 this.scene.start('HomeScenes', { playerData: this.playerData });
             });
+            try {
+                backBtn.classList.add('animated', 'pulse');
+                backBtn.style.animationDelay = (Math.random() * 2) + 's';
+                backBtn.addEventListener('pointerdown', () => { backBtn.style.transform = 'translateY(0) scale(0.98)'; });
+                backBtn.addEventListener('pointerup', () => { backBtn.style.transform = ''; });
+                backBtn.addEventListener('pointerleave', () => { backBtn.style.transform = ''; });
+            } catch (e) {
+                console.warn('No se pudieron inicializar animaciones en DifficultySelectScene', e);
+            }
         }
 
         // Difficulty card selection
