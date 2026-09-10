@@ -50,6 +50,10 @@ export default class PreloaderScene extends Phaser.Scene {
         // Aquí también cargarías otros assets como fondos, botones, sonidos, etc.
         // this.load.image('background', 'assets/images/background.png');
         // this.load.audio('attackSound', 'assets/sounds/attack.mp3');
+
+        // Video de fondo del menú principal: se carga UNA vez aquí para que
+        // HomeScenes lo tome de la caché y no haya cortes/negro al volver.
+        this.load.video('menu-bg-video', '/assets/images/menu%20principal/menu%20principal%20fondo.mp4', { muted: true, noAudio: true });
     }
 
     /**

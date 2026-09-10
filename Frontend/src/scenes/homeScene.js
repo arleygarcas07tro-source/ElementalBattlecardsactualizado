@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { startMenuMusic, play as playSfx } from '../helpers/audioManager.js';
 
 export default class HomeScenes extends Phaser.Scene {
     constructor() {
@@ -16,14 +17,22 @@ export default class HomeScenes extends Phaser.Scene {
     }
 
     preload() {
-        this.load.video("menu principal fondo", "/assets/images/menu%20principal/menu%20principal%20fondo.mp4", { muted: true });
+        // El video del menú se precarga UNA VEZ en PreloaderScene para que al
+        // volver a esta escena no haya recorte/negro por recarga de red.
+        if (!this.cache.video.exists('menu-bg-video')) {
+            this.load.video('menu-bg-video', "/assets/images/menu%20principal/menu%20principal%20fondo.mp4", { muted: true, noAudio: true });
+        }
     }
 
     create() {
         const { width, height } = this.scale;
 
         // BACKGROUND
-        this.bg = this.add.video(width / 2, height / 2, 'menu principal fondo').setOrigin(0.5);
+        // Fondo inmediato para que nunca se vea un hueco negro mientras el video
+        // (aunque venga de caché) termina de preparar su primer frame.
+        this.add.rectangle(width / 2, height / 2, width, height, 0x0f0a1a).setDepth(-2);
+
+        this.bg = this.add.video(width / 2, height / 2, 'menu-bg-video').setOrigin(0.5);
         this.bg.setDepth(-1); // Poner el video al fondo
 
         // Esperar a que el video esté listo para escalar correctamente
@@ -42,30 +51,47 @@ export default class HomeScenes extends Phaser.Scene {
             }
 
             videoEl.muted = true;
+            videoEl.defaultMuted = true;
             videoEl.loop = false;
             videoEl.playbackRate = 1;
+            videoEl.playsInline = true;
+            videoEl.preload = 'auto';
 
+            // Bucle continuo tipo péndulo (adelante/atrás) para que el fondo no
+            // tenga un "salto" de fin a inicio. Se cambia la dirección de PLAYBACK
+            // sin re-posicionar el tiempo (sin seek), lo que evita el parpadeo o
+            // micro-pausa que produce un currentTime recalculado a mano.
+            const EDGE = 0.12; // margen (s) antes de invertir la dirección
             const handleTimeUpdate = () => {
                 if (!videoEl.duration || Number.isNaN(videoEl.duration)) {
                     return;
                 }
 
-                const threshold = 0.05;
-
-                if (videoEl.playbackRate > 0 && videoEl.currentTime >= videoEl.duration - threshold) {
-                    videoEl.currentTime = videoEl.duration - threshold;
+                if (videoEl.playbackRate > 0 && videoEl.currentTime >= videoEl.duration - EDGE) {
                     videoEl.playbackRate = -1;
-                } else if (videoEl.playbackRate < 0 && videoEl.currentTime <= threshold) {
-                    videoEl.currentTime = threshold;
+                } else if (videoEl.playbackRate < 0 && videoEl.currentTime <= EDGE) {
                     videoEl.playbackRate = 1;
                 }
             };
 
+            // Si el navegador llega al final exacto antes del timeupdate, invertir igual.
+            const handleEnded = () => {
+                if (videoEl.playbackRate > 0) {
+                    videoEl.playbackRate = -1;
+                    videoEl.currentTime = videoEl.duration;
+                }
+            };
+
             videoEl.addEventListener('timeupdate', handleTimeUpdate);
+            videoEl.addEventListener('ended', handleEnded);
+            videoEl.currentTime = 0;
             videoEl.play().catch(() => {});
         });
 
         this.bg.play(false);
+
+        // Música ambiental del menú (procedural, bucle continuo sin cortes).
+        startMenuMusic(this);
 
         const cards = [
             {
@@ -228,6 +254,35 @@ export default class HomeScenes extends Phaser.Scene {
                 text-transform: uppercase;
                 letter-spacing: 0.05em;
                 margin: 0;
+            }
+
+            .btn-profile {
+                width: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 8px;
+                background: linear-gradient(135deg, rgba(241,231,188,0.16), rgba(138,0,255,0.16));
+                border: 1px solid rgba(241,231,188,0.35);
+                color: #f1e7bc;
+                padding: 10px 14px;
+                border-radius: 10px;
+                cursor: pointer;
+                font-size: 13px;
+                font-weight: 700;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+                transition: transform 180ms ease, background 180ms ease, box-shadow 180ms ease;
+            }
+
+            .btn-profile:hover {
+                background: linear-gradient(135deg, rgba(241,231,188,0.28), rgba(138,0,255,0.28));
+                transform: translateY(-2px);
+                box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+            }
+
+            .btn-profile:active {
+                transform: translateY(0) scale(0.98);
             }
 
             .user-stats {
@@ -734,6 +789,7 @@ export default class HomeScenes extends Phaser.Scene {
                         <h3 class="user-name">${(this.playerData && this.playerData.username) || "Meller2007"}</h3>
                         <p class="user-rank">Rango A</p>
                     </div>
+                    <button class="btn-profile" data-action="profile">🛡️ Ver Perfil</button>
                     <div class="user-stats">
                         <div class="stat-block">
                             <span class="stat-label">Experiencia</span>
@@ -766,8 +822,8 @@ export default class HomeScenes extends Phaser.Scene {
                         ${cardsHtml}
                     </div>
                     <div class="bottom-actions">
-                        <button class="bottom-btn">📋 Cartas</button>
-                        <button class="bottom-btn">🎯 Misiones</button>
+                        <button class="bottom-btn" data-action="cards">📋 Cartas</button>
+                        <button class="bottom-btn" data-action="missions">🎯 Misiones</button>
                         <button class="bottom-btn" data-action="stats">📊 Estadísticas</button>
                     </div>
                 </div>
@@ -819,6 +875,16 @@ export default class HomeScenes extends Phaser.Scene {
             console.warn('No se pudieron inicializar animaciones de botones', e);
         }
 
+        // Efectos de sonido de clic en todos los elementos interactivos.
+        try {
+            const clickables = node.querySelectorAll('.header-btn, .btn-exit, .bottom-btn, .btn-profile, .card');
+            clickables.forEach(el => {
+                el.addEventListener('pointerup', () => playSfx('click', this));
+            });
+        } catch (e) {
+            console.warn('No se pudieron conectar sonidos de clic', e);
+        }
+
         // --- LÓGICA DE LOS BOTONES ---
         // EXIT BUTTON
         const exitBtn = node.querySelector(".btn-exit");
@@ -867,6 +933,21 @@ export default class HomeScenes extends Phaser.Scene {
         const btnAbout = node.querySelector('[data-modal="about"]');
         const btnMechanics = node.querySelector('[data-modal="mechanics"]');
         const btnStats = node.querySelector('[data-action="stats"]');
+        const btnProfile = node.querySelector('[data-action="profile"]');
+        const btnCards = node.querySelector('[data-action="cards"]');
+        const btnMissions = node.querySelector('[data-action="missions"]');
+
+        if (btnProfile) btnProfile.addEventListener('click', () => {
+            this.scene.start('ProfileScene', { playerData: this.playerData });
+        });
+
+        if (btnCards) btnCards.addEventListener('click', () => {
+            this.scene.start('CardsScene', { playerData: this.playerData });
+        });
+
+        if (btnMissions) btnMissions.addEventListener('click', () => {
+            this.scene.start('MissionsScene', { playerData: this.playerData });
+        });
 
         if (btnStats) btnStats.addEventListener('click', () => {
             this.scene.start('StatsScene', {

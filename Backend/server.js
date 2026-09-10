@@ -5,7 +5,7 @@ const http = require('http');
 const cors = require('cors');
 
 // Importar módulos
-const db = require('./config/db'); // ahora importamos el objeto
+const db = require('./controllers/config/db'); // ahora importamos el objeto
 const models = require('./models'); // Importar modelos
 const socketManager = require('./socketManager');
 const { displayNetworkInfo } = require('./show-network-info');

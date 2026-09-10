@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { sequelize, Sequelize } = require('../config/db'); // usar la instancia centralizada
+const { sequelize, Sequelize } = require('../controllers/config/db'); // usar la instancia centralizada
 const DataTypes = require('sequelize').DataTypes;
 
 const db = {};

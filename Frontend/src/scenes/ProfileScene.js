@@ -47,8 +47,9 @@ export default class ProfileScene extends Phaser.Scene {
                 inset: 0;
                 overflow: auto;
                 background:
-                    linear-gradient(180deg, rgba(5, 8, 25, 0.96), rgba(5, 8, 25, 0.88)),
-                    url("assets/images/backgrounds/profile-bg.jpg");
+                    radial-gradient(1100px 520px at 15% 0%, rgba(138, 0, 255, 0.2), transparent 60%),
+                    radial-gradient(900px 500px at 90% 100%, rgba(43, 143, 239, 0.16), transparent 55%),
+                    linear-gradient(180deg, rgba(5, 8, 25, 0.97), rgba(5, 8, 25, 0.88));
                 background-size: cover;
                 background-position: center;
                 color: white;

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { setMusicVolume, setEffectsVolume } from '../helpers/audioManager.js';
 
 export default class SettingsScene extends Phaser.Scene {
     constructor() {
@@ -274,12 +275,14 @@ export default class SettingsScene extends Phaser.Scene {
             musicSlider.addEventListener('input', () => {
                 this.settings.musicVolume = Number(musicSlider.value);
                 musicValue.textContent = `${this.settings.musicVolume}%`;
+                setMusicVolume(this.settings.musicVolume);
             });
         }
         if (effectsSlider && effectsValue) {
             effectsSlider.addEventListener('input', () => {
                 this.settings.effectsVolume = Number(effectsSlider.value);
                 effectsValue.textContent = `${this.settings.effectsVolume}%`;
+                setEffectsVolume(this.settings.effectsVolume);
             });
         }
         if (linkEmail && accountStatus) {

@@ -13,6 +13,9 @@ import GameSceneLAN from './scenes/GameSceneLAN.js';
 import DifficultySelectScene from './scenes/DifficultySelectScene.js';
 import PauseScene from './scenes/PauseScene.js';
 import LoadingScene from './scenes/LoadingScene.js';
+import CardsScene from './scenes/cardsScene.js';
+import MissionsScene from './scenes/MissionsScene.js';
+import ProfileScene from './scenes/ProfileScene.js';
 
 const config = {
     type: Phaser.AUTO,
@@ -41,7 +44,7 @@ const config = {
      * 9. GameScene: La escena principal del juego donde ocurre la acción.
      * 10. UIScene: Se ejecuta en paralelo a GameScene para mostrar la interfaz de usuario.
      */
-    scene: [ BootScene, PreloaderScene, LoginScene, RegisterScene, HomeScenes, SettingsScene, StatsScene, DifficultySelectScene, CreateRoomScene, GameSceneLAN, GameScene, UIScene, PauseScene, LoadingScene ]
+    scene: [ BootScene, PreloaderScene, LoginScene, RegisterScene, HomeScenes, SettingsScene, StatsScene, DifficultySelectScene, CreateRoomScene, GameSceneLAN, GameScene, UIScene, PauseScene, LoadingScene, CardsScene, MissionsScene, ProfileScene ]
 }
 
 const game = new Phaser.Game(config);

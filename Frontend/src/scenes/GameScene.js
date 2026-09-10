@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { calculateRowPositions } from '../helpers/zone';
 import { resolveCombat } from '../helpers/combat';
+import { playFusionFx, playImpactFx, playDeathFx, playFireworksFx, TYPE_COLORS } from '../helpers/cardFx';
+import { play as playSfx } from '../helpers/audioManager.js';
 import Player from '../game_objects/player.js';
 import Card from '../game_objects/card.js';
 import { CardDefinitions } from '../game_objects/card-definitions.js';
@@ -394,6 +396,8 @@ export default class GameScene extends Phaser.Scene {
 
                     // 3. Robamos, refrescamos la mano y actualizamos contadores.
                     this.player.drawCard();
+                    playSfx('card', this);
+                    playSfx('draw', this);
                     this.refreshPlayerHand();
                     this.updateDeckCounts();
 
@@ -518,33 +522,9 @@ export default class GameScene extends Phaser.Scene {
         if (originalSlot) originalSlot.setInteractive({ dropZone: true });
 
 
-        // 4. Destruir los objetos visuales.
-        const selectedName = selectedCardObject.name;
-        const targetName = targetCardObject.name;
-        
-        selectedCardObject.destroy();
-        targetCardObject.destroy();
-
-        console.log('[GameScene] Objetos visuales eliminados tras fusión', { destroyed: [selectedName, targetName], sourceIndex: selIdx, targetIndex: tgtIdx });
-
-        // 5. Crear la nueva carta fusionada (visual) usando helper centralizado.
-        const fusedCardObject = this.createFieldCardAt(fusionPosition.x, fusionPosition.y, fusedCardData, { isOpponent: false, revealed: true, fieldIndex: targetIndex });
-        // Guardamos también la escala inicial por compatibilidad con animaciones de selección.
-        fusedCardObject.setData('startScale', fusedCardObject.scale);
-        this.deselectCard(false); // Deseleccionamos sin animación
-
-        // Animación de aparición (fade-in). No cambiamos escala para evitar overflow.
-        fusedCardObject.alpha = 0;
-        this.tweens.add({
-            targets: fusedCardObject,
-            alpha: { from: 0, to: 1 },
-            duration: 300,
-            ease: 'Power2'
-        });
-
-        // Consumir la acción y terminar el turno automáticamente.
+        // 4. Consumir la acción.
         this.playerHasActed = true;
-        
+
         // Emitir evento de fusión si estamos en LAN
         if (this.isLAN && this.socket) {
             try {
@@ -558,10 +538,42 @@ export default class GameScene extends Phaser.Scene {
                 });
             } catch (e) { console.warn('No se pudo emitir evento de fusión:', e); }
         }
-        
-        this.deselectCard(false);
-        console.log('[GameScene] Carta fusionada creada en campo', { fieldIndex: targetIndex, fusedCard: fusedCardData });
-        this.endPlayerTurn();
+
+        this.deselectCard(false); // Deseleccionamos sin animar.
+
+        // 5. Animar la fusión: la fuente converge sobre el objetivo, ambas
+        //    emiten destello + partículas del tipo antes de desaparecer.
+        this.tweens.killTweensOf(selectedCardObject); // Evita el "lift" de selección en curso.
+        this.blockingAnimations++;
+        playFusionFx(this, { sourceCard: selectedCardObject, targetCard: targetCardObject, type: fusedCardData.type }, () => {
+            // 6. Crear la carta resultante sin alterar su tamaño: fade-in + fuegos artificiales.
+            const fusedCardObject = this.createFieldCardAt(fusionPosition.x, fusionPosition.y, fusedCardData, { isOpponent: false, revealed: true, fieldIndex: targetIndex });
+            fusedCardObject.setAlpha(0);
+            playFireworksFx(this, fusionPosition.x, fusionPosition.y - 10, TYPE_COLORS[fusedCardData.type] || 0xffffff);
+
+            // El fin de la fusión se garantiza con un timer: si la carta resultante
+            // se destruye antes de completar el fade-in, Phaser cancelaría el
+            // onComplete y el juego se quedaría congelado.
+            let fusionDone = false;
+            const finishFusion = () => {
+                if (fusionDone) return;
+                fusionDone = true;
+                console.log('[GameScene] Carta fusionada creada en campo', { fieldIndex: targetIndex, fusedCard: fusedCardData });
+                this._animationComplete();
+                this.endPlayerTurn();
+            };
+
+            this.tweens.add({
+                targets: fusedCardObject,
+                alpha: { from: 0, to: 1 },
+                duration: 380,
+                ease: 'Power2',
+                onComplete: finishFusion
+            });
+
+            // Red de seguridad: fade-in 380 ms cubierto con margen amplio.
+            this.time.delayedCall(1300, finishFusion);
+        });
     }
 
     /**
@@ -599,26 +611,11 @@ export default class GameScene extends Phaser.Scene {
 
         console.log('[GameScene] Fusión desde la mano realizada', { handCardId: handCardData.instanceId, targetIndex, result: fusionResult });
 
-        // 3. Destruimos los objetos visuales de las cartas originales.
+        // 3. Posición donde quedará la carta resultante (slot del campo).
         const fusionPosition = { x: fieldCardObject.x, y: fieldCardObject.y };
-        handCardObject.destroy();
-        fieldCardObject.destroy();
 
-        // 4. Creamos el nuevo objeto visual para la carta fusionada usando helper.
-        const fusedCardObject = this.createFieldCardAt(fusionPosition.x, fusionPosition.y, fusionResult, { isOpponent: false, revealed: true, fieldIndex: targetIndex });
-        fusedCardObject.setData('startScale', fusedCardObject.scale);
-
-        // 5. Limpiamos la selección y refrescamos la mano.
+        // 4. Deseleccionamos y consumimos la acción.
         this.deselectCard(false); // Deseleccionamos sin animación.
-        console.log('[GameScene] Carta fusionada (mano->campo) creada', { fieldIndex: targetIndex, fusedCard: fusionResult });
-
-        // Robamos una carta para reponer la que se usó desde la mano.
-        this.player.drawCard();
-        this.refreshPlayerHand(); // Actualizamos la mano para que se reordene.
-        this.updateDeckCounts(); // Actualizamos el contador del mazo.
-        // Animación de aparición: fade-in (el helper mantiene el tamaño constante).
-        fusedCardObject.alpha = 0;
-        this.tweens.add({ targets: fusedCardObject, alpha: { from: 0, to: 1 }, duration: 300, ease: 'Power2' });
 
         // Consumir acción y emitir evento de fusión desde mano si estamos en LAN
         this.playerHasActed = true;
@@ -634,9 +631,44 @@ export default class GameScene extends Phaser.Scene {
                 });
             } catch (e) { console.warn('No se pudo emitir evento de fusión desde mano:', e); }
         }
-        this.endPlayerTurn();
 
-        // (No se admite fusiones desde la mano.)
+        // 5. Animar la fusión: la carta de la mano converge sobre la del campo.
+        this.tweens.killTweensOf(handCardObject); // Evita el "lift" de selección en curso.
+        this.blockingAnimations++;
+        playFusionFx(this, { sourceCard: handCardObject, targetCard: fieldCardObject, type: fusionResult.type }, () => {
+            // 6. Reponer la carta usada desde la mano (tras destruirse el origen en el efecto).
+            this.player.drawCard();
+            this.refreshPlayerHand();
+            this.updateDeckCounts();
+
+            // 7. Crear la carta resultante sin alterar su tamaño: fade-in + fuegos artificiales.
+            console.log('[GameScene] Carta fusionada (mano->campo) creada', { fieldIndex: targetIndex, fusedCard: fusionResult });
+            const fusedCardObject = this.createFieldCardAt(fusionPosition.x, fusionPosition.y, fusionResult, { isOpponent: false, revealed: true, fieldIndex: targetIndex });
+            fusedCardObject.setAlpha(0);
+            playFireworksFx(this, fusionPosition.x, fusionPosition.y - 10, TYPE_COLORS[fusionResult.type] || 0xffffff);
+
+            // El fin de la fusión se garantiza con un timer: si la carta resultante
+            // se destruye antes de completar el fade-in, Phaser cancelaría el
+            // onComplete y el juego se quedaría congelado.
+            let fusionDone = false;
+            const finishFusion = () => {
+                if (fusionDone) return;
+                fusionDone = true;
+                this._animationComplete();
+                this.endPlayerTurn();
+            };
+
+            this.tweens.add({
+                targets: fusedCardObject,
+                alpha: { from: 0, to: 1 },
+                duration: 380,
+                ease: 'Power2',
+                onComplete: finishFusion
+            });
+
+            // Red de seguridad: fade-in 380 ms cubierto con margen amplio.
+            this.time.delayedCall(1300, finishFusion);
+        });
     }
 
     /**
@@ -1274,40 +1306,94 @@ export default class GameScene extends Phaser.Scene {
     animateAttack(attackingCardObject, target, result) {
         this.blockingAnimations++;
         console.log('[GameScene] Animación de ataque iniciada. Bloqueos activos:', this.blockingAnimations);
+
+        // Evitar el "lift" de selección en curso.
+        this.tweens.killTweensOf(attackingCardObject);
+
+        const targetX = target.x;
+        const targetY = target.y;
+        const startX = attackingCardObject.x;
+        const startY = attackingCardObject.y;
+        const baseScale = attackingCardObject.scale;
+        const defenderCard = (target && typeof target.getData === 'function') ? target : null;
+
+        // Fase 1 — lanzamiento: el atacante se estira y vuela al objetivo.
         this.tweens.add({
             targets: attackingCardObject,
-            x: target.x, // Corregido: usar 'target.x'
-            y: target.y, // Corregido: usar 'target.y'
-            duration: 200,
-            yoyo: true, // La carta vuelve a su posición original
-            ease: 'Power1',
+            x: targetX,
+            y: targetY,
+            scaleX: baseScale * 1.18,
+            scaleY: baseScale * 0.9,
+            duration: 180,
+            ease: 'Sine.easeIn',
             onComplete: () => {
-                this.deselectCard(true); // asegurar que vuelva a startPosition tras el ataque
-                console.log('[GameScene] animateAttack local complete, result:', result, { attackerFieldIndex: attackingCardObject.getData('fieldIndex'), target });
-                // Determinar owner del atacante según metadata visual
-                const attackerIsOpponent = !!attackingCardObject.getData('isOpponentCard');
-                const attackerOwner = attackerIsOpponent ? this.opponent : this.player;
-                // Si el target es un objeto visual de carta, determinar su owner
-                let defenderOwner = null;
-                let defenderFieldIndex = null;
-                if (target && typeof target.getData === 'function') {
-                    const defenderIsOpponent = !!target.getData('isOpponentCard');
-                    defenderOwner = defenderIsOpponent ? this.opponent : this.player;
-                    defenderFieldIndex = target.getData('fieldIndex');
+                // Fase 2 — impacto: shake de cámara, destello, ondas y retroceso del defensor.
+                const defenderData = defenderCard ? ((defenderCard.getData && defenderCard.getData('cardData')) || defenderCard.cardData) : null;
+                const impactColor = defenderData ? (TYPE_COLORS[defenderData.type] || 0xffffff) : 0xffffff;
+                this.cameras.main.shake(70, 0.004);
+                playImpactFx(this, targetX, targetY, impactColor);
+
+                if (defenderCard && defenderCard.active) {
+                    const defenderIsOpponent = !!defenderCard.getData('isOpponentCard');
+                    const direction = defenderIsOpponent ? -1 : 1;
+                    this.tweens.add({
+                        targets: defenderCard,
+                        y: defenderCard.y + direction * 26,
+                        duration: 130,
+                        yoyo: true,
+                        ease: 'Sine.easeOut'
+                    });
                 }
 
-                if (result.loser === 'attacker') {
-                    const idx = attackingCardObject.getData('fieldIndex');
-                    console.log('[GameScene] animateAttack: destruyendo atacante', { owner: attackerOwner.id, idx });
-                    this.destroyCard(attackerOwner, idx);
-                } else if (result.loser === 'defender' && defenderOwner && typeof defenderFieldIndex === 'number') {
-                    console.log('[GameScene] animateAttack: destruyendo defensor', { owner: defenderOwner.id, idx: defenderFieldIndex });
-                    this.destroyCard(defenderOwner, defenderFieldIndex);
-                }
+                // Fase 3 — retorno del atacante a su posición y escala.
+                // El final del ataque debe ejecutarse SOLO una vez y SIEMPRE:
+                // si el atacante se destruye a mitad de secuencia, Phaser cancela
+                // el onComplete y el bloqueo quedaría atascado (pantalla congelada).
+                let attackDone = false;
+                const finalizeAttack = () => {
+                    if (attackDone) return;
+                    attackDone = true;
+                    this.deselectCard(false);
+                    const attackerIdx = attackingCardObject.active ? attackingCardObject.getData('fieldIndex') : null;
+                    console.log('[GameScene] animateAttack local complete, result:', result, { attackerFieldIndex: attackerIdx, target });
+                    // Determinar owner del atacante según metadata visual
+                    const attackerIsOpponent = !!attackingCardObject.getData('isOpponentCard');
+                    const attackerOwner = attackerIsOpponent ? this.opponent : this.player;
+                    // Si el target es un objeto visual de carta, determinar su owner
+                    let defenderOwner = null;
+                    let defenderFieldIndex = null;
+                    if (defenderCard && defenderCard.active) {
+                        const defenderIsOpponent = !!defenderCard.getData('isOpponentCard');
+                        defenderOwner = defenderIsOpponent ? this.opponent : this.player;
+                        defenderFieldIndex = defenderCard.getData('fieldIndex');
+                    }
 
-                // Tras el ataque, el turno del jugador termina automáticamente
-                this.endPlayerTurn();
-                this._animationComplete();
+                    if (result.loser === 'attacker') {
+                        console.log('[GameScene] animateAttack: destruyendo atacante', { owner: attackerOwner.id, idx: attackerIdx });
+                        if (attackerIdx !== null) this.destroyCard(attackerOwner, attackerIdx);
+                    } else if (result.loser === 'defender' && defenderOwner && typeof defenderFieldIndex === 'number') {
+                        console.log('[GameScene] animateAttack: destruyendo defensor', { owner: defenderOwner.id, idx: defenderFieldIndex });
+                        this.destroyCard(defenderOwner, defenderFieldIndex);
+                    }
+
+                    // Tras el ataque, el turno del jugador termina automáticamente
+                    this.endPlayerTurn();
+                    this._animationComplete();
+                };
+
+                this.tweens.add({
+                    targets: attackingCardObject,
+                    x: startX,
+                    y: startY,
+                    scaleX: baseScale,
+                    scaleY: baseScale,
+                    duration: 200,
+                    ease: 'Power2',
+                    onComplete: finalizeAttack
+                });
+
+                // Red de seguridad por si el atacante muere durante la secuencia.
+                this.time.delayedCall(1000, finalizeAttack);
             }
         });
     }
@@ -1363,6 +1449,10 @@ export default class GameScene extends Phaser.Scene {
         // No hay botón de terminar turno ahora.
 
         console.log('[GameScene] Fin de la partida. Ganador:', winner);
+
+        // Efecto de sonido de victoria/derrota según el resultado.
+        if (winner === 'player') playSfx('victory', this);
+        else if (winner === 'opponent') playSfx('defeat', this);
 
         // Desactivamos toda la interactividad para que no se pueda seguir jugando.
         this.input.enabled = false;
@@ -1522,39 +1612,29 @@ export default class GameScene extends Phaser.Scene {
 
             this.blockingAnimations++;
             console.log('[GameScene] Animación de destrucción iniciada. Bloqueos activos:', this.blockingAnimations);
-            console.log('[GameScene] destroyCard: iniciando efecto de partículas para destrucción', { owner: owner.id, fieldIndex, instanceId: finalInstanceId });
+            console.log('[GameScene] destroyCard: iniciando efecto de destrucción', { owner: owner.id, fieldIndex, instanceId: finalInstanceId });
 
-            // Hacemos la carta original invisible para que solo se vean las partículas.
-            cardObject.setVisible(false);
+            // La carta se desvanece girando mientras emite partículas de su elemento.
+            const fxCardData = (cardObject.getData && cardObject.getData('cardData')) || cardObject.cardData || cardData;
 
-            // En Phaser 3.60+, this.add.particles() crea directamente un emisor de partículas.
-            // Ya no se devuelve un manager ni se usa createEmitter.
-            const particles = this.add.particles(
-                cardObject.x,
-                cardObject.y,
-                cardObject.texture.key,
-            {
-                speed: { min: 50, max: 200 }, // Las partículas se dispersan a diferentes velocidades.
-                angle: { min: 0, max: 360 }, // Se dispersan en todas las direcciones.
-                scale: { start: 0.1, end: 0 }, // Empiezan a la mitad de su tamaño y se encogen hasta desaparecer.
-                alpha: { start: 1, end: 0 }, // Se desvanecen.
-                lifespan: 600, // Viven por 600ms.
-                blendMode: 'SCREEN', // Un modo de mezcla que se ve bien para efectos de energía/desintegración.
-                emitting: false // No empieza a emitir partículas constantemente.
-            });
-
-            // Le decimos al emisor que explote una vez en su posición.
-            particles.explode(40);
-
-            // Después de un tiempo, destruimos tanto la carta original como el sistema de partículas.
-            this.time.delayedCall(1000, () => { // Esperamos 1 segundo para que el efecto termine.
-                console.log('[GameScene] destroyCard: Limpiando objeto visual y partículas', { name: cardObject.name, fieldIndex });
-                if (cardObject && cardObject.destroy) cardObject.destroy();
-                if (particles) particles.destroy(); // Muy importante destruir el gestor de partículas para liberar memoria.
+            // El bloqueo se libera SIEMPRE vía timer de seguridad: si la carta se
+            // destruye antes de que el tween termine, Phaser descarta el onComplete
+            // y blockingAnimations quedaría > 0 para siempre (pantalla congelada).
+            let deathFinished = false;
+            const finishDeath = () => {
+                if (deathFinished) return;
+                deathFinished = true;
+                console.log('[GameScene] destroyCard: destrucción visual completada', { name: cardObject && cardObject.name, fieldIndex });
+                if (cardObject && cardObject.active && cardObject.destroy) cardObject.destroy();
                 visualDestroyed = true;
                 this._animationComplete();
                 tryFinalize();
-            });
+            };
+
+            playDeathFx(this, cardObject, fxCardData, finishDeath);
+
+            // Red de seguridad: la animación dura 340 ms; 650 ms lo cubre con margen.
+            this.time.delayedCall(650, finishDeath);
         }
 
         // Si tenemos modelo, mover a cementerio con la misma lógica previa
