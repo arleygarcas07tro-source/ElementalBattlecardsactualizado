@@ -156,7 +156,13 @@ export default class HomeScenes extends Phaser.Scene {
                 max-width: 100%;
             }
             .logo-box { display: flex; align-items: center; gap: 12px; }
-            .logo { width: 50px; height: 50px; }
+            .logo {
+                width: 54px;
+                height: 54px;
+                border-radius: 12px;
+                object-fit: cover;
+                box-shadow: 0 4px 18px rgba(0,0,0,0.45), 0 0 0 2px rgba(255,255,255,0.10);
+            }
             .user { font-size: 14px; opacity: 0.85; }
             
             /* HEADER BUTTONS */
@@ -767,7 +773,7 @@ export default class HomeScenes extends Phaser.Scene {
         <div class="wrap">
             <header class="header">
                 <div class="logo-box">
-                    <img class="logo" src="/assets/images/logo.png">
+                    <img class="logo" src="/assets/images/logotipomenu.jpg" alt="Elemental Battlecards">
                     <div>
                         <h1 style="margin:0; font-size:22px;">Elemental Battlecards</h1>
                         <span class="user">Jugador: ${(this.playerData && this.playerData.username) || ""}</span>

@@ -241,6 +241,9 @@ export default class LoginScene extends Phaser.Scene {
             fontSize: '14px',
             color: '#ffd77a'
         }).setOrigin(0.5, 0.5).setDepth(1);
+
+        // Reposicionar el logo y formulario al redimensionar la ventana
+        this.scale.on('resize', this.resize, this);
     }
 
     resize(gameSize) {
