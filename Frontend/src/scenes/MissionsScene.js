@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { play as playSfx } from '../helpers/audioManager.js';
+import { getMissionProgress } from '../helpers/playerProgress.js';
 
 const ELEMENTS = [
     { key: 'agua',       name: 'Agua',       color: '#38bdf8', soft: 'rgba(56,189,248,0.14)',  glow: 'rgba(56,189,248,0.42)',  img: '/assets/images/iconos/agua.jpeg' },
@@ -89,6 +90,14 @@ export default class MissionsScene extends Phaser.Scene {
     create() {
         const { width, height } = this.scale;
 
+        // Progreso real de las misiones, derivado de las partidas jugadas.
+        const username = (this.playerData && this.playerData.username) || 'Jugador';
+        const missionProgress = getMissionProgress(username);
+        const missions = MISSIONS.map(mission => ({
+            ...mission,
+            progress: missionProgress[mission.id] || 0
+        }));
+
         // Energía flotante del fondo: motas luminosas posicionadas en JS.
         const particles = Array.from({ length: 10 }, (_, i) => {
             const left = Math.round(4 + ((i * 37) % 92));
@@ -98,7 +107,7 @@ export default class MissionsScene extends Phaser.Scene {
             return `<span class="energy" style="left:${left}%; top:${top}%; width:${size}px; height:${size}px; animation-delay:${delay}s;"></span>`;
         }).join('');
 
-        const missionsHtml = MISSIONS.map((mission, index) => {
+        const missionsHtml = missions.map((mission, index) => {
             const el = elementByKey(mission.element);
             const percent = Math.min(100, Math.round((mission.progress / mission.target) * 100));
             const completed = mission.progress >= mission.target;
@@ -676,7 +685,7 @@ export default class MissionsScene extends Phaser.Scene {
         const detailButtons = node.querySelectorAll('.btn-details');
 
         const openModal = (missionId) => {
-            const mission = MISSIONS.find(m => m.id === missionId);
+            const mission = missions.find(m => m.id === missionId);
             if (!mission || !modal) return;
             const el = elementByKey(mission.element);
             const percent = Math.min(100, Math.round((mission.progress / mission.target) * 100));

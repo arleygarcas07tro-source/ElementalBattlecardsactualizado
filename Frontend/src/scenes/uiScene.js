@@ -224,11 +224,12 @@ export default class UIScene extends Phaser.Scene {
         this.essenceGraphics = [];
 
         // Crear triángulos: fuego>planta>agua y luz>sombra>espiritu
-        this.createEssenceTriangle(playerCenterX, playerTopY, radius, ['fuego', 'planta', 'agua'], 'player', 0xffffff, orbSize);
-        this.createEssenceTriangle(playerCenterX, playerBottomY, radius, ['luz', 'sombra', 'espiritu'], 'player', 0xffffff, orbSize);
+        // Energía azul para el jugador y naranja para el oponente.
+        this.createEssenceTriangle(playerCenterX, playerTopY, radius, ['fuego', 'planta', 'agua'], 'player', 0x5bc0ff, orbSize);
+        this.createEssenceTriangle(playerCenterX, playerBottomY, radius, ['luz', 'sombra', 'espiritu'], 'player', 0x5bc0ff, orbSize);
 
-        this.createEssenceTriangle(opponentCenterX, opponentTopY, radius, ['fuego', 'planta', 'agua'], 'opponent', 0xffffff, orbSize);
-        this.createEssenceTriangle(opponentCenterX, opponentBottomY, radius, ['luz', 'sombra', 'espiritu'], 'opponent', 0xffffff, orbSize);
+        this.createEssenceTriangle(opponentCenterX, opponentTopY, radius, ['fuego', 'planta', 'agua'], 'opponent', 0xff9a5c, orbSize);
+        this.createEssenceTriangle(opponentCenterX, opponentBottomY, radius, ['luz', 'sombra', 'espiritu'], 'opponent', 0xff9a5c, orbSize);
     }
 
     /**

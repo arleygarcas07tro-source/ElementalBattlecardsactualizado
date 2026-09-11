@@ -3,6 +3,15 @@ import { calculateRowPositions } from '../helpers/zone';
 import { resolveCombat } from '../helpers/combat';
 import { playFusionFx, playImpactFx, playDeathFx, playFireworksFx, TYPE_COLORS } from '../helpers/cardFx';
 import { play as playSfx } from '../helpers/audioManager.js';
+import {
+    recordVictory,
+    recordDefeat,
+    recordFusion,
+    recordFieldComplete,
+    recordLevel3Win,
+    recordAttackWithType,
+    recordCollectedCard
+} from '../helpers/playerProgress.js';
 import Player from '../game_objects/player.js';
 import Card from '../game_objects/card.js';
 import { CardDefinitions } from '../game_objects/card-definitions.js';
@@ -113,6 +122,11 @@ export default class GameScene extends Phaser.Scene {
 
     create() {
         // Limpieza de objetos visuales de partidas previas (si la escena se reutiliza)
+        // Decoración del campo (emblema, marcos, runas, energía).
+        if (this.fieldDecor) {
+            try { this.fieldDecor.destroy(); } catch (e) { /* ignore */ }
+            this.fieldDecor = null;
+        }
         try {
             // Tomamos una copia porque destroy modifica children.list
             const childrenCopy = this.children ? this.children.list.slice() : [];
@@ -224,6 +238,12 @@ export default class GameScene extends Phaser.Scene {
         this.player.drawInitialHand();
         this.opponent.drawInitialHand();
 
+        // Registramos las cartas iniciales de la mano del jugador como coleccionadas.
+        const username = (this.playerData && this.playerData.username) || 'Jugador';
+        (this.player.hand || []).forEach(card => {
+            if (card && card.type) recordCollectedCard(username, card.type, card.level);
+        });
+
         // Fondo centrado
         this.board = this.add.video(width / 2, height / 2, 'campo-video')
             .setOrigin(0.5);
@@ -241,6 +261,10 @@ export default class GameScene extends Phaser.Scene {
             this.board.setScale(scale);
         });
         this.board.play(true); // Reproducir en bucle
+
+        // Decoración visual del campo (emblema dorado, marcos, runas y energía).
+        // Se crea bajo los slots/cartas para no interferir con la jugabilidad.
+        this.createFieldDecor();
 
         // ---------- ZONA DE MANO DEL OPONENTE (4 espacios) ----------
         this.createSlotsRow(height * 0.18, 'opponent-slots');
@@ -404,6 +428,8 @@ export default class GameScene extends Phaser.Scene {
                             // 4. Marcamos la acción y terminamos el turno.
                     this.playerHasActed = true;
                             console.log('[GameScene] Jugador colocó carta en el campo', { cardId: cardPlayed.id, instanceId: cardPlayed.instanceId, type: cardPlayed.type, level: cardPlayed.level, fieldIndex });
+                    // Registrar la carta como coleccionada.
+                    recordCollectedCard((this.playerData && this.playerData.username) || 'Jugador', cardPlayed.type, cardPlayed.level);
                     // Emitir evento de juego a oponente si estamos en LAN
                         if (this.isLAN && this.socket) {
                         const payload = { 
@@ -559,6 +585,9 @@ export default class GameScene extends Phaser.Scene {
                 if (fusionDone) return;
                 fusionDone = true;
                 console.log('[GameScene] Carta fusionada creada en campo', { fieldIndex: targetIndex, fusedCard: fusedCardData });
+                // Progreso: la fusión cuenta y la carta resultante entra en la colección.
+                recordFusion((this.playerData && this.playerData.username) || 'Jugador');
+                recordCollectedCard((this.playerData && this.playerData.username) || 'Jugador', fusedCardData.type, fusedCardData.level);
                 this._animationComplete();
                 this.endPlayerTurn();
             };
@@ -654,6 +683,9 @@ export default class GameScene extends Phaser.Scene {
             const finishFusion = () => {
                 if (fusionDone) return;
                 fusionDone = true;
+                // Progreso: la fusión cuenta y la carta resultante entra en la colección.
+                recordFusion((this.playerData && this.playerData.username) || 'Jugador');
+                recordCollectedCard((this.playerData && this.playerData.username) || 'Jugador', fusionResult.type, fusionResult.level);
                 this._animationComplete();
                 this.endPlayerTurn();
             };
@@ -1450,6 +1482,22 @@ export default class GameScene extends Phaser.Scene {
 
         console.log('[GameScene] Fin de la partida. Ganador:', winner);
 
+        // Progreso real: cada victoria/derrota se cuenta y alimenta misiones y logros.
+        const username = (this.playerData && this.playerData.username) || 'Jugador';
+        if (winner === 'player') {
+            recordVictory(username);
+            const fieldCards = (this.player.field || []).filter(c => c);
+            if (fieldCards.some(c => c && c.level >= 3)) {
+                recordLevel3Win(username);
+            }
+            const fieldTypes = new Set(fieldCards.map(c => c && c.type).filter(Boolean));
+            if (fieldTypes.size >= 6) {
+                recordFieldComplete(username);
+            }
+        } else if (winner === 'opponent') {
+            recordDefeat(username);
+        }
+
         // Efecto de sonido de victoria/derrota según el resultado.
         if (winner === 'player') playSfx('victory', this);
         else if (winner === 'opponent') playSfx('defeat', this);
@@ -1664,6 +1712,121 @@ export default class GameScene extends Phaser.Scene {
         }
 
         this.updateDeckCounts();
+    }
+
+    // Decoración visual del campo de batalla (solo presentación, sin lógica).
+    // Capa futbolística: tablero de piedra oscura con viñeta, energía naranja
+    // (oponente) / azul (jugador), emblema central dorado, marcos ornamentales
+    // y runas de cristal. Todo se agrupa en this.fieldDecor (rendered bajo las cartas).
+    createFieldDecor() {
+        const W = this.scale.width;
+        const H = this.scale.height;
+        const CX = W / 2;
+        const CY = H / 2;
+        const GOLD = 0xcfaf6d;
+        const GOLD_BRIGHT = 0xe8cf8f;
+        const ORANGE = 0xff9a5c;
+        const BLUE = 0x5bc0ff;
+
+        const container = this.add.container(0, 0).setDepth(-0.4);
+        this.fieldDecor = container;
+
+        const diamondPts = (x, y, r) => [
+            new Phaser.Geom.Point(x, y - r),
+            new Phaser.Geom.Point(x + r, y),
+            new Phaser.Geom.Point(x, y + r),
+            new Phaser.Geom.Point(x - r, y)
+        ];
+
+        // Viñeta oscura suave para mejorar la legibilidad sobre el video.
+        container.add(this.add.rectangle(CX, CY, W, H, 0x04060f, 0.14));
+
+        // ---- Franjas de energía ----
+        const beam = (y, color) => {
+            const g = this.add.graphics();
+            g.fillStyle(color, 0.04).fillRect(0, y - 62, W, 124);
+            g.fillStyle(color, 0.07).fillRect(0, y - 30, W, 60);
+            g.lineStyle(2, color, 0.30).lineBetween(0, y, W, y);
+            g.lineStyle(2, color, 0.14).lineBetween(0, y - 24, W, y - 24);
+            g.lineStyle(2, color, 0.14).lineBetween(0, y + 24, W, y + 24);
+            return g;
+        };
+        const opponentFieldY = H * 0.45 - 70;
+        const playerFieldY = H * 0.55 + 70;
+        container.add(beam(opponentFieldY, ORANGE));
+        container.add(beam(playerFieldY, BLUE));
+
+        // ---- Emblema central dorado ----
+        const emblem = this.add.graphics();
+        emblem.lineStyle(2, GOLD, 0.26).strokeCircle(CX, CY, 118);
+        emblem.lineStyle(2, GOLD, 0.38).strokeCircle(CX, CY, 86);
+        emblem.save().translateCanvas(CX, CY).rotateCanvas(Math.PI / 4);
+        emblem.lineStyle(2, GOLD, 0.40).strokeRect(-70, -70, 140, 140);
+        emblem.lineStyle(3, GOLD_BRIGHT, 0.60).strokeRect(-44, -44, 88, 88);
+        emblem.fillStyle(GOLD, 0.10).fillRect(-44, -44, 88, 88);
+        emblem.restore();
+        for (let a = 0; a < 8; a++) {
+            const ang = a * Math.PI / 4;
+            emblem.lineStyle(2, GOLD, 0.24)
+                .lineBetween(CX + Math.cos(ang) * 88, CY + Math.sin(ang) * 88,
+                             CX + Math.cos(ang) * 100, CY + Math.sin(ang) * 100);
+        }
+        emblem.fillStyle(GOLD, 0.12).fillCircle(CX, CY, 30);
+        emblem.fillStyle(GOLD_BRIGHT, 0.9).fillCircle(CX, CY, 5);
+        container.add(emblem);
+
+        // ---- Marcos dorados alrededor de las filas de batalla ----
+        const frameRow = (yCenter) => {
+            const positions = calculateRowPositions({ numItems: 6, itemWidth: 110, itemSpacing: 35, containerWidth: W });
+            const left = Math.min(...positions) - 82;
+            const right = Math.max(...positions) + 82;
+            const top = yCenter - 78;
+            const height = 156;
+            const g = this.add.graphics();
+            g.lineStyle(2, GOLD, 0.28).strokeRoundedRect(left, top, right - left, height, 20);
+            g.lineStyle(1, GOLD, 0.14).strokeRoundedRect(left + 9, top + 9, right - left - 18, height - 18, 16);
+            const corners = [[left, top], [right, top], [left, top + height], [right, top + height]];
+            corners.forEach(([x, y]) => {
+                g.fillStyle(GOLD_BRIGHT, 0.75);
+                g.fillPoints(diamondPts(x, y, 6), true);
+            });
+            return g;
+        };
+        container.add(frameRow(opponentFieldY));
+        container.add(frameRow(playerFieldY));
+
+        // ---- Runas de cristal en los laterales de cada fila de batalla ----
+        const rune = (x, y, color, r = 7) => {
+            const g = this.add.graphics();
+            g.fillStyle(color, 0.10).fillCircle(x, y, r * 3);
+            g.fillStyle(color, 0.18).fillCircle(x, y, r * 2);
+            g.fillStyle(color, 0.85);
+            g.fillPoints(diamondPts(x, y, r), true);
+            return g;
+        };
+
+        const battlePositions = calculateRowPositions({ numItems: 6, itemWidth: 110, itemSpacing: 35, containerWidth: W });
+        const leftEdge = Math.min(...battlePositions) - 82;
+        const rightEdge = Math.max(...battlePositions) + 82;
+
+        container.add(rune(leftEdge + 16, opponentFieldY, ORANGE));
+        container.add(rune(rightEdge - 16, opponentFieldY, ORANGE));
+        container.add(rune(leftEdge + 16, playerFieldY, BLUE));
+        container.add(rune(rightEdge - 16, playerFieldY, BLUE));
+
+        // ---- Brillo y runa junto a los mazos ----
+        const deckGlow = (x, y, color) => {
+            const g = this.add.graphics();
+            g.fillStyle(color, 0.05).fillCircle(x, y, 88);
+            g.fillStyle(color, 0.08).fillCircle(x, y, 56);
+            g.fillStyle(color, 0.14).fillCircle(x, y, 32);
+            g.lineStyle(2, GOLD, 0.24).strokeCircle(x, y, 46);
+            return g;
+        };
+        container.add(deckGlow(120, 290, ORANGE));
+        container.add(deckGlow(W - 120, H - 290, BLUE));
+        container.add(rune(120, 246, GOLD_BRIGHT));
+        container.add(rune(W - 120, H - 334, GOLD_BRIGHT));
     }
 
     // Crear fila de slots
@@ -2299,6 +2462,13 @@ export default class GameScene extends Phaser.Scene {
         const cardData = cardObject.getData('cardData') || cardObject.cardData;
         const level = cardData.level || 1;
         const nowTurn = ownerType === 'player' ? this.playerTurnNumber : this.opponentTurnNumber;
+
+        // Progreso: los ataques del jugador alimentan la misión de tipos y la colección.
+        if (ownerType === 'player' && cardData.type) {
+            const username = (this.playerData && this.playerData.username) || 'Jugador';
+            recordAttackWithType(username, cardData.type);
+            recordCollectedCard(username, cardData.type, cardData.level);
+        }
 
         const last = cardObject.getData('lastAttackedTurn') || null;
         const consecutive = cardObject.getData('consecutiveAttacks') || 0;

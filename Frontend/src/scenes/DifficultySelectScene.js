@@ -17,6 +17,37 @@ export default class DifficultySelectScene extends Phaser.Scene {
     create() {
         const { width, height } = this.scale;
 
+        const levels = [
+            { level: 1,  name: 'Muy Fácil',   icon: 'agua',   clr: '#5bc0ff', desc: 'El bot comete errores, no fusiona cartas.' },
+            { level: 2,  name: 'Fácil',       icon: 'planta', clr: '#7fe09a', desc: 'El bot juega con decisiones predecibles.' },
+            { level: 3,  name: 'Normal',      icon: 'luz',    clr: '#f1c86a', desc: 'El bot juega bien y utiliza fusiones.' },
+            { level: 4,  name: 'Difícil',     icon: 'fuego',  clr: '#ff9a5c', desc: 'El bot juega óptimamente con estrategia.' },
+            { level: 5,  name: 'Muy Difícil', icon: 'sombra', clr: '#b78bff', desc: 'El bot juega de forma casi perfecta.' },
+            { level: 6,  name: 'Experto',     icon: 'espiritu', clr: '#8b5cf6', desc: 'El bot predice movimientos y juega agresivamente.' },
+            { level: 7,  name: 'Maestro',     icon: 'agua',   clr: '#3b82f6', desc: 'El bot usa estrategias avanzadas y contrajuega.' },
+            { level: 8,  name: 'Gran Maestro',icon: 'fuego',  clr: '#ff5c5c', desc: 'El bot juega con precisión quirúrgica.' },
+            { level: 9,  name: 'Leyenda',     icon: 'planta', clr: '#34d399', desc: 'El bot es prácticamente imbatible.' },
+            { level: 10, name: 'Mito',        icon: 'luz',    clr: '#ffd666', desc: 'El bot juega como una deidad del juego.' }
+        ];
+
+        const cardsHtml = levels.map(lv => {
+            const filled = Math.min(5, Math.ceil(lv.level / 2));
+            const dots = Array.from({ length: 5 }, (_, i) =>
+                `<span class="dv-dot${i < filled ? ' on' : ''}"></span>`
+            ).join('');
+            return `
+            <div class="difficulty-card" data-level="${lv.level}" style="--clr:${lv.clr};">
+                <span class="dv-corner tl"></span><span class="dv-corner tr"></span>
+                <span class="dv-corner bl"></span><span class="dv-corner br"></span>
+                <div class="dv-medallion"><span>${lv.level}</span></div>
+                <img class="dv-el" src="/assets/images/iconos/${lv.icon}.jpeg" alt="${lv.name}">
+                <div class="dv-level">Nivel ${lv.level}</div>
+                <div class="dv-name">${lv.name}</div>
+                <div class="dv-dots">${dots}</div>
+                <div class="dv-desc">${lv.desc}</div>
+            </div>`;
+        }).join('');
+
         // UI TEMPLATE
         const html = `<div class="scene-root">
         <style>
@@ -28,305 +59,288 @@ export default class DifficultySelectScene extends Phaser.Scene {
                 display: flex;
                 flex-direction: column;
                 color: white;
-                font-family: Poppins, Arial;
+                font-family: Poppins, Arial, sans-serif;
                 overflow: hidden;
-                /* Background image with a translucent gradient overlay */
-                background-image: linear-gradient(135deg, rgba(10,10,30,0.35) 0%, rgba(20,10,40,0.35) 100%), url('/assets/images/levels/background%20levels.jpeg');
+                background-image: linear-gradient(180deg, rgba(6, 8, 22, 0.62), rgba(6, 8, 22, 0.34) 40%, rgba(6, 8, 22, 0.48) 80%, rgba(4, 6, 18, 0.72)), url('/assets/images/levels/background%20levels.jpeg');
                 background-size: cover;
                 background-position: center;
                 background-repeat: no-repeat;
             }
 
+            .wrap::before {
+                content: "";
+                position: absolute;
+                inset: 0;
+                pointer-events: none;
+                z-index: 1;
+                background:
+                    radial-gradient(900px 460px at 50% 10%, rgba(91, 192, 255, 0.06), transparent 60%),
+                    radial-gradient(700px 380px at 12% 96%, rgba(139, 92, 246, 0.08), transparent 55%);
+            }
+
             /* HEADER */
             .header {
+                position: relative;
+                z-index: 2;
                 flex: 0 0 auto;
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                padding: 20px 28px;
-                border-bottom: 2px solid rgba(138, 0, 255, 0.3);
+                gap: 20px;
+                padding: 16px 28px 8px;
             }
-            .logo-box { display: flex; align-items: center; gap: 12px; }
-            .logo { width: 40px; height: 40px; }
-            .title { font-size: 24px; font-weight: bold; }
+            .back-button {
+                position: relative;
+                appearance: none;
+                background: linear-gradient(160deg, rgba(10, 18, 48, 0.72), rgba(6, 10, 30, 0.72));
+                border: 1px solid rgba(214, 180, 110, 0.5);
+                color: #f1e7bc;
+                padding: 11px 20px;
+                border-radius: 12px;
+                cursor: pointer;
+                font-family: Poppins, Arial, sans-serif;
+                font-size: 13px;
+                font-weight: 600;
+                letter-spacing: 0.03em;
+                backdrop-filter: blur(8px);
+                box-shadow: inset 0 0 18px rgba(91, 192, 255, 0.07), 0 0 16px rgba(214, 180, 110, 0.07);
+                transition: transform 160ms ease, background 160ms ease, box-shadow 160ms ease;
+            }
+            .back-button::before {
+                content: "";
+                position: absolute;
+                top: -1px; left: -1px;
+                width: 11px; height: 11px;
+                border-top: 2px solid rgba(214, 180, 110, 0.9);
+                border-left: 2px solid rgba(214, 180, 110, 0.9);
+                border-top-left-radius: 11px;
+                filter: drop-shadow(0 0 6px rgba(214, 180, 110, 0.6));
+            }
+            .back-button::after {
+                content: "";
+                position: absolute;
+                bottom: -1px; right: -1px;
+                width: 11px; height: 11px;
+                border-bottom: 2px solid rgba(214, 180, 110, 0.9);
+                border-right: 2px solid rgba(214, 180, 110, 0.9);
+                border-bottom-right-radius: 11px;
+                filter: drop-shadow(0 0 6px rgba(214, 180, 110, 0.6));
+            }
+            .back-button:hover {
+                background: linear-gradient(160deg, rgba(16, 28, 70, 0.82), rgba(10, 18, 48, 0.8));
+                transform: translateY(-2px);
+                box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35), 0 0 22px rgba(214, 180, 110, 0.16);
+            }
+            .back-button:active { transform: translateY(0) scale(0.98); }
+
+            .head-title {
+                margin: 0;
+                font-family: Georgia, 'Times New Roman', serif;
+                font-size: 22px;
+                font-weight: 800;
+                letter-spacing: 0.05em;
+                background: linear-gradient(180deg, #fff4d6, #d9b36a);
+                -webkit-background-clip: text;
+                background-clip: text;
+                -webkit-text-fill-color: transparent;
+            }
 
             /* MAIN CONTENT */
             .main {
+                position: relative;
+                z-index: 2;
                 flex: 1;
                 display: flex;
                 flex-direction: column;
                 align-items: center;
                 justify-content: center;
-                padding: 40px;
-                gap: 30px;
+                padding: 8px 30px 12px;
+                gap: 16px;
                 overflow-y: auto;
+                min-height: 0;
             }
 
+            .cards-header { text-align: center; }
+            .cards-subtitle {
+                margin: 0;
+                font-size: 11px;
+                letter-spacing: 0.26em;
+                text-transform: uppercase;
+                color: #d9b36a;
+                opacity: 0.9;
+            }
             .section-title {
-                font-size: 32px;
-                font-weight: bold;
-                text-align: center;
-                color: #8a00ff;
-                margin-bottom: 20px;
+                margin: 6px 0 2px;
+                font-family: Georgia, 'Times New Roman', serif;
+                font-size: 34px;
+                font-weight: 800;
+                letter-spacing: 0.03em;
+                background: linear-gradient(180deg, #fff4d6, #e6cf9d);
+                -webkit-background-clip: text;
+                background-clip: text;
+                -webkit-text-fill-color: transparent;
+                filter: drop-shadow(0 2px 12px rgba(0, 0, 0, 0.55));
+            }
+            .cards-desc {
+                margin: 2px 0 0;
+                font-size: 13px;
+                color: rgba(255, 255, 255, 0.68);
             }
 
-            /* DIFFICULTY GRID */
+            /* DIFFICULTY GRID - dos filas de 5 */
             .difficulty-grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(180px, 180px));
-                gap: 20px;
-                width: 100%;
-                max-width: 1000px;
+                grid-template-columns: repeat(5, minmax(150px, 200px));
+                gap: 18px;
                 justify-content: center;
-                place-items: start;
             }
 
             .difficulty-card {
-                width: 180px;
-                height: 160px;
-                background: rgba(0, 0, 0, 0.5);
-                border: 2px solid rgba(255, 255, 255, 0.2);
-                border-radius: 12px;
-                padding: 16px;
+                position: relative;
+                height: 220px;
+                border-radius: 18px;
+                background: linear-gradient(170deg, rgba(9, 14, 32, 0.78), rgba(5, 8, 20, 0.82));
+                border: 1px solid var(--clr);
+                padding: 14px 14px 12px;
                 text-align: center;
                 cursor: pointer;
-                transition: all 0.3s ease;
                 display: flex;
                 flex-direction: column;
-                justify-content: space-between;
                 align-items: center;
                 box-sizing: border-box;
+                overflow: hidden;
+                box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45), 0 0 20px color-mix(in srgb, var(--clr) 26%, transparent);
+                backdrop-filter: blur(6px);
+                transition: transform .3s cubic-bezier(.2,.8,.2,1), box-shadow .3s ease, border-color .3s ease;
             }
-
+            .difficulty-card::before {
+                content: "";
+                position: absolute;
+                top: 0; left: 12%; right: 12%;
+                height: 2px;
+                background: linear-gradient(90deg, transparent, var(--clr), transparent);
+                box-shadow: 0 0 14px var(--clr);
+                opacity: 0.8;
+            }
             .difficulty-card:hover {
-                border-color: #8a00ff;
-                background: rgba(138, 0, 255, 0.1);
-                transform: translateY(-5px);
-                box-shadow: 0 0 20px rgba(138, 0, 255, 0.4);
+                transform: translateY(-8px);
+                border-color: var(--clr);
+                box-shadow: 0 22px 46px rgba(0, 0, 0, 0.5), 0 0 38px color-mix(in srgb, var(--clr) 45%, transparent);
             }
+            .difficulty-card:active { transform: translateY(-2px) scale(0.98); }
 
-            .difficulty-level {
-                font-size: 14px;
-                color: #aaa;
-                font-weight: 600;
-                text-transform: uppercase;
-                letter-spacing: 1px;
-                margin-bottom: 4px;
-                flex-shrink: 0;
+            .dv-corner {
+                position: absolute;
+                width: 18px; height: 18px;
+                pointer-events: none;
+                filter: drop-shadow(0 0 5px var(--clr));
             }
+            .dv-corner.tl { top: 8px; left: 8px; border-top: 2px solid var(--clr); border-left: 2px solid var(--clr); border-top-left-radius: 10px; }
+            .dv-corner.tr { top: 8px; right: 8px; border-top: 2px solid var(--clr); border-right: 2px solid var(--clr); border-top-right-radius: 10px; }
+            .dv-corner.bl { bottom: 8px; left: 8px; border-bottom: 2px solid var(--clr); border-left: 2px solid var(--clr); border-bottom-left-radius: 10px; }
+            .dv-corner.br { bottom: 8px; right: 8px; border-bottom: 2px solid var(--clr); border-right: 2px solid var(--clr); border-bottom-right-radius: 10px; }
 
-            .difficulty-name {
-                font-size: 16px;
-                font-weight: bold;
-                color: #fff;
-                margin-bottom: 6px;
-                flex-shrink: 0;
-            }
-
-            .difficulty-description {
-                font-size: 11px;
-                color: #ccc;
-                text-align: center;
-                line-height: 1.3;
-                flex: 1;
+            .dv-medallion {
+                width: 46px; height: 46px;
+                transform: rotate(45deg);
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                min-height: 32px;
+                margin: 10px auto 8px;
+                background: linear-gradient(160deg, color-mix(in srgb, var(--clr) 26%, rgba(6,10,26,0.9)), rgba(6, 10, 26, 0.95));
+                border: 1px solid color-mix(in srgb, var(--clr) 70%, #fff 10%);
+                border-radius: 12px;
+                box-shadow: 0 0 18px color-mix(in srgb, var(--clr) 55%, transparent), inset 0 0 12px color-mix(in srgb, var(--clr) 25%, transparent);
+            }
+            .dv-medallion span {
+                transform: rotate(-45deg);
+                font-family: Georgia, 'Times New Roman', serif;
+                font-size: 21px;
+                font-weight: 700;
+                color: #fff;
+                text-shadow: 0 0 12px var(--clr);
             }
 
-            .difficulty-stars {
-                font-size: 12px;
-                color: #ffd700;
-                margin-top: 4px;
-                flex-shrink: 0;
+            .dv-el {
+                position: absolute;
+                top: 14px; right: 14px;
+                width: 34px; height: 34px;
+                border-radius: 10px;
+                object-fit: cover;
+                border: 1px solid color-mix(in srgb, var(--clr) 65%, transparent);
+                box-shadow: 0 0 12px color-mix(in srgb, var(--clr) 45%, transparent);
             }
 
-            /* DIFFICULTY SPECIFIC COLORS */
-            .difficulty-1 { --color: #00ff00; }
-            .difficulty-2 { --color: #00ccff; }
-            .difficulty-3 { --color: #ffaa00; }
-            .difficulty-4 { --color: #ff6600; }
-            .difficulty-5 { --color: #ff0000; }
-            .difficulty-6 { --color: #cc00ff; }
-            .difficulty-7 { --color: #9900ff; }
-            .difficulty-8 { --color: #6600ff; }
-            .difficulty-9 { --color: #3300ff; }
-            .difficulty-10 { --color: #0000ff; }
-
-            .difficulty-card.difficulty-1 { border-color: rgba(0, 255, 0, 0.4); }
-            .difficulty-card.difficulty-1:hover { border-color: #00ff00; box-shadow: 0 0 20px rgba(0, 255, 0, 0.4); }
-
-            .difficulty-card.difficulty-2 { border-color: rgba(0, 204, 255, 0.4); }
-            .difficulty-card.difficulty-2:hover { border-color: #00ccff; box-shadow: 0 0 20px rgba(0, 204, 255, 0.4); }
-
-            .difficulty-card.difficulty-3 { border-color: rgba(255, 170, 0, 0.4); }
-            .difficulty-card.difficulty-3:hover { border-color: #ffaa00; box-shadow: 0 0 20px rgba(255, 170, 0, 0.4); }
-
-            .difficulty-card.difficulty-4 { border-color: rgba(255, 102, 0, 0.4); }
-            .difficulty-card.difficulty-4:hover { border-color: #ff6600; box-shadow: 0 0 20px rgba(255, 102, 0, 0.4); }
-
-            .difficulty-card.difficulty-5 { border-color: rgba(255, 0, 0, 0.4); }
-            .difficulty-card.difficulty-5:hover { border-color: #ff0000; box-shadow: 0 0 20px rgba(255, 0, 0, 0.4); }
-
-            .difficulty-card.difficulty-6 { border-color: rgba(204, 0, 255, 0.4); }
-            .difficulty-card.difficulty-6:hover { border-color: #cc00ff; box-shadow: 0 0 20px rgba(204, 0, 255, 0.4); }
-
-            .difficulty-card.difficulty-7 { border-color: rgba(153, 0, 255, 0.4); }
-            .difficulty-card.difficulty-7:hover { border-color: #9900ff; box-shadow: 0 0 20px rgba(153, 0, 255, 0.4); }
-RESPONSIVE DESIGN */
-            @media (max-width: 768px) {
-                .difficulty-grid {
-                    grid-template-columns: repeat(2, 1fr);
-                    gap: 15px;
-                    max-width: 100%;
-                }
-
-                .difficulty-card {
-                    width: 100%;
-                    height: 140px;
-                    padding: 12px;
-                }
-
-                .section-title {
-                    font-size: 28px;
-                }
+            .dv-level {
+                font-size: 10px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.18em;
+                color: var(--clr);
+                margin-bottom: 3px;
+            }
+            .dv-name {
+                font-family: Georgia, 'Times New Roman', serif;
+                font-size: 17px;
+                font-weight: 700;
+                color: #fff;
+                text-shadow: 0 0 10px color-mix(in srgb, var(--clr) 35%, transparent);
+                margin-bottom: 6px;
+                line-height: 1.1;
+                flex: 0 0 auto;
+            }
+            .dv-dots {
+                display: flex;
+                gap: 5px;
+                margin-bottom: 8px;
+                flex: 0 0 auto;
+            }
+            .dv-dot {
+                width: 8px; height: 8px;
+                border-radius: 50%;
+                background: rgba(255, 255, 255, 0.14);
+                border: 1px solid rgba(255, 255, 255, 0.14);
+            }
+            .dv-dot.on {
+                background: var(--clr);
+                border-color: color-mix(in srgb, var(--clr) 80%, #fff);
+                box-shadow: 0 0 8px var(--clr);
+            }
+            .dv-desc {
+                font-size: 11px;
+                line-height: 1.4;
+                color: rgba(255, 255, 255, 0.72);
+                overflow: hidden;
             }
 
-            @media (max-width: 480px) {
-                .difficulty-grid {
-                    grid-template-columns: 1fr;
-                    gap: 12px;
-                }
-
-                .difficulty-card {
-                    height: 130px;
-                    padding: 10px;
-                }
-
-                .difficulty-name {
-                    font-size: 15px;
-                }
-
-                .difficulty-description {
-                    font-size: 10px;
-                    min-height: 28px;
-                };
-                color: white;
-                border-radius: 6px;
-                cursor: pointer;
-                font-weight: bold;
-                transition: all 0.2s;
+            @media (max-width: 1160px) {
+                .difficulty-grid { grid-template-columns: repeat(5, 150px); gap: 14px; }
+                .difficulty-card { height: 205px; }
             }
-
-            .back-button:hover {
-                background: #8a00ff;
-                border-color: #8a00ff;
+            @media (max-width: 960px) {
+                .difficulty-grid { grid-template-columns: repeat(2, 200px); }
             }
-            .back-button {
-                transition: transform 180ms cubic-bezier(.2,.8,.2,1), box-shadow 180ms, filter 180ms;
-                will-change: transform;
+            @media (max-width: 520px) {
+                .difficulty-grid { grid-template-columns: 1fr; }
             }
-            @keyframes subtle-pulse { 0% { transform: scale(1);} 50% { transform: scale(1.02);} 100% { transform: scale(1);} }
-            .back-button.pulse { animation: subtle-pulse 3.8s ease-in-out infinite; }
-            .back-button.animated { backface-visibility: hidden; }
-            .back-button:hover { transform: translateY(-4px) scale(1.03); box-shadow: 0 8px 20px rgba(0,0,0,0.35); }
-            .back-button:active { transform: translateY(0) scale(0.98); }
         </style>
 
         <div class="wrap">
             <header class="header">
                 <button class="back-button" id="back-btn">← Volver</button>
-                <div class="logo-box">
-                    <div class="title">Seleccionar Dificultad</div>
-                </div>
-                <div style="width: 100px;"></div>
+                <h1 class="head-title">Seleccionar Dificultad</h1>
+                <div style="width: 104px;"></div>
             </header>
 
             <div class="main">
-                <h1 class="section-title">Elige tu oponente</h1>
+                <div class="cards-header">
+                    <p class="cards-subtitle">Modo aventura</p>
+                    <h1 class="section-title">Elige tu oponente</h1>
+                    <p class="cards-desc">Cada nivel eleva la inteligencia del bot. Elige con sabiduría.</p>
+                </div>
 
                 <div class="difficulty-grid">
-                    <!-- NIVEL 1: MUY FÁCIL -->
-                    <div class="difficulty-card difficulty-1" data-level="1">
-                        <div class="difficulty-level">Nivel 1</div>
-                        <div class="difficulty-name">Muy Fácil</div>
-                        <div class="difficulty-stars"></div>
-                        <div class="difficulty-description">El bot comete errores, no fusiona cartas.</div>
-                    </div>
-
-                    <!-- NIVEL 2: FÁCIL -->
-                    <div class="difficulty-card difficulty-2" data-level="2">
-                        <div class="difficulty-level">Nivel 2</div>
-                        <div class="difficulty-name">Fácil</div>
-                        <div class="difficulty-stars"></div>
-                        <div class="difficulty-description">El bot juega con decisiones predecibles.</div>
-                    </div>
-
-                    <!-- NIVEL 3: NORMAL -->
-                    <div class="difficulty-card difficulty-3" data-level="3">
-                        <div class="difficulty-level">Nivel 3</div>
-                        <div class="difficulty-name">Normal</div>
-                        <div class="difficulty-stars"></div>
-                        <div class="difficulty-description">El bot juega bien y utiliza fusiones.</div>
-                    </div>
-
-                    <!-- NIVEL 4: DIFÍCIL -->
-                    <div class="difficulty-card difficulty-4" data-level="4">
-                        <div class="difficulty-level">Nivel 4</div>
-                        <div class="difficulty-name">Difícil</div>
-                        <div class="difficulty-stars"></div>
-                        <div class="difficulty-description">El bot juega óptimamente con estrategia.</div>
-                    </div>
-
-                    <!-- NIVEL 5: MUY DIFÍCIL -->
-                    <div class="difficulty-card difficulty-5" data-level="5">
-                        <div class="difficulty-level">Nivel 5</div>
-                        <div class="difficulty-name">Muy Difícil</div>
-                        <div class="difficulty-stars"></div>
-                        <div class="difficulty-description">El bot juega de forma casi perfecta.</div>
-                    </div>
-
-
-                    <!-- NIVEL 6: EXPERTO -->
-                    <div class="difficulty-card difficulty-6" data-level="6">
-                        <div class="difficulty-level">Nivel 6</div>
-                        <div class="difficulty-name">Experto</div>
-                        <div class="difficulty-stars"></div>
-                        <div class="difficulty-description">El bot predice movimientos y juega agresivamente.</div>
-                    </div>
-
-                    <!-- NIVEL 7: MAESTRO -->
-                    <div class="difficulty-card difficulty-7" data-level="7">
-                        <div class="difficulty-level">Nivel 7</div>
-                        <div class="difficulty-name">Maestro</div>
-                        <div class="difficulty-stars"></div>
-                        <div class="difficulty-description">El bot usa estrategias avanzadas y contrajuega.</div>
-                    </div>
-
-                    <!-- NIVEL 8: GRAN MAESTRO -->
-                    <div class="difficulty-card difficulty-8" data-level="8">
-                        <div class="difficulty-level">Nivel 8</div>
-                        <div class="difficulty-name">Gran Maestro</div>
-                        <div class="difficulty-stars"></div>
-                        <div class="difficulty-description">El bot juega con precisión quirúrgica.</div>
-                    </div>
-
-                    <!-- NIVEL 9: LEYENDA -->
-                    <div class="difficulty-card difficulty-9" data-level="9">
-                        <div class="difficulty-level">Nivel 9</div>
-                        <div class="difficulty-name">Leyenda</div>
-                        <div class="difficulty-stars"></div>
-                        <div class="difficulty-description">El bot es prácticamente imbatible.</div>
-                    </div>
-
-                    <!-- NIVEL 10: MITO -->
-                    <div class="difficulty-card difficulty-10" data-level="10">
-                        <div class="difficulty-level">Nivel 10</div>
-                        <div class="difficulty-name">Mito</div>
-                        <div class="difficulty-stars"></div>
-                        <div class="difficulty-description">El bot juega como una deidad del juego.</div>
-                    </div>
+                    ${cardsHtml}
                 </div>
             </div>
         </div>`;
@@ -351,8 +365,6 @@ RESPONSIVE DESIGN */
                 this.scene.start('HomeScenes', { playerData: this.playerData });
             });
             try {
-                backBtn.classList.add('animated', 'pulse');
-                backBtn.style.animationDelay = (Math.random() * 2) + 's';
                 backBtn.addEventListener('pointerdown', () => { backBtn.style.transform = 'translateY(0) scale(0.98)'; });
                 backBtn.addEventListener('pointerup', () => { backBtn.style.transform = ''; });
                 backBtn.addEventListener('pointerleave', () => { backBtn.style.transform = ''; });

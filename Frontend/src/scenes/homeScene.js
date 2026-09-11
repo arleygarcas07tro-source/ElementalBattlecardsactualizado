@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { startMenuMusic, play as playSfx } from '../helpers/audioManager.js';
+import { getProfileStats } from '../helpers/playerProgress.js';
 
 export default class HomeScenes extends Phaser.Scene {
     constructor() {
@@ -20,7 +21,7 @@ export default class HomeScenes extends Phaser.Scene {
         // El video del menú se precarga UNA VEZ en PreloaderScene para que al
         // volver a esta escena no haya recorte/negro por recarga de red.
         if (!this.cache.video.exists('menu-bg-video')) {
-            this.load.video('menu-bg-video', "/assets/images/menu%20principal/menu%20principal%20fondo.mp4", { muted: true, noAudio: true });
+            this.load.video('menu-bg-video', "/assets/images/menu%20principal/anmenuPrincipal.mp4", { muted: true, noAudio: true });
         }
     }
 
@@ -52,46 +53,23 @@ export default class HomeScenes extends Phaser.Scene {
 
             videoEl.muted = true;
             videoEl.defaultMuted = true;
-            videoEl.loop = false;
+            videoEl.loop = true; // Bucle continuo: al terminar, se reinicia desde el inicio.
             videoEl.playbackRate = 1;
             videoEl.playsInline = true;
             videoEl.preload = 'auto';
-
-            // Bucle continuo tipo péndulo (adelante/atrás) para que el fondo no
-            // tenga un "salto" de fin a inicio. Se cambia la dirección de PLAYBACK
-            // sin re-posicionar el tiempo (sin seek), lo que evita el parpadeo o
-            // micro-pausa que produce un currentTime recalculado a mano.
-            const EDGE = 0.12; // margen (s) antes de invertir la dirección
-            const handleTimeUpdate = () => {
-                if (!videoEl.duration || Number.isNaN(videoEl.duration)) {
-                    return;
-                }
-
-                if (videoEl.playbackRate > 0 && videoEl.currentTime >= videoEl.duration - EDGE) {
-                    videoEl.playbackRate = -1;
-                } else if (videoEl.playbackRate < 0 && videoEl.currentTime <= EDGE) {
-                    videoEl.playbackRate = 1;
-                }
-            };
-
-            // Si el navegador llega al final exacto antes del timeupdate, invertir igual.
-            const handleEnded = () => {
-                if (videoEl.playbackRate > 0) {
-                    videoEl.playbackRate = -1;
-                    videoEl.currentTime = videoEl.duration;
-                }
-            };
-
-            videoEl.addEventListener('timeupdate', handleTimeUpdate);
-            videoEl.addEventListener('ended', handleEnded);
             videoEl.currentTime = 0;
             videoEl.play().catch(() => {});
         });
 
-        this.bg.play(false);
+        this.bg.play(true);
 
         // Música ambiental del menú (procedural, bucle continuo sin cortes).
         startMenuMusic(this);
+
+        // Datos reales del perfil para el panel izquierdo.
+        const username = (this.playerData && this.playerData.username) || 'Jugador';
+        const stats = getProfileStats(username);
+        const xpPercent = Math.min(100, Math.round((stats.xpActual / stats.xpMaxima) * 100));
 
         const cards = [
             {
@@ -99,36 +77,48 @@ export default class HomeScenes extends Phaser.Scene {
                 title: "Niveles",
                 desc: "Abre la selección de niveles y enfréntate a nuevos desafíos.",
                 image: "/assets/images/mod%C3%BAlos%20menuprincipal/niveles%20fondo.jpeg",
-                icon: "⭐"
+                accent: "rgba(92, 196, 255, 0.20)",
+                glow: "rgba(92, 196, 255, 0.35)"
             },
             {
                 eyebrow: 'Multijugador',
                 title: "Juego LAN",
                 desc: "Inicia la conexión LAN y enfréntate a otros jugadores.",
                 image: "/assets/images/mod%C3%BAlos%20menuprincipal/juego%20en%20linea.jpeg",
-                icon: "⚡"
+                accent: "rgba(168, 130, 255, 0.20)",
+                glow: "rgba(168, 130, 255, 0.35)"
             },
             {
                 eyebrow: 'Aprende',
                 title: "Mecánicas",
                 desc: "Consulta las reglas, ventajas y estrategias del juego.",
                 image: "/assets/images/mod%C3%BAlos%20menuprincipal/mecanicas%20fondo.jpeg",
-                icon: "📖"
+                accent: "rgba(201, 170, 92, 0.20)",
+                glow: "rgba(201, 170, 92, 0.35)"
             }
         ];
 
         const cardsHtml = cards.map((card, index) => `
-            <div class="card" data-index="${index}">
+            <div class="card" data-index="${index}" style="--card-accent:${card.accent}; --card-glow:${card.glow};">
+                <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
                 <img src="${card.image}" class="card-image" />
                 <div class="overlay"></div>
                 <div class="content">
                     <span class="eyebrow">${card.eyebrow}</span>
                     <h3>${card.title}</h3>
                     <p>${card.desc}</p>
-                    <div class="icon" aria-hidden="true">${card.icon}</div>
                 </div>
+                <div class="card-edge"></div>
             </div>
         `).join('');
+
+        const energy = Array.from({ length: 8 }, (_, i) => {
+            const left = Math.round(6 + ((i * 47) % 88));
+            const top = Math.round(10 + ((i * 61) % 70));
+            const size = 3 + (i % 3) * 2;
+            const delay = (i % 6) * -1.6;
+            return `<span class="energy" style="left:${left}%; top:${top}%; width:${size}px; height:${size}px; animation-delay:${delay}s;"></span>`;
+        }).join('');
 
         // UI TEMPLATE (incluye modal overlay)
         const html = `<div class="scene-root">
@@ -141,297 +131,395 @@ export default class HomeScenes extends Phaser.Scene {
                 display: flex;
                 flex-direction: column;
                 color: white;
-                font-family: Poppins, Arial;
+                font-family: Poppins, 'Segoe UI', Arial, sans-serif;
                 overflow: hidden;
                 transition: filter 160ms ease;
+                background: linear-gradient(180deg, rgba(6, 8, 22, 0.55), rgba(6, 8, 22, 0.35) 40%, rgba(6, 8, 22, 0.45) 78%, rgba(4, 5, 16, 0.72));
+            }
+
+            .wrap::before {
+                content: "";
+                position: absolute;
+                inset: 0;
+                pointer-events: none;
+                z-index: 1;
+                background:
+                    radial-gradient(900px 420px at 14% -4%, rgba(108, 76, 235, 0.16), transparent 55%),
+                    radial-gradient(820px 460px at 92% 102%, rgba(92, 196, 255, 0.12), transparent 56%);
+            }
+
+            .energy {
+                position: absolute;
+                border-radius: 50%;
+                pointer-events: none;
+                z-index: 1;
+                background: #8fb7ff;
+                box-shadow: 0 0 12px 3px rgba(143, 183, 255, 0.35);
+                animation: rise 10s ease-in-out infinite alternate;
+                opacity: 0.30;
             }
 
             /* HEADER */
             .header {
+                position: relative;
+                z-index: 2;
                 flex: 0 0 auto;
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                padding: 16px 28px;
-                max-width: 100%;
+                gap: 20px;
+                padding: 18px 28px 12px;
             }
-            .logo-box { display: flex; align-items: center; gap: 12px; }
+            .logo-box { display: flex; align-items: center; gap: 14px; }
             .logo {
                 width: 54px;
                 height: 54px;
-                border-radius: 12px;
+                border-radius: 14px;
                 object-fit: cover;
-                box-shadow: 0 4px 18px rgba(0,0,0,0.45), 0 0 0 2px rgba(255,255,255,0.10);
+                box-shadow: 0 6px 22px rgba(0,0,0,0.5), 0 0 0 2px rgba(230, 200, 115, 0.35), 0 0 22px rgba(230, 200, 115, 0.12);
             }
-            .user { font-size: 14px; opacity: 0.85; }
-            
+            .brand-title {
+                margin: 0;
+                font-family: Georgia, 'Times New Roman', serif;
+                font-size: 22px;
+                font-weight: 800;
+                letter-spacing: 0.05em;
+                background: linear-gradient(180deg, #fff4d6, #e6c873);
+                -webkit-background-clip: text;
+                background-clip: text;
+                -webkit-text-fill-color: transparent;
+            }
+            .brand-sub {
+                font-size: 11.5px;
+                color: rgba(255, 255, 255, 0.66);
+                letter-spacing: 0.12em;
+                text-transform: uppercase;
+            }
+
             /* HEADER BUTTONS */
-            .header-actions {
-                display: flex;
-                align-items: center;
-                gap: 14px;
-            }
+            .header-actions { display: flex; align-items: center; gap: 10px; }
             .header-btn {
+                position: relative;
                 display: flex;
                 align-items: center;
-                gap: 6px;
-                background: rgba(255,255,255,0.08);
-                border: 1px solid rgba(255,255,255,0.15);
-                color: white;
-                padding: 8px 14px;
-                border-radius: 8px;
+                gap: 7px;
+                appearance: none;
+                background: linear-gradient(160deg, rgba(10, 18, 48, 0.72), rgba(6, 10, 30, 0.72));
+                border: 1px solid rgba(230, 200, 115, 0.5);
+                color: #f5ecd2;
+                padding: 10px 18px;
+                border-radius: 12px;
                 cursor: pointer;
+                font-family: Poppins, Arial, sans-serif;
                 font-size: 13px;
-                transition: transform 180ms ease, background 180ms ease;
+                font-weight: 600;
+                letter-spacing: 0.03em;
+                backdrop-filter: blur(8px);
+                box-shadow: inset 0 0 18px rgba(143, 183, 255, 0.07), 0 0 16px rgba(230, 200, 115, 0.07);
+                transition: transform 160ms ease, background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
             }
             .header-btn:hover {
-                background: rgba(255,255,255,0.12);
+                background: linear-gradient(160deg, rgba(16, 28, 70, 0.8), rgba(10, 18, 48, 0.78));
+                border-color: rgba(241, 200, 106, 0.75);
                 transform: translateY(-2px);
+                box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35), 0 0 24px rgba(230, 200, 115, 0.16), inset 0 0 20px rgba(143, 183, 255, 0.08);
+            }
+            .header-btn .notif-dot {
+                width: 7px; height: 7px;
+                border-radius: 50%;
+                background: #f1c86a;
+                box-shadow: 0 0 8px rgba(241, 200, 106, 0.9);
             }
             .btn-exit {
-                background: #b90000;
-                border: 1px solid #8a0000;
-                padding: 10px 16px;
-                border-radius: 8px;
+                position: relative;
+                display: flex;
+                align-items: center;
+                gap: 7px;
+                appearance: none;
+                background: linear-gradient(160deg, rgba(58, 18, 34, 0.62), rgba(10, 14, 34, 0.7));
+                border: 1px solid rgba(230, 200, 115, 0.4);
+                color: #ffd9d9;
+                padding: 10px 20px;
+                border-radius: 12px;
                 cursor: pointer;
-                color: white;
-                font-weight: bold;
-                transition: transform 180ms ease, background 180ms ease;
+                font-family: Poppins, Arial, sans-serif;
+                font-size: 13px;
+                font-weight: 600;
+                letter-spacing: 0.03em;
+                box-shadow: inset 0 0 18px rgba(255, 120, 120, 0.06), 0 0 14px rgba(230, 200, 115, 0.06);
+                transition: transform 160ms ease, background 160ms ease, box-shadow 160ms ease;
             }
             .btn-exit:hover {
-                background: #d60000;
+                background: linear-gradient(160deg, rgba(120, 30, 48, 0.7), rgba(40, 20, 44, 0.75));
                 transform: translateY(-2px);
+                box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35), 0 0 22px rgba(255, 122, 122, 0.14);
+            }
+
+            /* ESQUINAS ORNAMENTALES DORADAS (botones) */
+            .header-btn::before, .btn-exit::before, .bottom-btn::before, .btn-profile::before {
+                content: "";
+                position: absolute;
+                top: -1px; left: -1px;
+                width: 11px; height: 11px;
+                border-top: 2px solid rgba(230, 200, 115, 0.9);
+                border-left: 2px solid rgba(230, 200, 115, 0.9);
+                border-top-left-radius: 11px;
+                filter: drop-shadow(0 0 6px rgba(241, 200, 106, 0.7));
+                pointer-events: none;
+            }
+            .header-btn::after, .btn-exit::after, .bottom-btn::after, .btn-profile::after {
+                content: "";
+                position: absolute;
+                bottom: -1px; right: -1px;
+                width: 11px; height: 11px;
+                border-bottom: 2px solid rgba(230, 200, 115, 0.9);
+                border-right: 2px solid rgba(230, 200, 115, 0.9);
+                border-bottom-right-radius: 11px;
+                filter: drop-shadow(0 0 6px rgba(241, 200, 106, 0.7));
+                pointer-events: none;
             }
 
             /* MAIN CONTENT */
             .main {
+                position: relative;
+                z-index: 2;
                 flex: 1;
                 display: flex;
-                padding: 2vh 2vw;
-                gap: 2vw;
+                padding: 4px 28px 14px;
+                gap: 22px;
                 overflow: hidden;
+                min-height: 0;
             }
 
-            /* USER PROFILE PANEL */
+            /* USER PROFILE PANEL (izquierda) - tarjeta lateral compacta */
             .user-panel {
                 display: flex;
                 flex-direction: column;
-                width: 200px;
-                background: rgba(0,0,0,0.35);
-                border: 1px solid rgba(255,255,255,0.08);
-                border-radius: 16px;
-                padding: 20px;
-                gap: 16px;
-                backdrop-filter: blur(8px);
+                align-self: flex-start;
+                width: 15%;
+                flex: 0 0 15%;
+                min-width: 168px;
+                max-width: 240px;
+                background: rgba(8, 11, 28, 0.66);
+                border: 1px solid rgba(230, 200, 115, 0.22);
+                border-radius: 14px;
+                padding: 8px 12px 6px;
+                gap: 6px;
+                backdrop-filter: blur(10px);
+                box-shadow: 0 20px 46px rgba(0, 0, 0, 0.4), inset 0 0 26px rgba(92, 196, 255, 0.03);
+                overflow: hidden;
+            }
+            .user-panel::before {
+                content: "";
+                position: absolute;
+                top: 0; left: 16%; right: 16%;
+                height: 2px;
+                background: linear-gradient(90deg, transparent, rgba(230, 200, 115, 0.7), transparent);
+                box-shadow: 0 0 12px rgba(230, 200, 115, 0.4);
             }
 
-            .user-profile {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                text-align: center;
-                gap: 10px;
-                border-bottom: 1px solid rgba(255,255,255,0.08);
-                padding-bottom: 16px;
-            }
-
-            .user-avatar {
-                width: 60px;
-                height: 60px;
-                border-radius: 12px;
-                background: linear-gradient(135deg, #2b8fef, #183f8a);
-                display: flex;
+            .user-avatar-wrap { position: relative; display: flex; justify-content: center; }
+            .user-avatar-orb {
+                width: 52px; height: 52px;
+                border-radius: 50%;
+                padding: 2px;
+                display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                font-size: 32px;
-                border: 2px solid rgba(255,255,255,0.15);
+                background: conic-gradient(from 0deg, #e6c873, #0b0a26 45%, #8fb7ff 72%, transparent 100%);
+                box-shadow: 0 0 26px rgba(230, 200, 115, 0.22);
             }
-
+            .user-avatar-orb img {
+                width: 100%; height: 100%;
+                border-radius: 50%;
+                object-fit: cover;
+                border: 2px solid rgba(4, 5, 16, 0.7);
+            }
             .user-name {
-                font-weight: 700;
-                font-size: 14px;
-                color: white;
                 margin: 0;
+                font-family: Georgia, 'Times New Roman', serif;
+                font-size: 13px;
+                font-weight: 700;
+                color: #fff;
+                text-align: center;
+                letter-spacing: 0.02em;
+            }
+            .user-role {
+                margin: 0;
+                font-size: 8.5px;
+                color: rgba(255, 255, 255, 0.6);
+                text-align: center;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
             }
 
-            .user-rank {
-                font-size: 12px;
-                color: rgba(255,255,255,0.7);
-                text-transform: uppercase;
-                letter-spacing: 0.05em;
-                margin: 0;
+            .profile-stats { display: flex; flex-direction: column; gap: 5px; padding-top: 5px; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+            .stat-line { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; color: rgba(255, 255, 255, 0.78); }
+            .stat-line .label { text-transform: uppercase; letter-spacing: 0.08em; font-size: 9px; color: rgba(255, 255, 255, 0.52); }
+            .stat-line .value { font-family: Georgia, 'Times New Roman', serif; font-weight: 700; font-size: 12px; color: #fff; }
+            .value.gold { color: #f1c86a; text-shadow: 0 0 12px rgba(241, 200, 106, 0.35); }
+
+            .xp-block { display: flex; flex-direction: column; gap: 3px; }
+            .xp-top { display: flex; justify-content: space-between; font-size: 9px; color: rgba(255, 255, 255, 0.6); }
+            .xp-bar {
+                height: 7px;
+                border-radius: 999px;
+                background: rgba(255, 255, 255, 0.07);
+                border: 1px solid rgba(255, 255, 255, 0.10);
+                overflow: hidden;
+            }
+            .xp-fill {
+                width: 0%;
+                height: 100%;
+                border-radius: 999px;
+                background: linear-gradient(90deg, #7d72ff, #8fb7ff);
+                box-shadow: 0 0 12px rgba(143, 183, 255, 0.4);
+                transition: width 900ms ease;
             }
 
             .btn-profile {
+                position: relative;
                 width: 100%;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                gap: 8px;
-                background: linear-gradient(135deg, rgba(241,231,188,0.16), rgba(138,0,255,0.16));
-                border: 1px solid rgba(241,231,188,0.35);
+                gap: 6px;
+                appearance: none;
+                background: linear-gradient(160deg, rgba(14, 24, 60, 0.8), rgba(8, 14, 40, 0.8));
+                border: 1px solid rgba(230, 200, 115, 0.45);
                 color: #f1e7bc;
-                padding: 10px 14px;
-                border-radius: 10px;
+                padding: 5px 12px;
+                border-radius: 9px;
                 cursor: pointer;
-                font-size: 13px;
+                font-family: Poppins, Arial, sans-serif;
+                font-size: 10px;
                 font-weight: 700;
-                letter-spacing: 0.04em;
+                letter-spacing: 0.05em;
                 text-transform: uppercase;
+                margin-top: auto;
+                box-shadow: inset 0 0 14px rgba(143, 183, 255, 0.08), 0 0 12px rgba(143, 183, 255, 0.10);
                 transition: transform 180ms ease, background 180ms ease, box-shadow 180ms ease;
             }
-
             .btn-profile:hover {
-                background: linear-gradient(135deg, rgba(241,231,188,0.28), rgba(138,0,255,0.28));
+                background: linear-gradient(160deg, rgba(20, 34, 82, 0.85), rgba(12, 20, 54, 0.85));
                 transform: translateY(-2px);
-                box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+                box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3), 0 0 18px rgba(143, 183, 255, 0.18);
             }
+            .btn-profile:active { transform: translateY(0) scale(0.98); }
 
-            .btn-profile:active {
-                transform: translateY(0) scale(0.98);
-            }
-
-            .user-stats {
-                display: flex;
-                flex-direction: column;
-                gap: 12px;
-            }
-
-            .stat-block {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                font-size: 12px;
-                color: rgba(255,255,255,0.75);
-            }
-
-            .stat-block strong {
-                color: rgba(241,231,188,0.9);
-                font-weight: 700;
-                font-size: 13px;
-            }
-
-            .stat-label {
-                text-transform: uppercase;
-                letter-spacing: 0.04em;
-                font-size: 11px;
-            }
-
-            .progress-bar-small {
-                width: 100%;
-                height: 6px;
-                background: rgba(255,255,255,0.08);
-                border-radius: 3px;
-                overflow: hidden;
-            }
-
-            .progress-fill-small {
-                height: 100%;
-                background: linear-gradient(90deg, #2b8fef, #1a5fc4);
-                border-radius: 3px;
-                width: 82%;
-            }
-
-            /* MAIN CONTENT */
+            /* MAIN CONTENT (centro) */
             .main-content {
                 flex: 1;
+                min-width: 0;
                 display: flex;
                 flex-direction: column;
-                gap: 2rem;
+                gap: 18px;
                 overflow-y: auto;
             }
-                padding: 24px;
-                display: flex;
-                flex-direction: column;
-                height: auto;
-                max-height: 100%;
-                box-shadow: 0 0 12px rgba(0,0,0,0.55);
+            .cards-header { text-align: center; padding-top: 6px; }
+            .cards-subtitle {
+                margin: 0;
+                font-size: 11px;
+                letter-spacing: 0.22em;
+                text-transform: uppercase;
+                color: #f1c86a;
+                opacity: 0.85;
             }
-
-            .stats-panel {
-                display: flex;
-                flex-direction: column;
-                height: auto;
-                width: 100%;
-                max-width: 400px;
-                align-self: flex-end;
-                margin-top: auto;
+            .cards-title {
+                margin: 6px 0 4px;
+                font-family: Georgia, 'Times New Roman', serif;
+                font-size: 34px;
+                font-weight: 800;
+                letter-spacing: 0.03em;
+                background: linear-gradient(180deg, #fff4d6, #e8d291);
+                -webkit-background-clip: text;
+                background-clip: text;
+                -webkit-text-fill-color: transparent;
+                filter: drop-shadow(0 2px 12px rgba(233, 185, 73, 0.25));
             }
-
-            h2 { margin: 0; font-size: 28px; }
-            p { margin: 0 0 18px 0; }
-
-            .stats-grid {
-                display: grid;
-                grid-template-columns: 1fr auto;
-                row-gap: 8px;
-                margin-bottom: 60px;
-                gap: 15px;
-            }
-
-            .actions {
-                display: flex;
-                flex-direction: column;
-                gap: 10px;
-                margin-top: 10px;
-            }
-
-            .btn-primary {
-                padding: 12px;
-                background: #8a00ff;
-                border-radius: 8px;
-                border: none;
-                color: white;
-                cursor: pointer;
-                transition: transform 180ms cubic-bezier(.2,.8,.2,1), box-shadow 180ms, filter 180ms;
-                will-change: transform;
+            .cards-description {
+                margin: 0 auto;
+                max-width: 640px;
+                font-size: 14px;
+                line-height: 1.6;
+                color: rgba(255, 255, 255, 0.72);
             }
 
             .cards {
                 display: flex;
-                gap: 2rem;
-                justify-content: flex-start;
+                gap: 22px;
+                justify-content: center;
                 align-items: stretch;
                 flex-wrap: wrap;
-                margin: 0;
+                margin: 4px 0 0;
             }
 
+            /* TARJETAS DE MÓDULOS */
             .card {
                 position: relative;
                 width: 320px;
-                height: 480px;
-                border-radius: 20px;
+                height: 432px;
+                border-radius: 22px;
                 overflow: hidden;
                 cursor: pointer;
-                transition: transform .35s cubic-bezier(.2,.8,.2,1), box-shadow .35s ease, filter .35s ease;
-                background: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(0,0,0,0.3));
-                border: 1px solid rgba(255,255,255,0.12);
-                box-shadow: 0 8px 32px rgba(0,0,0,0.4), 
-                            0 0 40px rgba(138,0,255,0.1),
-                            inset 0 0 30px rgba(255,255,255,0.02);
-                backdrop-filter: blur(2px);
+                background: linear-gradient(160deg, rgba(10, 18, 48, 0.68), rgba(6, 10, 30, 0.72));
+                border: 1px solid rgba(230, 200, 115, 0.45);
+                box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5), 0 0 24px rgba(230, 200, 115, 0.08), inset 0 0 34px rgba(143, 183, 255, 0.05);
+                backdrop-filter: blur(3px);
+                transition: transform .35s cubic-bezier(.2,.8,.2,1), box-shadow .35s ease, border-color .35s ease;
             }
-
             .card::before {
                 content: "";
                 position: absolute;
                 inset: 0;
-                border-radius: 20px;
+                border-radius: 22px;
                 padding: 2px;
                 pointer-events: none;
-                background: linear-gradient(90deg, rgba(24,150,255,0.08), rgba(138,0,255,0.08));
+                background: linear-gradient(90deg, rgba(241, 200, 106, 0.55), rgba(143, 183, 255, 0.35), rgba(241, 200, 106, 0.55));
                 -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
                 -webkit-mask-composite: xor;
                 mask-composite: exclude;
             }
-
+            .card::after {
+                content: "";
+                position: absolute;
+                top: 0; bottom: 0;
+                width: 34%;
+                left: -60%;
+                background: linear-gradient(105deg, transparent, rgba(143, 183, 255, 0.16), rgba(108, 76, 235, 0.14), transparent);
+                transform: skewX(-18deg);
+                pointer-events: none;
+                animation: card-sheen 6s ease-in-out infinite;
+            }
+            .card:hover::after { animation-duration: 3.2s; }
+            .card-edge {
+                position: absolute;
+                top: 0; left: 0; right: 0;
+                height: 3px;
+                background: linear-gradient(90deg, transparent, var(--card-accent), transparent);
+                box-shadow: 0 0 18px var(--card-glow);
+                opacity: 0.85;
+                transition: opacity .35s ease;
+            }
             .card:hover {
-                transform: translateY(-16px) scale(1.02);
-                box-shadow: 0 16px 56px rgba(0,0,0,0.5), 
-                            0 0 60px rgba(138,0,255,0.25),
-                            inset 0 0 30px rgba(255,255,255,0.03);
-                filter: brightness(1.08);
+                transform: translateY(-14px) scale(1.02);
+                box-shadow: 0 26px 64px rgba(0, 0, 0, 0.55), 0 0 44px var(--card-glow);
+                border-color: rgba(241, 200, 106, 0.7);
             }
+            .card:hover .card-edge { opacity: 1; }
+
+            /* ESQUINAS ORNAMENTALES DORADAS (tarjetas) */
+            .corner {
+                position: absolute;
+                width: 30px; height: 30px;
+                pointer-events: none;
+                z-index: 5;
+                filter: drop-shadow(0 0 8px rgba(241, 200, 106, 0.8));
+            }
+            .corner.tl { top: 10px; left: 10px; border-top: 3px solid rgba(230, 200, 115, 0.95); border-left: 3px solid rgba(230, 200, 115, 0.95); border-top-left-radius: 14px; }
+            .corner.tr { top: 10px; right: 10px; border-top: 3px solid rgba(230, 200, 115, 0.95); border-right: 3px solid rgba(230, 200, 115, 0.95); border-top-right-radius: 14px; }
+            .corner.bl { bottom: 10px; left: 10px; border-bottom: 3px solid rgba(230, 200, 115, 0.95); border-left: 3px solid rgba(230, 200, 115, 0.95); border-bottom-left-radius: 14px; }
+            .corner.br { bottom: 10px; right: 10px; border-bottom: 3px solid rgba(230, 200, 115, 0.95); border-right: 3px solid rgba(230, 200, 115, 0.95); border-bottom-right-radius: 14px; }
 
             .card-image {
                 position: absolute;
@@ -439,187 +527,113 @@ export default class HomeScenes extends Phaser.Scene {
                 height: 100%;
                 object-fit: cover;
                 transition: transform .6s ease, filter .4s ease;
-                filter: brightness(0.6) saturate(1.05) contrast(1.02);
+                filter: brightness(0.62) saturate(0.92) contrast(1.02);
             }
-
             .card:hover .card-image {
                 transform: scale(1.06);
-                filter: brightness(0.72) saturate(1.06) contrast(1.04);
+                filter: brightness(0.72) saturate(0.95) contrast(1.04);
             }
-
             .overlay {
                 position: absolute;
                 inset: 0;
                 background: linear-gradient(
                     to top,
-                    rgba(3,6,12,0.9) 20%,
-                    rgba(3,6,12,0.5) 45%,
-                    rgba(3,6,12,0.18) 70%,
-                    rgba(3,6,12,0.0) 100%
+                    rgba(6, 10, 28, 0.95) 16%,
+                    rgba(10, 18, 48, 0.62) 46%,
+                    rgba(12, 20, 52, 0.34) 74%,
+                    rgba(8, 14, 40, 0.16) 100%
                 );
             }
-
             .content {
                 position: absolute;
-                bottom: 36px;
-                left: 28px;
-                right: 28px;
+                bottom: 32px;
+                left: 26px;
+                right: 26px;
                 color: white;
                 text-align: left;
             }
-
             .eyebrow {
                 display: block;
+                font-family: Georgia, 'Times New Roman', serif;
                 font-size: 12px;
-                letter-spacing: .12em;
+                letter-spacing: .16em;
                 text-transform: uppercase;
-                color: rgba(255,255,255,0.65);
+                color: #f1c86a;
                 margin-bottom: 8px;
+                text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6);
             }
-
             .card h3 {
-                margin: 0 0 12px 0;
-                font-size: 28px;
+                margin: 0 0 10px 0;
+                font-family: Georgia, 'Times New Roman', serif;
+                font-size: 29px;
                 line-height: 1.05;
                 letter-spacing: 0.02em;
-                color: #fff;
+                background: linear-gradient(180deg, #ffffff, #f1e7bc);
+                -webkit-background-clip: text;
+                background-clip: text;
+                -webkit-text-fill-color: transparent;
+                filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.55));
             }
-
             .card p {
-                color: rgba(255,255,255,0.78);
-                font-size: 15px;
-                margin: 0 0 18px 0;
-                max-width: 85%;
+                color: rgba(255, 255, 255, 0.88);
+                font-size: 13.5px;
+                line-height: 1.55;
+                margin: 0 0 16px 0;
+                max-width: 90%;
+                text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
             }
 
-            .icon {
-                width: 64px;
-                height: 64px;
-                display: inline-flex;
-                justify-content: center;
-                align-items: center;
-                border-radius: 14px;
-                background: rgba(0,0,0,0.35);
-                border: 1px solid rgba(255,255,255,0.08);
-                color: #fff;
-                font-size: 28px;
-            }
-
-            /* color accents for each card (by data-index) */
-            .card[data-index="0"] .icon { background: linear-gradient(180deg,#2b8fef,#183f8a); box-shadow: 0 6px 18px rgba(43,143,239,0.12); }
-            .card[data-index="1"] .icon { background: linear-gradient(180deg,#24d0ff,#003a5a); box-shadow: 0 6px 18px rgba(36,208,255,0.10); }
-            .card[data-index="2"] .icon { background: linear-gradient(180deg,#2be48a,#0b5231); box-shadow: 0 6px 18px rgba(43,228,138,0.10); }
-
-            .card-image {
-                position: absolute;
-                width: 100%;
-                height: 100%;
-                object-fit: cover;
-                transition: transform .6s ease, filter .4s ease;
-                filter: brightness(0.6) saturate(1.05) contrast(1.02);
-            }
-
-            .card:hover .card-image {
-                transform: scale(1.06);
-                filter: brightness(0.72) saturate(1.06) contrast(1.04);
-            }
-
-            .overlay {
-                position: absolute;
-                inset: 0;
-                background: linear-gradient(
-                    to top,
-                    rgba(3,6,12,0.9) 20%,
-                    rgba(3,6,12,0.5) 45%,
-                    rgba(3,6,12,0.18) 70%,
-                    rgba(3,6,12,0.0) 100%
-                );
-            }
-
-            .content {
-                position: absolute;
-                bottom: 36px;
-                left: 28px;
-                right: 28px;
-                color: white;
-                text-align: left;
-            }
-
-            .eyebrow {
-                display: block;
-                font-size: 12px;
-                letter-spacing: .12em;
-                text-transform: uppercase;
-                color: rgba(255,255,255,0.65);
-                margin-bottom: 8px;
-            }
-
-            .card h3 {
-                margin: 0 0 12px 0;
-                font-size: 28px;
-                line-height: 1.05;
-                letter-spacing: 0.02em;
-                color: #fff;
-            }
-
-            .card p {
-                color: rgba(255,255,255,0.78);
-                font-size: 15px;
-                margin: 0 0 18px 0;
-                max-width: 85%;
-            }
-
-            /* Button animations */
-            @keyframes subtle-pulse {
-                0% { transform: scale(1); }
-                50% { transform: scale(1.02); }
-                100% { transform: scale(1); }
-            }
-            .btn-primary.pulse { animation: subtle-pulse 3.8s ease-in-out infinite; }
-            .btn-primary.animated, .btn-exit.animated, .btn-close.animated { backface-visibility: hidden; }
-            .btn-primary:hover, .btn-exit:hover, .btn-close:hover {
-                transform: translateY(-4px) scale(1.03);
-                box-shadow: 0 8px 20px rgba(0,0,0,0.35);
-            }
-            .btn-primary:active, .btn-exit:active, .btn-close:active { transform: translateY(0) scale(0.98); }
-
-            /* BOTTOM ACTION BUTTONS */
+            /* BOTTOM ACTIONS (Cartas / Misiones) */
             .bottom-actions {
                 display: flex;
-                gap: 12px;
-                padding: 16px 0;
-                border-top: 1px solid rgba(255,255,255,0.08);
-                justify-content: flex-start;
+                justify-content: center;
+                gap: 16px;
+                padding: 10px 0 2px;
                 margin-top: auto;
             }
-
             .bottom-btn {
+                position: relative;
                 display: flex;
                 align-items: center;
-                gap: 8px;
-                background: rgba(255,255,255,0.06);
-                border: 1px solid rgba(255,255,255,0.12);
-                color: rgba(255,255,255,0.9);
-                padding: 12px 18px;
-                border-radius: 10px;
+                justify-content: center;
+                gap: 12px;
+                min-width: 250px;
+                appearance: none;
+                background: linear-gradient(160deg, rgba(10, 18, 48, 0.78), rgba(6, 10, 30, 0.82));
+                border: 1px solid rgba(230, 200, 115, 0.5);
+                color: #f5ecd2;
+                padding: 16px 26px;
+                border-radius: 16px;
                 cursor: pointer;
-                font-weight: 600;
-                font-size: 13px;
-                text-transform: uppercase;
-                letter-spacing: 0.05em;
-                transition: transform 180ms ease, background 180ms ease, box-shadow 180ms ease;
+                font-family: Poppins, Arial, sans-serif;
+                font-weight: 700;
+                font-size: 15px;
+                letter-spacing: 0.08em;
+                text-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
+                backdrop-filter: blur(8px);
+                box-shadow: inset 0 0 22px rgba(143, 183, 255, 0.08), 0 0 22px rgba(143, 183, 255, 0.18), 0 10px 26px rgba(0, 0, 0, 0.4);
+                transition: transform 180ms ease, background 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
             }
-
             .bottom-btn:hover {
-                background: rgba(255,255,255,0.1);
-                border-color: rgba(255,255,255,0.2);
-                transform: translateY(-2px);
-                box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                background: linear-gradient(160deg, rgba(16, 28, 70, 0.85), rgba(10, 16, 42, 0.85));
+                border-color: rgba(241, 200, 106, 0.75);
+                transform: translateY(-3px);
+                box-shadow: inset 0 0 26px rgba(143, 183, 255, 0.12), 0 0 38px rgba(143, 183, 255, 0.30), 0 14px 30px rgba(0, 0, 0, 0.45);
             }
-
-            .bottom-btn:active {
-                transform: translateY(0);
+            .bottom-btn:active { transform: translateY(0); }
+            .bottom-btn .btn-icon {
+                width: 42px; height: 42px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 12px;
+                font-size: 18px;
+                background: rgba(143, 183, 255, 0.12);
+                border: 1px solid rgba(143, 183, 255, 0.45);
+                box-shadow: 0 0 16px rgba(143, 183, 255, 0.25);
             }
+            .bottom-btn.cards .btn-icon { background: rgba(143, 183, 255, 0.16); border-color: rgba(143, 183, 255, 0.55); box-shadow: 0 0 18px rgba(143, 183, 255, 0.30); }
+            .bottom-btn.missions .btn-icon { background: rgba(241, 200, 106, 0.14); border-color: rgba(241, 200, 106, 0.45); box-shadow: 0 0 18px rgba(241, 200, 106, 0.22); }
 
             /* MODAL / OVERLAY */
             .modal-overlay {
@@ -628,211 +642,149 @@ export default class HomeScenes extends Phaser.Scene {
                 display: none;
                 align-items: center;
                 justify-content: center;
-                background: rgba(0,0,0,0.45);
+                background: rgba(3, 5, 16, 0.6);
                 z-index: 10000;
                 pointer-events: auto;
-                backdrop-filter: blur(2px);
+                backdrop-filter: blur(5px);
             }
             .modal-overlay.show { display: flex; }
-
             .modal {
-                background: rgba(10,10,10,0.95);
+                background: rgba(9, 12, 28, 0.96);
                 color: white;
-                padding: 20px;
-                border-radius: 10px;
-                max-width: 720px;
+                padding: 26px 30px;
+                border-radius: 20px;
+                max-width: 460px;
                 width: 90%;
-                box-shadow: 0 10px 30px rgba(0,0,0,0.6);
-                /* por defecto modal no ocupa toda la altura ni hace scroll */
-                max-height: 90vh;
-                overflow: visible;
-            }
-
-            /* Clase especial para modales largos (mecánicas): 80% de la pantalla y con scroll */
-            .modal--tall {
+                border: 1px solid rgba(230, 200, 115, 0.35);
+                box-shadow: 0 14px 40px rgba(0, 0, 0, 0.6), 0 0 30px rgba(230, 200, 115, 0.08);
                 max-height: 80vh;
-                overflow: auto;
+                overflow-y: auto;
             }
-            .modal--tall .modal-body {
-                /* asegurar scroll interno si el contenido es largo */
-                max-height: calc(80vh - 80px);
-                overflow: auto;
-            }
-
-            .modal .modal-title { font-weight: 700; margin-bottom: 8px; }
-            .modal .modal-body { margin-bottom: 16px; }
-            .modal .modal-actions { display:flex; justify-content:flex-end; gap:8px; }
-            .modal .btn-close {
-                padding: 8px 12px; border-radius: 8px; border:none; cursor:pointer;
-                background:#666; color:white;
-            }
-            .modal--config {
-                max-width: 760px;
-                width: 90%;
-            }
-            .settings-panel {
-                display: grid;
-                gap: 22px;
-            }
-            .settings-section {
-                background: rgba(255,255,255,0.05);
-                border: 1px solid rgba(255,255,255,0.12);
-                border-radius: 18px;
-                padding: 20px 20px 18px;
-                display: grid;
-                gap: 16px;
-            }
-            .section-header {
-                display: flex;
-                align-items: center;
-                gap: 12px;
-                margin-bottom: 4px;
-            }
-            .section-header h3 {
-                margin: 0;
-                font-size: 18px;
-                letter-spacing: 0.06em;
-                text-transform: uppercase;
+            .modal-title {
+                font-family: Georgia, 'Times New Roman', serif;
+                font-size: 21px;
+                font-weight: 700;
                 color: #f1e7bc;
+                margin-bottom: 10px;
             }
-            .section-icon {
-                width: 36px;
-                height: 36px;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                border-radius: 50%;
-                background: rgba(241,231,188,0.16);
-                font-size: 18px;
-            }
-            .setting-row {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                gap: 14px;
-                flex-wrap: wrap;
-            }
-            .setting-label {
-                color: rgba(255,255,255,0.82);
+            .modal-body { margin-bottom: 18px; font-size: 14px; line-height: 1.7; color: rgba(255, 255, 255, 0.85); }
+            .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+            .btn-close {
+                appearance: none;
+                padding: 10px 18px;
+                border-radius: 11px;
+                border: 1px solid rgba(230, 200, 115, 0.4);
+                background: rgba(230, 200, 115, 0.12);
+                color: #f1e7bc;
+                cursor: pointer;
+                font-family: Poppins, Arial, sans-serif;
                 font-size: 13px;
                 font-weight: 600;
-                letter-spacing: 0.04em;
-                text-transform: uppercase;
-                flex: 1 1 220px;
+                transition: transform 160ms ease, background 160ms ease;
             }
-            .slider-group {
-                display: flex;
-                align-items: center;
-                gap: 12px;
-                min-width: 220px;
-                flex: 1 1 320px;
+            .btn-close:hover { background: rgba(230, 200, 115, 0.22); transform: translateY(-2px); }
+
+            /* BUTTON ANIMATIONS */
+            @keyframes subtle-pulse { 0% { transform: scale(1);} 50% { transform: scale(1.02);} 100% { transform: scale(1);} }
+            @keyframes rise { 0% { transform: translateY(0) scale(1); opacity: 0.2; } 100% { transform: translateY(-60px) scale(1.4); opacity: 0.5; } }
+            @keyframes card-sheen { 0% { left: -60%; } 55%, 100% { left: 130%; } }
+            .btn-primary.pulse { animation: subtle-pulse 3.8s ease-in-out infinite; }
+            .btn-primary.animated, .btn-exit.animated, .btn-close.animated { backface-visibility: hidden; }
+            .btn-primary:hover, .btn-exit:hover, .btn-close:hover {
+                transform: translateY(-4px) scale(1.03);
+                box-shadow: 0 8px 20px rgba(0,0,0,0.35);
             }
-            .slider-group input[type=range] {
-                width: 100%;
-                accent-color: #f1e7bc;
+            .btn-primary:active, .btn-exit:active, .btn-close:active { transform: translateY(0) scale(0.98); }
+
+            @media (max-width: 1080px) {
+                .user-panel { width: 17%; flex: 0 0 17%; min-width: 160px; }
+                .card { width: 260px; height: 360px; }
             }
-            .slider-value {
-                min-width: 42px;
-                text-align: right;
-                font-weight: 700;
-                color: #f1e7bc;
-            }
-            .account-card {
-                background: rgba(0,0,0,0.16);
-                border: 1px solid rgba(255,255,255,0.1);
-                border-radius: 16px;
-                padding: 18px;
-                display: grid;
-                gap: 14px;
-            }
-            .account-row {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                gap: 12px;
-                color: rgba(255,255,255,0.88);
-            }
-            .account-row strong {
-                color: #fff;
-                font-size: 14px;
-            }
-            .account-actions {
-                display: flex;
-                justify-content: flex-end;
-            }
-            .account-actions .btn-primary {
-                margin: 0;
-                width: auto;
-                padding: 12px 18px;
-                background: linear-gradient(135deg, #f5d86b, #e0b230);
-                color: #1f1a0f;
-                font-weight: 700;
+            @media (max-width: 860px) {
+                .main { flex-direction: column; overflow-y: auto; }
+                .user-panel { width: 100%; flex: none; flex-direction: row; align-items: center; gap: 16px; }
+                .user-panel .btn-profile { margin-top: 0; }
+                .profile-stats { border-top: none; padding-top: 0; min-width: 200px; }
+                .bottom-btn { min-width: 0; flex: 1; }
             }
         </style>
 
         <div class="wrap">
+            ${energy}
+
             <header class="header">
                 <div class="logo-box">
                     <img class="logo" src="/assets/images/logotipomenu.jpg" alt="Elemental Battlecards">
                     <div>
-                        <h1 style="margin:0; font-size:22px;">Elemental Battlecards</h1>
-                        <span class="user">Jugador: ${(this.playerData && this.playerData.username) || ""}</span>
+                        <h1 class="brand-title">Elemental Battlecards</h1>
+                        <span class="brand-sub">Bienvenido, ${username}</span>
                     </div>
                 </div>
                 <div class="header-actions">
-                    <button class="header-btn" data-modal="config">⚙️ Configuración</button>
-                    <button class="header-btn" data-modal="about">ℹ️ Acerca de</button>
-                    <button class="header-btn">💬 Mensajes</button>
+                    <button class="header-btn" data-modal="config">Configuración</button>
+                    <button class="header-btn" data-modal="about">Acerca de</button>
+                    <button class="header-btn" data-modal="notifications">Notificaciones <span class="notif-dot"></span></button>
                     <button class="btn-exit">Salir</button>
                 </div>
             </header>
 
             <div class="main">
                 <!-- USER PROFILE PANEL -->
-                <div class="user-panel">
-                    <div class="user-profile">
-                        <div class="user-avatar">⚔️</div>
-                        <h3 class="user-name">${(this.playerData && this.playerData.username) || "Meller2007"}</h3>
-                        <p class="user-rank">Rango A</p>
-                    </div>
-                    <button class="btn-profile" data-action="profile">🛡️ Ver Perfil</button>
-                    <div class="user-stats">
-                        <div class="stat-block">
-                            <span class="stat-label">Experiencia</span>
-                        </div>
-                        <div class="progress-bar-small">
-                            <div class="progress-fill-small"></div>
-                        </div>
-                        <div class="stat-block">
-                            <span>820 / 1000</span>
-                        </div>
-                        <div style="margin-top: 8px;">
-                            <div class="stat-block">
-                                <span class="stat-label">Diamante IV</span>
-                            </div>
-                            <div class="stat-block">
-                                <span>2,150 / 2,500 FP</span>
+                <aside class="user-panel">
+                    <div>
+                        <div class="user-avatar-wrap">
+                            <div class="user-avatar-orb">
+                                <img src="/assets/images/logo.png" alt="Avatar">
                             </div>
                         </div>
+                        <h3 class="user-name">${username}</h3>
+                        <p class="user-role">${stats.ranking}</p>
                     </div>
-                </div>
+
+                    <div class="profile-stats">
+                        <div class="stat-line">
+                            <span class="label">Nivel</span>
+                            <span class="value gold">${stats.nivel}</span>
+                        </div>
+                        <div class="stat-line">
+                            <span class="label">Rango</span>
+                            <span class="value">${stats.ranking}</span>
+                        </div>
+                        <div class="stat-line">
+                            <span class="label">Victorias</span>
+                            <span class="value">${stats.battlesWon}</span>
+                        </div>
+                        <div class="xp-block">
+                            <div class="xp-top">
+                                <span>Experiencia</span>
+                                <span>${stats.xpActual} / ${stats.xpMaxima} XP</span>
+                            </div>
+                            <div class="xp-bar"><div class="xp-fill" id="xp-fill"></div></div>
+                        </div>
+                    </div>
+
+                    <button class="btn-profile" data-action="profile">Ver Perfil</button>
+                </aside>
 
                 <!-- MAIN CONTENT -->
-                <div class="main-content">
+                <section class="main-content">
                     <div class="cards-header">
                         <p class="cards-subtitle">Pantalla Principal</p>
                         <h2 class="cards-title">Elige tu ruta de aventura</h2>
-                        <p class="cards-description">Accede a niveles, partidas LAN y mecánicas desde un menú moderno con estética RPG.</p>
+                        <p class="cards-description">Accede a niveles, partidas LAN y mecánicas .</p>
                     </div>
                     <div class="cards">
                         ${cardsHtml}
                     </div>
                     <div class="bottom-actions">
-                        <button class="bottom-btn" data-action="cards">📋 Cartas</button>
-                        <button class="bottom-btn" data-action="missions">🎯 Misiones</button>
-                        <button class="bottom-btn" data-action="stats">📊 Estadísticas</button>
+                        <button class="bottom-btn cards" data-action="cards">
+                             Cartas
+                        </button>
+                        <button class="bottom-btn missions" data-action="missions">
+                             Misiones
+                        </button>
                     </div>
-                </div>
+                </section>
             </div>
         </div>
 
@@ -846,8 +798,6 @@ export default class HomeScenes extends Phaser.Scene {
                 </div>
             </div>
         </div>
-        <!-- Botón oculto para activar modal de mecánicas desde tarjeta -->
-        <button data-modal="mechanics" style="display:none;"></button>
         </div>`;
 
         // DOM ELEMENT
@@ -877,7 +827,6 @@ export default class HomeScenes extends Phaser.Scene {
                 b.addEventListener('pointerleave', () => { b.style.transform = ''; });
             });
         } catch (e) {
-            // seguridad: si el DOM no está disponible, ignorar
             console.warn('No se pudieron inicializar animaciones de botones', e);
         }
 
@@ -898,7 +847,6 @@ export default class HomeScenes extends Phaser.Scene {
 
         // Modal elements and helpers
         const modalOverlay = node.querySelector('#scene-modal');
-        const modalElement = node.querySelector('.modal'); // elemento .modal (donde aplicaremos modal--tall)
         const modalTitle = node.querySelector('#modal-title');
         const modalBody = node.querySelector('#modal-body');
         const modalClose = node.querySelector('#modal-close');
@@ -906,8 +854,6 @@ export default class HomeScenes extends Phaser.Scene {
 
         const openModal = (title, htmlContent) => {
             if (!modalOverlay || !wrap) return;
-            // eliminar cualquier clase residual antes de abrir
-            if (modalElement) modalElement.classList.remove('modal--tall');
             modalTitle.textContent = title || "";
             modalBody.innerHTML = htmlContent || "";
             modalOverlay.classList.add('show');
@@ -920,8 +866,6 @@ export default class HomeScenes extends Phaser.Scene {
             modalOverlay.classList.remove('show');
             modalOverlay.setAttribute('aria-hidden', 'true');
             wrap.style.filter = "";
-            // limpiar clase de modal largo si existe
-            if (modalElement) modalElement.classList.remove('modal--tall');
         };
 
         if (modalClose) modalClose.addEventListener('click', closeModal);
@@ -937,8 +881,7 @@ export default class HomeScenes extends Phaser.Scene {
         // Asignar acciones distintas por botón
         const btnConfig = node.querySelector('[data-modal="config"]');
         const btnAbout = node.querySelector('[data-modal="about"]');
-        const btnMechanics = node.querySelector('[data-modal="mechanics"]');
-        const btnStats = node.querySelector('[data-action="stats"]');
+        const btnNotifications = node.querySelector('[data-modal="notifications"]');
         const btnProfile = node.querySelector('[data-action="profile"]');
         const btnCards = node.querySelector('[data-action="cards"]');
         const btnMissions = node.querySelector('[data-action="missions"]');
@@ -955,24 +898,6 @@ export default class HomeScenes extends Phaser.Scene {
             this.scene.start('MissionsScene', { playerData: this.playerData });
         });
 
-        if (btnStats) btnStats.addEventListener('click', () => {
-            this.scene.start('StatsScene', {
-                playerData: this.playerData,
-                returnScene: 'HomeScenes',
-                stats: {
-                    gamesPlayed: 0,
-                    gamesWon: 0,
-                    winRate: '0%',
-                    achievements: '0/50',
-                    timePlayed: '0h 0m',
-                    totalTimePlayed: 0,
-                    lastGameResult: 'N/A',
-                    longestWinStreak: 0,
-                    currentWinStreak: 0
-                }
-            });
-        });
-
         if (btnConfig) btnConfig.addEventListener('click', () => {
             this.scene.start('SettingsScene', {
                 playerData: this.playerData,
@@ -981,155 +906,11 @@ export default class HomeScenes extends Phaser.Scene {
             });
         });
         if (btnAbout) btnAbout.addEventListener('click', () => {
-            openModal("Acerca de", `<p>Este proyecto es un juego de cartas estratégico digital inspirado en la Teoría de Conjuntos, donde cada mecánica del sistema corresponde a una operación matemática formal.</p>
-            <p>El objetivo del jugador es vencer al oponente mediante combate, o completar el conjunto total de esencias y elementos activos en el campo.</p>
-            <p>El sistema de juego se basa en los siguientes principios matemáticos:</p>
-            <ul>
-                <li><strong>Unión (A ∪ B ∪ C):</strong> Representada por la obtención simultánea de los 6 tipos elementales en tu lado del campo o la colección completa de las 6 esencias.</li>
-                <li><strong>Intersección (A ∩ A):</strong> La fusión de dos cartas idénticas para crear cartas de nivel superior.</li>
-                <li><strong>Diferencia (A − B):</strong> El sistema de ventajas elementales, donde un elemento supera al que “resta”.</li>
-                <li><strong>Complemento (Aᶜ):</strong> Cartas de nivel 3 que quedan fuera de la relación elemental y anulan ventajas y desventajas.</li>
-            </ul>
-            <p>Durante la partida, el jugador administra recursos (esencias), controla un campo de seis espacios, invoca cartas, realiza fusiones, interactúa con el rival mediante ataques y construye estrategias basadas en combinaciones elementales y operaciones matemáticas.</p>
-            <p>El resultado es un TCG elegante, educativo y competitivo, con una identidad visual basada en iconografía elemental, colores definidos y un layout claro optimizado para pantallas modernas.</p>`);
+            this.scene.start('AboutScene', { playerData: this.playerData });
         });
-        if (btnMechanics) btnMechanics.addEventListener('click', () => {
-            // abrir modal y aplicar clase para que tenga altura = 80% pantalla y scroll
-            openModal("Mecánicas del juego", `<ol>
-            <li><strong>Objetivo del Juego:</strong>
-                <ul>
-                    <li><strong>Principal:</strong> El primer jugador que logre tener los 6 tipos de cartas distintos en su campo gana la partida.</li>
-                    <li><strong>Secundario:</strong> El jugador que logre llenar las esencias elementales, gana.</li>
-                </ul>
-            </li>
-
-            <li><strong>Tipos y Ventajas:</strong>
-                <p>El sistema está dividido en dos triángulos independientes:</p>
-                <h3>Triángulo 1:</h3>
-                <ul>
-                    <li>Fuego vence a Planta</li>
-                    <li>Planta vence a Agua</li>
-                    <li>Agua vence a Fuego</li>
-                </ul>
-                <h3>Triángulo 2:</h3>
-                <ul>
-                    <li>Luz vence a Sombra</li>
-                    <li>Sombra vence a Espíritu</li>
-                    <li>Espíritu vence a Luz</li>
-                </ul>
-                <p><strong>Relación entre triángulos:</strong> Todos los tipos de un triángulo son neutrales contra los del otro triángulo.</p>
-            </li>
-
-            <li><strong>Niveles de Carta:</strong>
-                <p>Las cartas pueden tener 3 niveles:</p>
-                <ul>
-                    <li><strong>⭐ Nivel 1 (base)</strong></li>
-                    <li><strong>⭐⭐ Nivel 2 (fusión de dos cartas nivel 1 iguales)</strong></li>
-                    <li><strong>⭐⭐⭐ Nivel 3 (fusión de dos cartas nivel 2 iguales)</strong></li>
-                </ul>
-                <p><strong>Efecto de los niveles en el combate:</strong></p>
-                <ul>
-                    <li>Mismo nivel: se aplica ventaja de tipo normal.</li>
-                    <li>1 nivel arriba: se vuelve neutral al tipo que tiene desventaja, le gana al tipo que es neutral.</li>
-                    <li>2 niveles arriba: ganará siempre.</li>
-                </ul>
-            </li>
-
-            <li><strong>Turnos:</strong>
-                <p>El juego es por turnos, 1v1. En cada turno el jugador puede realizar 1 sola acción:</p>
-                <ul>
-                    <li>Poner una carta en el campo.</li>
-                    <li>Atacar con una carta.</li>
-                    <li>Fusionar (si cumple requisitos).</li>
-                </ul>
-                <p>Después de realizar la acción, el turno termina.</p>
-            </li>
-
-            <li><strong>Regla de Ataque Obligatorio:</strong>
-                <p>Cada jugador debe atacar al menos una vez cada 3 turnos propios. Puedes atacar antes si quieres. Si atacas antes (por ejemplo, en tu turno 2), el contador se reinicia. Si llegas al turno 3 sin atacar, ese turno obligatoriamente debes atacar.</p>
-                <p><strong>Otros casos:</strong></p>
-                <ul>
-                    <li>Si tienes que atacar obligatoriamente y tu oponente no tiene cartas en el campo, podrás llenar una Esencia elemental (atacando).</li>
-                    <li>Si tienes que atacar obligatoriamente y no tienes cartas, saltará el turno y el contador se reiniciará.</li>
-                </ul>
-            </li>
-
-            <li><strong>Campo y Mano:</strong>
-                <p>Cada jugador tiene 6 espacios en el campo. Se puede tener máximo 1 carta por espacio. Se inicia con 4 cartas en la mano. Cuando colocas una carta en el campo, robas una nueva del mazo.</p>
-            </li>
-
-            <li><strong>Robos y Mazo:</strong>
-                <p>Cada jugador inicia con 48 cartas (8 copias de cada tipo). Cuando pones una carta, robas una del mazo (para mantener 4 en la mano). Si el mazo se queda sin cartas, se baraja automáticamente el cementerio (ver Regla 10).</p>
-            </li>
-
-            <li><strong>Colocar Cartas:</strong>
-                <p>Las cartas siempre se colocan boca abajo (ocultas para el rival). Se revelan en tres casos:</p>
-                <ul>
-                    <li>Cuando atacan.</li>
-                    <li>Cuando son atacadas.</li>
-                    <li>Cuando se fusionan.</li>
-                </ul>
-                <p>Una vez reveladas, permanecen boca arriba para el resto de la partida.</p>
-            </li>
-
-            <li><strong>Combate:</strong>
-                <p><strong>Cómo se realiza:</strong></p>
-                <ul>
-                    <li>El jugador atacante elige una de sus cartas.</li>
-                    <li>Elige una carta del oponente.</li>
-                </ul>
-                <p><strong>Resultados:</strong></p>
-                <ul>
-                    <li>Si tu carta gana → la carta enemiga muere.</li>
-                    <li>Si tu carta pierde → tu carta muere.</li>
-                    <li>Si son neutrales → ninguna muere.</li>
-                </ul>
-            </li>
-
-            <li><strong>Muertes y Cementerio:</strong>
-                <p>Cuando una carta muere, va al cementerio. Cuando las 48 cartas del mazo se acaban, las del cementerio se revuelven y se crea un nuevo mazo.</p>
-            </li>
-
-            <li><strong>Fusiones:</strong>
-                <p><strong>Requisitos:</strong> Tener 2 cartas iguales (tipo y nivel) en el campo. Fusionar consume tu acción del turno.</p>
-                <p><strong>Efecto:</strong> Se forma una sola carta del mismo tipo y sube un nivel. La carta fusionada se revela.</p>
-            </li>
-
-            <li><strong>Restricciones de Ataques según Nivel:</strong>
-                <ul>
-                    <li>⭐ Nivel 1 → puede atacar cada turno (sin límites).</li>
-                    <li>⭐⭐ Nivel 2 → puede atacar 2 turnos seguidos luego debe descansar 1 turno.</li>
-                    <li>⭐⭐⭐ Nivel 3 → puede atacar 1 turno, luego debe descansar 1 turno.</li>
-                </ul>
-            </li>
-
-            <li><strong>Esencias Elementales:</strong>
-                <p>Cada jugador tiene 6 esencias, una por cada tipo elemental. Todas las esencias comienzan vacías. Se llenan cuando se cumplen las condiciones de atacar y no haber cartas del oponente para defender.</p>
-            </li>
-
-            <li><strong>Revelación:</strong>
-                <p>Las cartas boca abajo se revelan solo cuando:</p>
-                <ul>
-                    <li>Atacan.</li>
-                    <li>Son atacadas.</li>
-                    <li>Se fusionan (la resultante entra boca arriba).</li>
-                </ul>
-            </li>
-
-            <li><strong>Límites de Tiempo:</strong>
-                <p>Cada turno tiene un máximo de 12 segundos. Si el jugador no realiza acción → pierde el turno.</p>
-            </li>
-
-            <li><strong>Fin del Juego:</strong>
-                <p>Un jugador gana si:</p>
-                <ul>
-                    <li>Logra colocar los 6 tipos distintos en su campo (no importa el orden ni si están ocultas).</li>
-                    <li>Logra llenar las esencias elementales (no importa el orden).</li>
-                    <li>Por abandono: Si un jugador no actúa durante 3 turnos seguidos → se considera rendido. A los 3 turnos sin acción, derrota automática.</li>
-                </ul>
-            </li>
-        </ol>`);
-            if (modalElement) modalElement.classList.add('modal--tall');
+        if (btnNotifications) btnNotifications.addEventListener('click', () => {
+            openModal('Notificaciones',
+                '<p>No tienes notificaciones nuevas por ahora.</p><p style="color:rgba(255,255,255,0.6);">Cuando ganes batallas, completen misiones o haya eventos, lo verás aquí.</p>');
         });
 
         // Conectar acciones a las tarjetas
@@ -1153,13 +934,21 @@ export default class HomeScenes extends Phaser.Scene {
                     }
 
                     if (idx === 2) {
-                        if (btnMechanics) btnMechanics.click();
+                        this.scene.start('MechanicsScene', { playerData: this.playerData });
                         return;
                     }
                 });
             });
         } catch (e) {
             console.warn('No se pudieron asignar listeners a las tarjetas', e);
+        }
+
+        // Animación de la barra de experiencia al entrar.
+        const xpFill = node.querySelector('#xp-fill');
+        if (xpFill) {
+            setTimeout(() => {
+                xpFill.style.width = xpPercent + '%';
+            }, 120);
         }
 
         // Responsive resize handler
