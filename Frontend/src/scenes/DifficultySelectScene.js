@@ -14,8 +14,46 @@ export default class DifficultySelectScene extends Phaser.Scene {
         this.playerData = data;
     }
 
+    preload() {
+        this.load.video('levels-bg-video', '/assets/images/levels/fondoSELE.mp4', { muted: true, noAudio: true });
+    }
+
     create() {
         const { width, height } = this.scale;
+
+        // Fondo inmediato para que nunca se vea un hueco negro mientras el video
+        // termina de preparar su primer frame.
+        this.add.rectangle(width / 2, height / 2, width, height, 0x0a0e22).setDepth(-2);
+
+        this.bg = this.add.video(width / 2, height / 2, 'levels-bg-video').setOrigin(0.5);
+        this.bg.setDepth(-1); // Poner el video al fondo
+
+        // Esperar a que el video esté listo para escalar correctamente
+        this.bg.on('play', () => {
+            const scaleX = width / this.bg.width;
+            const scaleY = height / this.bg.height;
+            const scale = Math.max(scaleX, scaleY);
+            this.bg.setScale(scale);
+        });
+
+        this.bg.once('ready', () => {
+            const videoEl = this.bg.video;
+
+            if (!videoEl) {
+                return;
+            }
+
+            videoEl.muted = true;
+            videoEl.defaultMuted = true;
+            videoEl.loop = true; // Bucle continuo: al terminar, se reinicia desde el inicio.
+            videoEl.playbackRate = 1;
+            videoEl.playsInline = true;
+            videoEl.preload = 'auto';
+            videoEl.currentTime = 0;
+            videoEl.play().catch(() => {});
+        });
+
+        this.bg.play(true); // Reproducir en bucle
 
         const levels = [
             { level: 1,  name: 'Muy Fácil',   icon: 'agua',   clr: '#5bc0ff', desc: 'El bot comete errores, no fusiona cartas.' },
@@ -61,10 +99,7 @@ export default class DifficultySelectScene extends Phaser.Scene {
                 color: white;
                 font-family: Poppins, Arial, sans-serif;
                 overflow: hidden;
-                background-image: linear-gradient(180deg, rgba(6, 8, 22, 0.62), rgba(6, 8, 22, 0.34) 40%, rgba(6, 8, 22, 0.48) 80%, rgba(4, 6, 18, 0.72)), url('/assets/images/levels/background%20levels.jpeg');
-                background-size: cover;
-                background-position: center;
-                background-repeat: no-repeat;
+                background: linear-gradient(180deg, rgba(6, 8, 22, 0.62), rgba(6, 8, 22, 0.34) 40%, rgba(6, 8, 22, 0.48) 80%, rgba(4, 6, 18, 0.72));
             }
 
             .wrap::before {
@@ -393,6 +428,7 @@ export default class DifficultySelectScene extends Phaser.Scene {
 
     onResize(gameSize) {
         const { width, height } = gameSize;
+        if (this.bg) this.bg.setDisplaySize(width, height);
         if (this.domUI && this.domUI.node) {
             const node = this.domUI.node;
             if (node.style) {

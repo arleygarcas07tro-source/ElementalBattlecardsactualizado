@@ -13,16 +13,20 @@ export default class CreateRoomScene extends Phaser.Scene {
     }
 
     preload() {
-        this.load.video("home-video", "/assets/images/home.mp4", { muted: true });
+        if (!this.cache.video.exists('lan-bg-video')) {
+            this.load.video('lan-bg-video', '/assets/images/LAN/fondoLAN.mp4', { muted: true, noAudio: true });
+        }
     }
 
     create() {
         const { width, height } = this.scale;
 
         // BACKGROUND
+        // Fondo inmediato para que nunca se vea un hueco negro mientras el video
+        // termina de preparar su primer frame.
         this.add.rectangle(width / 2, height / 2, width, height, 0x0a0e22).setDepth(-2);
 
-        this.bg = this.add.video(width / 2, height / 2, 'home-video').setOrigin(0.5);
+        this.bg = this.add.video(width / 2, height / 2, 'lan-bg-video').setOrigin(0.5);
         this.bg.setDepth(-1); // Poner el video al fondo
 
         // Esperar a que el video esté listo para escalar correctamente
@@ -32,6 +36,24 @@ export default class CreateRoomScene extends Phaser.Scene {
             const scale = Math.max(scaleX, scaleY);
             this.bg.setScale(scale);
         });
+
+        this.bg.once('ready', () => {
+            const videoEl = this.bg.video;
+
+            if (!videoEl) {
+                return;
+            }
+
+            videoEl.muted = true;
+            videoEl.defaultMuted = true;
+            videoEl.loop = true; // Bucle continuo: al terminar, se reinicia desde el inicio.
+            videoEl.playbackRate = 1;
+            videoEl.playsInline = true;
+            videoEl.preload = 'auto';
+            videoEl.currentTime = 0;
+            videoEl.play().catch(() => {});
+        });
+
         this.bg.play(true); // Reproducir en bucle
 
         const username = (this.playerData && this.playerData.username) || "Jugador";

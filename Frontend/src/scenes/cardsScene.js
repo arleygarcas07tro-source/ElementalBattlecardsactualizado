@@ -3,8 +3,8 @@ import { play as playSfx } from '../helpers/audioManager.js';
 const ELEMENTS = [
     { key: 'agua',       name: 'Agua',       color: '#38bdf8', soft: 'rgba(56,189,248,0.14)',  glow: 'rgba(56,189,248,0.42)',  img: '/assets/images/iconos/agua.jpeg' },
     { key: 'fuego',      name: 'Fuego',      color: '#fb5a2a', soft: 'rgba(251,90,42,0.14)',   glow: 'rgba(251,90,42,0.42)',   img: '/assets/images/iconos/fuego.jpeg' },
-    { key: 'luz',        name: 'Aire',       color: '#6fe3ff', soft: 'rgba(111,227,255,0.14)', glow: 'rgba(111,227,255,0.42)', img: '/assets/images/iconos/luz.jpeg' },
-    { key: 'espiritu',   name: 'Tierra',     color: '#a78bfa', soft: 'rgba(167,139,250,0.14)', glow: 'rgba(167,139,250,0.42)', img: '/assets/images/iconos/espiritu.jpeg' },
+    { key: 'luz',        name: 'Tierra',     color: '#6fe3ff', soft: 'rgba(111,227,255,0.14)', glow: 'rgba(111,227,255,0.42)', img: '/assets/images/iconos/luz.jpeg' },
+    { key: 'espiritu',   name: 'Aire',       color: '#a78bfa', soft: 'rgba(167,139,250,0.14)', glow: 'rgba(167,139,250,0.42)', img: '/assets/images/iconos/espiritu.jpeg' },
     { key: 'planta',     name: 'Naturaleza', color: '#34d97b', soft: 'rgba(52,217,123,0.14)',  glow: 'rgba(52,217,123,0.42)',  img: '/assets/images/iconos/planta.jpeg' },
     { key: 'sombra',     name: 'Oscuridad',  color: '#c026d3', soft: 'rgba(192,38,211,0.16)',  glow: 'rgba(192,38,211,0.45)',  img: '/assets/images/iconos/sombra.jpeg' }
 ];
@@ -17,13 +17,6 @@ const CARD_NAMES = {
     planta:   ['Brote Guardián', 'Selva Viva', 'Ente Raigal'],
     sombra:   ['Velo Sombrío', 'Eclipse Abisal', 'Señor de las Sombras']
 };
-
-const LEVEL_LABELS = { 1: 'I', 2: 'II', 3: 'III' };
-const SKILLS = [
-    { icon: '⚔️', title: 'Ataque' },
-    { icon: '🛡️', title: 'Defensa' },
-    { icon: '✨', title: 'Especial' }
-];
 
 const elementByKey = element => ELEMENTS.find(el => el.key === element);
 
@@ -73,8 +66,6 @@ export default class CardsScene extends Phaser.Scene {
             const el = elementByKey(card.element);
             const names = CARD_NAMES[card.element];
             const name = names[card.level - 1];
-            const cost = card.level * 2;
-            const skillsHtml = SKILLS.map(s => `<span class="skill" title="${s.title}">${s.icon}</span>`).join('');
             const delay = `${(index % 6) * 0.05}s`;
 
             return `
@@ -83,13 +74,6 @@ export default class CardsScene extends Phaser.Scene {
                     <div class="gal-frame">
                         <img class="gal-img" src="/assets/images/cartas/carta-${card.element}-${card.level}.jpeg" alt="${name}" loading="lazy">
                         <div class="gal-shade"></div>
-                        <span class="gal-badge">${LEVEL_LABELS[card.level]}</span>
-                        <span class="gal-cost">◆ ${cost}</span>
-                        <div class="gal-info">
-                            <span class="gal-element">✦ ${el.name}</span>
-                            <h4 class="gal-name">${name}</h4>
-                            <div class="gal-skills">${skillsHtml}</div>
-                        </div>
                     </div>
                 </article>
             `;
@@ -378,81 +362,6 @@ export default class CardsScene extends Phaser.Scene {
                 inset: 0;
                 background: linear-gradient(to top, rgba(4,6,18,0.94) 0%, rgba(4,6,18,0.35) 42%, rgba(4,6,18,0.05) 68%);
             }
-            .gal-badge {
-                position: absolute;
-                top: 10px; left: 10px;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                min-width: 30px;
-                height: 30px;
-                padding: 0 8px;
-                border-radius: 10px;
-                font-family: Georgia, 'Times New Roman', serif;
-                font-size: 16px;
-                font-weight: 800;
-                color: #fff;
-                background: linear-gradient(160deg, var(--el), rgba(4,6,18,0.85));
-                border: 1px solid rgba(255,255,255,0.35);
-                box-shadow: 0 0 14px var(--el-glow);
-                text-shadow: 0 1px 3px rgba(0,0,0,0.7);
-            }
-            .gal-cost {
-                position: absolute;
-                top: 10px; right: 10px;
-                display: inline-flex;
-                align-items: center;
-                height: 30px;
-                padding: 0 10px;
-                border-radius: 10px;
-                font-size: 13.5px;
-                font-weight: 700;
-                color: #ffd75a;
-                background: rgba(4, 6, 18, 0.75);
-                border: 1px solid rgba(255, 215, 90, 0.4);
-                box-shadow: 0 0 12px rgba(255, 215, 90, 0.2);
-                text-shadow: 0 1px 3px rgba(0,0,0,0.7);
-            }
-            .gal-info {
-                position: absolute;
-                left: 12px; right: 12px; bottom: 10px;
-                display: flex;
-                flex-direction: column;
-                gap: 4px;
-            }
-            .gal-element {
-                font-size: 9.5px;
-                font-weight: 700;
-                letter-spacing: 0.16em;
-                text-transform: uppercase;
-                color: var(--el);
-                text-shadow: 0 0 12px var(--el-glow);
-            }
-            .gal-name {
-                margin: 0;
-                font-family: Georgia, 'Times New Roman', serif;
-                font-size: 16px;
-                color: #fff;
-                letter-spacing: 0.01em;
-                text-shadow: 0 2px 6px rgba(0,0,0,0.8);
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-            }
-            .gal-skills { display: flex; gap: 6px; margin-top: 2px; }
-            .skill {
-                width: 22px; height: 22px;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 12px;
-                background: rgba(4, 6, 18, 0.7);
-                border: 1px solid rgba(255,255,255,0.18);
-                border-radius: 7px;
-                cursor: help;
-                transition: transform 150ms ease, border-color 150ms ease;
-            }
-            .skill:hover { transform: translateY(-2px); border-color: var(--el); }
 
             /* ---------- NAV INFERIOR ---------- */
             .bottom-nav {
