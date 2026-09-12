@@ -53,4 +53,12 @@ export default class EssenceManager {
     getAll() {
         return { ...this._essences };
     }
+
+    /**
+     * Cantidad de esencias activas.
+     * @returns {number}
+     */
+    get size() {
+        return Object.values(this._essences).filter(Boolean).length;
+    }
 }

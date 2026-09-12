@@ -121,7 +121,8 @@ export default class ProfileScene extends Phaser.Scene {
                     radial-gradient(1200px 640px at 18% -6%, rgba(138, 0, 255, 0.20), transparent 58%),
                     radial-gradient(1000px 560px at 88% 8%, rgba(43, 143, 239, 0.16), transparent 55%),
                     radial-gradient(1400px 900px at 50% 118%, rgba(255, 176, 64, 0.10), transparent 60%),
-                    linear-gradient(180deg, #06081a 0%, #0c0a26 46%, #081026 100%);
+                    linear-gradient(180deg, rgba(6, 8, 26, 0.72) 0%, rgba(13, 12, 40, 0.66) 46%, rgba(8, 16, 38, 0.78) 100%),
+                    url('/assets/images/PERFIL/PERFIL.jpeg') center / cover no-repeat;
             }
 
             /* ---------- FONDO: montañas, castillo, islas y energía ---------- */

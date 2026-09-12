@@ -106,3 +106,11 @@ export const CardDefinitions = {
         level: 3,
     },
 };
+
+/**
+ * Devuelve los tipos elementales de las cartas base (nivel 1).
+ * @returns {string[]} Lista de tipos únicos presentes en las cartas de nivel 1.
+ */
+export function getBaseCardTypes() {
+    return [...new Set(Object.values(CardDefinitions).filter(d => d.level === 1).map(d => d.type))];
+}

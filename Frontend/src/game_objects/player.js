@@ -205,6 +205,26 @@ export default class Player {
         return newCardInstance;
     }
     /**
+     * Llena la esencia de un tipo elemental para este jugador.
+     * Si la esencia ya estaba activa, no hace nada y no emite el evento.
+     * @param {string} essenceType El tipo de esencia a activar.
+     * @returns {boolean} `true` si la esencia se activó ahora, `false` si ya estaba activa.
+     */
+    fillEssence(essenceType) {
+        if (this.essences.has(essenceType)) {
+            console.log('[GameScene] Esencia ya activada previamente', { playerId: this.id, essenceType });
+            return false;
+        }
+        this.essences.activate(essenceType);
+        console.log('[GameScene] Esencia activada', { playerId: this.id, essenceType, total: this.essences.size });
+        // Notificamos a la escena para que la UIScene actualice los orbes.
+        if (this.scene && this.scene.events) {
+            this.scene.events.emit('essence-activated', this.id, essenceType);
+        }
+        return true;
+    }
+
+    /**
      * Añade los datos de una carta (objeto de datos, no sprite) al cementerio.
      * Si la carta es de nivel 2 o 3, la descompone en cartas de nivel 1.
      * @param {object} cardData Los datos de la carta que ha sido derrotada.

@@ -40,16 +40,18 @@ cd Frontend; npm install; npm run dev
 - Frontend: `npm run dev` = `vite --host`, serves on a random port. Open the printed URL.
 - There are **no test, lint, typecheck, or format commands** — `test` scripts just exit 1.
 
-## Backend Key Facts
+## Backend Key Facts (estructura OOP + SOLID)
 
-- **Entry point:** `Backend/server.js`. Boot order: dotenv → db connect → sync schema → mount auth routes → create socket server → listen.
-- **DB:** Sequelize. SQLite by default (`DB_USE_SQLITE=true` in `.env`). File at `Backend/database.sqlite`. Supports Postgres via env vars.
+- **Entry point:** `Backend/server.js` es un thin wrapper → `Backend/src/bootstrap.js` (composition root). Boot order: dotenv → `AppConfig`/`Logger` → `DatabaseFactory` crea Sequelize → `DatabaseInitializer` conecta y sincroniza → arma auth router → `AppFactory` crea la app Express → crea socket.io → `SocketGateway` registra eventos → listen.
+- **Arquitectura por capas en `Backend/src/`:** `core/` (AppConfig, Logger, errores AppError, assertContract), `database/` (DatabaseFactory, DatabaseInitializer, models), `repositories/` (interfaz IUserRepository + SequelizeUserRepository), `services/` (interfaces IPasswordHasher/ITokenService + BcryptPasswordHasher/JwtTokenService + AuthService), `http/` (AuthController, rutas, middleware errorHandler, AppFactory), `socketio/` (IRoomStore + InMemoryRoomStore, RoomCodeGenerator, RoomManager, SocketGateway), `utils/` (NetworkInfo).
+- **DI estricto:** las clases altas dependen de interfaces (JSDoc/`assertContract`) inyectadas por constructor. Los contratos (`IUserRepository`, `IPasswordHasher`, `ITokenService`, `IRoomStore`) viven en un archivo aparte con `static assert()` (fail-fast en bootstrap).
+- **DB:** Sequelize. SQLite por defecto (`DB_USE_SQLITE=true` en `.env`). File at `Backend/database.sqlite`. Supports Postgres via env vars.
 - **Schema management:** `sequelize.sync({ alter: true })` on every boot. Migrations in `migrations/` are **dead code** — never run. New models auto-create/alter tables at startup.
 - **Auth routes** (`/api/auth/register`, `/api/auth/login`) only mount if `DB_ENABLED=true` AND db connected.
 - **Login uses `username`**, not `email` (contradicts the README). Register uses `email`.
-- **Socket.io rooms** (`socketManager.js`): in-memory only. 6-digit numeric codes, 2-player rooms, `game_event` relay only (no server-side game logic). Room state resets on server restart.
-- **CORS is wide open** (`*`) on both HTTP and sockets. JWT secret has a hardcoded fallback.
-- **Config dead code:** `controllers/config/config.js`, `config.json`, and a stray `controllers/database.sqlite` are unused. Don't modify them.
+- **Socket.io rooms** (`src/socketio/RoomManager.js`): in-memory only. 6-digit numeric codes, 2-player rooms, `game_event` relay only (no server-side game logic). Room state resets on server restart. `global.activeRooms` enlaza al store vivo para debug.
+- **CORS is wide open** (`*`) on both HTTP and sockets (via `config.corsOrigin`). JWT secret has a hardcoded fallback.
+- **Error handling:** `src/http/middleware/errorHandler.js` traduce `AppError` → `{ message }` con su status; errores inesperados → 500 `{ message: 'Error en el servidor.' }` y se loguean.
 
 ## Frontend Key Facts
 
@@ -67,8 +69,7 @@ cd Frontend; npm install; npm run dev
 - **Spanish codebase:** All logs, comments, and user-facing messages are in Spanish.
 - **Inconsistent card-type names:** `cardsScene.js` uses `aire/tierra/oscuridad` while `constants.js` uses `planta/sombra/espiritu`.
 - **`.env.example` is referenced in README but doesn't exist.**
-- **No error-handling middleware** on the Express side.
-- **`show-network-info.js` advertises a `/rooms` HTTP endpoint that doesn't exist.**
+- **`NetworkInfo` (src/utils) still advertises a `/rooms` HTTP endpoint that doesn't exist.**
 - **Root `node_modules/` and `react-icons`** are tracked. Don't commit more deps there.
 - **`dist/`** in Frontend is gitignored (correct).
 - **Port:** Backend `.env` says `3001`. README mentions `3000` — trust the `.env`.

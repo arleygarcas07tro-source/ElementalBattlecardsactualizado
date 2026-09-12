@@ -12,23 +12,34 @@ export default class RegisterSceneUpdated extends Phaser.Scene {
     }
 
     preload() {
-        this.load.video('inicio-video', '/assets/images/inicio/inicio.mp4', { muted: true });
+        this.load.video('inicio-video', '/assets/images/LOGIN/Login_fixed.mp4', { muted: true, noAudio: true });
         this.load.image('logo', '/assets/images/Logotipoletras.png');
     }
 
     create() {
         const { width, height } = this.scale;
+        this.add.rectangle(width / 2, height / 2, width, height, 0x0f0a1a).setDepth(-2);
+
         // BACKGROUND VIDEO
         this.bg = this.add.video(width / 2, height / 2, 'inicio-video').setOrigin(0.5);
         this.bg.setDepth(-1); // Poner el video al fondo
 
-        // Esperar a que el video esté listo para escalar correctamente
         this.bg.on('play', () => {
             const scaleX = width / this.bg.width;
             const scaleY = height / this.bg.height;
             const scale = Math.max(scaleX, scaleY);
             this.bg.setScale(scale);
         });
+
+        this.bg.once('created', () => {
+            const videoEl = this.bg.video;
+            if (!videoEl) return;
+            videoEl.muted = true;
+            videoEl.defaultMuted = true;
+            videoEl.loop = true;
+            videoEl.play().catch(() => {});
+        });
+
         this.bg.play(true); // Reproducir en bucle
         const formHTML = `
             <style>
