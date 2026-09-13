@@ -14,12 +14,14 @@ import {
 } from '../helpers/playerProgress.js';
 import Player from '../game_objects/player.js';
 import Card from '../game_objects/card.js';
-import { GAME_CONFIG } from '../helpers/constants.js';
+import { CARD_TYPES, GAME_CONFIG } from '../helpers/constants.js';
 import TurnManager from '../game/TurnManager.js';
 import BotAI from '../game/BotAI.js';
 import VictoryEvaluator from '../game/VictoryEvaluator.js';
-import CardDestructionService from '../game/CardDestructionService.js';
 import LANClient from '../game/LANClient.js';
+import LevelAttackRule from '../game/LevelAttackRule.js';
+import EssencePowerService from '../game/EssencePowerService.js';
+import ConvergenceService from '../game/ConvergenceService.js';
 
 /**
  * La escena principal donde se desarrolla el juego de cartas.
@@ -146,6 +148,10 @@ export default class GameScene extends Phaser.Scene {
         this.turn.reset();
         // Set para marcar destrucciones en curso y evitar doble procesamiento
         this._pendingDestroys = new Set();
+
+        // Poderes de esencia: la UIScene emite la solicitud al hacer clic en un
+        // orbe propio. La validación vive en EssencePowerService.
+        this.events.on('request-essence-power', this.useEssencePower, this);
 
         // Mostramos un mensaje de bienvenida con el nombre del usuario temporal.
         console.log(`¡Bienvenido a GameScene, ${this.playerData?.username || 'Jugador'}!`);
@@ -309,12 +315,12 @@ export default class GameScene extends Phaser.Scene {
         // Obtenemos los datos de la carta seleccionada y el índice del slot.
         const cardDataFromHand = this.selectedCard.cardData;
         const fieldIndex = parseInt(dropZone.name.split('-')[1]);
-        const targetCardData = this.player.field[fieldIndex];
+        const targetCardData = this.player.field.get(fieldIndex);
 
         console.log('[GameScene] Intento de jugar carta en slot', { slotIndex: fieldIndex, cardFromHand: cardDataFromHand && { id: cardDataFromHand.id, instanceId: cardDataFromHand.instanceId, type: cardDataFromHand.type, level: cardDataFromHand.level } });
         if (this.debugSync) {
             console.log('[GameScene][debug] pre-play state:', {
-                playerField: this.player.field.map(f => f && f.instanceId),
+                playerField: this.player.field.snapshot().map(f => f && f.instanceId),
                 playerHand: this.player.hand.map(h => h && h.instanceId),
                 targetSlotIndex: fieldIndex,
                 timestamp: Date.now()
@@ -455,15 +461,15 @@ export default class GameScene extends Phaser.Scene {
 
         const ensureModelAt = (idx, cardObj) => {
             if (typeof idx !== 'number') return;
-            if (!this.player.field[idx]) {
+            if (!this.player.field.get(idx)) {
                 const cd = (cardObj.getData && cardObj.getData('cardData')) || cardObj.cardData;
                 if (cd) {
-                    console.warn('[GameScene] Sincronizando modelo: rellenando player.field[' + idx + '] desde objeto visual', cd);
-                    this.player.field[idx] = cd;
+                    console.warn('[GameScene] Sincronizando modelo: rellenando player.field slot [' + idx + '] desde objeto visual', cd);
+                    this.player.field.set(idx, cd);
                 }
             } else {
                 // Si existe modelo pero difiere de la vista, informar
-                const modelCd = this.player.field[idx];
+                const modelCd = this.player.field.get(idx);
                 const viewCd = (cardObj.getData && cardObj.getData('cardData')) || cardObj.cardData;
                 if (viewCd && modelCd.instanceId && viewCd.instanceId && modelCd.instanceId !== viewCd.instanceId) {
                     console.warn('[GameScene] Desincronización detectada en slot', idx, 'modelo.instanceId=', modelCd.instanceId, 'vista.instanceId=', viewCd.instanceId);
@@ -648,19 +654,25 @@ export default class GameScene extends Phaser.Scene {
      */
     startOpponentTurn() {
         this.turn.beginOpponentTurn();
+
+        // Poder ESPÍRITU (Conducto): bloquea la convergencia rival 1 turno.
+        if (this.turn.opponentConvergenceBlocked) {
+            this.turn.opponentConvergenceBlocked = false;
+            this.turn.opponentConvergenceArmed = false;
+            console.log('[GameScene] Conducto: la Convergencia del oponente queda anulada este turno.');
+            this.refreshConvergenceStatusUi();
+        } else if (this.turn.opponentConvergenceArmed
+            && ConvergenceService.isConverged(this.opponent.field.types(), GAME_CONFIG.UNIQUE_TYPES_TO_WIN)) {
+            console.log('[GameScene] CONVERGENCIA: el oponente conservó los 6 tipos un turno completo.');
+            this.endGame('opponent');
+            return;
+        }
+
         let opponentHasActed = false;
 
-        // Limpieza bloqueos vencidos y reset consecutiveAttacks si no atacó el turno anterior
+        // Limpieza de restricciones de ataque por nivel al comenzar el turno (regla central en LevelAttackRule)
         const opponentFieldCardObjects = this.children.list.filter(c => c.getData('isOpponentCard') && c.getData('isCardOnField'));
-        opponentFieldCardObjects.forEach(cardObj => {
-            if (cardObj.getData('lastAttackedTurn') !== (this.turn.opponentTurnNumber - 1)) {
-                cardObj.setData('consecutiveAttacks', 0);
-            }
-            const blocked = cardObj.getData('blockedTurn');
-            if (typeof blocked === 'number' && blocked < this.turn.opponentTurnNumber) {
-                cardObj.setData('blockedTurn', null);
-            }
-        });
+        opponentFieldCardObjects.forEach(cardObj => this._refreshCardTurnMetadata(cardObj, 'opponent'));
 
         // 🎮 EN MODO LAN: No ejecutar IA, solo esperar acciones del oponente remoto
         if (this.isLAN) {
@@ -708,7 +720,7 @@ export default class GameScene extends Phaser.Scene {
         return {
             opponent: this.opponent,
             mustAttack: this.turn.opponentMustAttackThisTurn,
-            playerHasField: this.player.field.some(c => c !== null),
+            playerHasField: this.player.field.hasAny(),
             opponentAttackers,
             bestAttackPool,
             revealedDefenders: playerFieldCards.filter(pair => {
@@ -761,8 +773,8 @@ export default class GameScene extends Phaser.Scene {
     executeBotFusion(plan) {
         if (this.debugSync) console.log('[GameScene][debug] Oponente BOT fusionando campo', { indices: plan.indices, timestamp: Date.now() });
         const [idxA, idxB] = plan.indices;
-        const origA = this.opponent.field[idxA];
-        const origB = this.opponent.field[idxB];
+        const origA = this.opponent.field.get(idxA);
+        const origB = this.opponent.field.get(idxB);
         const res = this.opponent.fuseCards(idxA, idxB);
         if (!res || !res.newCard) return false;
         let targetIndex = null;
@@ -814,7 +826,12 @@ export default class GameScene extends Phaser.Scene {
             targets: attackerObj, x: defenderObj.x, y: defenderObj.y, duration: 200, yoyo: true, ease: 'Power1',
             onComplete: () => {
                 if (res.loser === 'attacker') this.destroyCard(this.opponent, attackerObj.getData('fieldIndex'));
-                else if (res.loser === 'defender') this.destroyCard(this.player, defenderObj.getData('fieldIndex'));
+                else if (res.loser === 'defender') {
+                    this.destroyCard(this.player, defenderObj.getData('fieldIndex'));
+                    // Regla de esencias: el atacante (bot) gana el combate y llena la esencia de su tipo.
+                    const winnerData = attackerObj.getData('cardData') || attackerObj.cardData;
+                    if (winnerData && winnerData.type) this.opponent.fillEssence(winnerData.type);
+                }
                 this.turn.opponentPerformedAttackThisTurn = true;
                 this.endOpponentTurn(true);
             }
@@ -846,7 +863,7 @@ export default class GameScene extends Phaser.Scene {
     executeBotPlayCard(plan) {
         const cardToPlay = this.opponent.hand[plan.handIndex];
         const slotIndex = plan.slotIndex;
-        if (!cardToPlay || this.opponent.field[slotIndex] !== null) return false;
+        if (!cardToPlay || !this.opponent.field.isEmpty(slotIndex)) return false;
         if (this.debugSync) console.log('[GameScene][debug] Oponente BOT jugando carta', { cardInstanceId: cardToPlay.instanceId, slotIndex, timestamp: Date.now() });
         const played = this.opponent.playCardFromHand(cardToPlay.instanceId, slotIndex);
         if (!played) return false;
@@ -885,6 +902,19 @@ export default class GameScene extends Phaser.Scene {
      * Inicia el turno del jugador, reseteando flags y activando el temporizador.
      */
     startPlayerTurn() {
+        // Convergencia: si el jugador armó los 6 tipos y los conservó durante el
+        // turno rival completo, gana. Si perdió alguno, se cancela y rearma.
+        if (this.turn.playerConvergenceArmed) {
+            if (ConvergenceService.isConverged(this.player.field.types(), GAME_CONFIG.UNIQUE_TYPES_TO_WIN)) {
+                console.log('[GameScene] CONVERGENCIA: el jugador conservó los 6 tipos un turno completo.');
+                this.endGame('player');
+                return;
+            }
+            this.turn.playerConvergenceArmed = false;
+            console.log('[GameScene] Convergencia del jugador cancelada: perdió un tipo durante el turno rival.');
+            this.refreshConvergenceStatusUi();
+        }
+
         this.turn.beginPlayerTurn();
 
         console.log('[GameScene] Inicio del turno del JUGADOR', { turnNumber: this.turn.playerTurnNumber, mustAttack: this.turn.playerMustAttackThisTurn });
@@ -900,10 +930,8 @@ export default class GameScene extends Phaser.Scene {
                 cooldown = Math.max(0, cooldown - 1);
                 cardObj.setData('cooldown', cooldown);
             }
-            // Si no atacó en turno previo, y no hay cooldown, reset de consecutiveAttacks
-            if (cardObj.getData('lastAttackedTurn') !== (this.turn.playerTurnNumber - 1)) {
-                cardObj.setData('consecutiveAttacks', 0);
-            }
+            // Resets de restricción por nivel (regla central en LevelAttackRule)
+            this._refreshCardTurnMetadata(cardObj, 'player');
         });
 
         // --- TEMPORIZADOR REDUCIDO A 12s ---
@@ -915,11 +943,11 @@ export default class GameScene extends Phaser.Scene {
         });
 
         // Si está obligado a atacar y NO tiene cartas en campo: saltar el turno y reiniciar contador.
-        const playerHasFieldCards = this.player.field.some(c => c !== null);
+        const playerHasFieldCards = this.player.field.hasAny();
         if (this.turn.playerMustAttackThisTurn && !playerHasFieldCards) {
                 console.log('[GameScene] Obligado a atacar pero no tiene cartas -> salto de turno automático', { playerTurnsSinceLastAttack: this.turn.playerTurnsSinceLastAttack });
-            this.turn.resetForcedAttackSkip();
-            this.endPlayerTurn();
+            // El salto forzado no cuenta como inactividad ni como turno sin atacar.
+            this.endPlayerTurn(true);
             return;
         }
     }
@@ -934,8 +962,9 @@ export default class GameScene extends Phaser.Scene {
 
     /**
      * Finaliza el turno del jugador, ya sea por tiempo o por acción voluntaria (eliminado).
+     * @param {boolean} [forcedAttackSkip=false] Si el turno se salta por obligación de atacar sin cartas.
      */
-    endPlayerTurn() {
+    endPlayerTurn(forcedAttackSkip = false) {
         if (this.turn.state !== 'player-turn') return;
         // Si hay animaciones en curso, solo marcamos el cambio de turno como pendiente.
         if (!this.turn.requestTurnEnd('opponent')) return;
@@ -944,7 +973,9 @@ export default class GameScene extends Phaser.Scene {
 
         if (this.turnTimer) this.turnTimer.destroy();
         // Comprobamos inactividad y actualizamos contadores de ataque
-        const turnReport = this.turn.finishPlayerTurn();
+        const turnReport = forcedAttackSkip
+            ? this.turn.finishForcedAttackSkip()
+            : this.turn.finishPlayerTurn();
         if (!this.turn.playerHasActed) {
             console.log('[GameScene] Jugador inactivo', { inactiveTurns: turnReport.inactiveTurns });
         }
@@ -1053,7 +1084,15 @@ export default class GameScene extends Phaser.Scene {
         this.revealOpponentCard(defendingCardObject);
 
         // Resolvemos el combate
-        const result = resolveCombat(attackerData, defenderData);
+        let result = resolveCombat(attackerData, defenderData);
+        // Poder FUEGO (Ráfaga): el próximo ataque del jugador también gana en empate.
+        if (this.turn.playerNextAttackBreaksTie) {
+            if (result.winner === 'none') {
+                console.log('[GameScene] Ráfaga: el empate se convierte en victoria.');
+                result = { winner: 'attacker', loser: 'defender' };
+            }
+            this.turn.playerNextAttackBreaksTie = false;
+        }
         console.log('[GameScene] Resultado del combate', result);
 
         // Registrar cooldowns / consecutiveAttacks
@@ -1093,6 +1132,8 @@ export default class GameScene extends Phaser.Scene {
         this.turn.playerHasActed = true;
         this.turn.playerPerformedAttackThisTurn = true;
         this.turn.playerTurnsSinceLastAttack = 0;
+        // Un ataque directo siempre gana: no aplica la Ráfaga (se consume igualmente).
+        this.turn.playerNextAttackBreaksTie = false;
 
         console.log('[GameScene] Jugador realiza ataque directo', { attackerType: attackerData.type, attackerIndex: attackingCardObject.getData('fieldIndex') });
 
@@ -1190,6 +1231,9 @@ export default class GameScene extends Phaser.Scene {
                     } else if (result.loser === 'defender' && defenderOwner && typeof defenderFieldIndex === 'number') {
                         console.log('[GameScene] animateAttack: destruyendo defensor', { owner: defenderOwner.id, idx: defenderFieldIndex });
                         this.destroyCard(defenderOwner, defenderFieldIndex);
+                        // Regla de esencias: el atacante gana el combate y llena la esencia de su tipo.
+                        const winnerData = attackingCardObject.getData('cardData') || attackingCardObject.cardData;
+                        if (winnerData && winnerData.type) attackerOwner.fillEssence(winnerData.type);
                     }
 
                     // Tras el ataque, el turno del jugador termina automáticamente
@@ -1219,9 +1263,130 @@ export default class GameScene extends Phaser.Scene {
      * @returns {string|null} 'player', 'opponent' o null.
      */
     checkVictoryConditions() {
+        // La victoria por 6 tipos ya no es instantánea: se arma la Convergencia
+        // aquí y se resuelve al comenzar el siguiente turno propio de cada bando.
+        this._syncConvergence();
         const result = VictoryEvaluator.evaluate({ player: this.player, opponent: this.opponent, turn: this.turn, config: GAME_CONFIG });
         if (result.log) console.log(result.log);
         return result.winner;
+    }
+
+    /**
+     * Sincroniza el flag de Convergencia de ambos jugadores según los tipos
+     * únicos que tienen en el campo. Al completar los 6 se arma; si pierde
+     * algún tipo, se cancela. Responsabilidad: mantener el estado del turno
+     * coherente con el tablero modelado por Player.
+     */
+    _syncConvergence() {
+        this.turn.playerConvergenceArmed = ConvergenceService.isConverged(
+            this.player.field.types(),
+            GAME_CONFIG.UNIQUE_TYPES_TO_WIN
+        );
+        this.turn.opponentConvergenceArmed = ConvergenceService.isConverged(
+            this.opponent.field.types(),
+            GAME_CONFIG.UNIQUE_TYPES_TO_WIN
+        );
+        this.refreshConvergenceStatusUi();
+    }
+
+    /**
+     * Emite a la UIScene el estado de Convergencia para avisos visuales.
+     */
+    refreshConvergenceStatusUi() {
+        this.events.emit('convergence-status', {
+            player: this.turn.playerConvergenceArmed,
+            opponent: this.turn.opponentConvergenceArmed
+        });
+    }
+
+    /**
+     * Ejecuta el poder de esencia solicitado por la UIScene (clic en un orbe
+     * propio activo). Validación delegada en EssencePowerService; los efectos
+     * se aplican sobre el dominio (Player, TurnManager). Uso: 1 por turno propio.
+     * @param {string} essenceType Tipo de esencia ('fuego', 'agua', ...).
+     */
+    useEssencePower(essenceType) {
+        if (this.turn.state !== 'player-turn') {
+            console.log('[GameScene] Solo puedes usar poderes de esencia en tu turno.');
+            return;
+        }
+
+        const plan = EssencePowerService.plan(essenceType, {
+            isPlayerTurn: this.turn.state === 'player-turn',
+            usedThisTurn: this.turn.playerEssencePowerUsed,
+            essenceActive: this.player.essences.has(essenceType),
+            graveyard: this.player.graveyard,
+            opponentHand: this.opponent.hand
+        });
+        if (!plan.ok) {
+            console.warn('[GameScene] Poder de esencia no disponible:', { essenceType, reason: plan.reason });
+            return;
+        }
+
+        this.turn.playerEssencePowerUsed = true;
+
+        switch (essenceType) {
+            case CARD_TYPES.FUEGO:
+                // Ráfaga: el próximo ataque del jugador también gana en empate.
+                this.turn.playerNextAttackBreaksTie = true;
+                break;
+            case CARD_TYPES.AGUA: {
+                // Rescate: vuelve a la mano la carta base más reciente del cementerio.
+                const rescued = this.player.returnTopGraveyardCardToHand();
+                if (rescued) this.refreshPlayerHand();
+                break;
+            }
+            case CARD_TYPES.PLANTA:
+                // Brotar: roba 2 cartas.
+                this.player.drawCard();
+                this.player.drawCard();
+                this.refreshPlayerHand();
+                this.updateDeckCounts();
+                break;
+            case CARD_TYPES.LUZ:
+                // Clarividencia: revela la mano del rival hasta que robe o juegue.
+                this.revealOpponentHandForTurn();
+                break;
+            case CARD_TYPES.SOMBRA: {
+                // Robar: el rival descarta su carta de mayor nivel.
+                const discarded = this.opponent.discardHighestLevelCard();
+                if (discarded) {
+                    this.refreshOpponentHand();
+                    this.updateDeckCounts();
+                }
+                break;
+            }
+            case CARD_TYPES.ESPIRITU:
+                // Conducto: bloquea la Convergencia del rival durante su próximo turno.
+                this.turn.opponentConvergenceBlocked = true;
+                this.refreshConvergenceStatusUi();
+                break;
+            default:
+                console.warn('[GameScene] Poder de esencia desconocido:', essenceType);
+                this.turn.playerEssencePowerUsed = false;
+                return;
+        }
+
+        // Feedback para la UIScene (toast + highlight del orbe).
+        this.events.emit('essence-power-used', essenceType, plan.name);
+        console.log('[GameScene] Poder de esencia usado:', plan.name, 'de', essenceType);
+    }
+
+    /**
+     * Poder LUZ (Clarividencia): revela visualmente la mano del rival. Las cartas
+     * vuelven a su reverso la próxima vez que el rival robe o juegue (refresh).
+     */
+    revealOpponentHandForTurn() {
+        const opponentCards = this['opponent-cards'] || [];
+        let revealed = 0;
+        opponentCards.forEach(cardObj => {
+            const cd = (cardObj.getData && cardObj.getData('cardData')) || cardObj.cardData;
+            if (!cd) return;
+            try { cardObj.setTexture(`card-${cd.type}-${cd.level}`); } catch (e) {}
+            cardObj.setData('isRevealed', true);
+            revealed++;
+        });
+        console.log(`[GameScene] Clarividencia: mano del rival revelada (${revealed} carta(s)).`);
     }
 
     /**
@@ -1240,7 +1405,7 @@ export default class GameScene extends Phaser.Scene {
         const username = (this.playerData && this.playerData.username) || 'Jugador';
         if (winner === 'player') {
             recordVictory(username);
-            const fieldCards = (this.player.field || []).filter(c => c);
+            const fieldCards = this.player.field.cards();
             if (fieldCards.some(c => c && c.level >= 3)) {
                 recordLevel3Win(username);
             }
@@ -1270,14 +1435,14 @@ export default class GameScene extends Phaser.Scene {
     destroyCard(owner, fieldIndex, instanceId = null) {
         if (this.debugSync) console.log('[GameScene][debug] destroyCard called', { owner: owner && owner.id, fieldIndex, instanceId, timestamp: Date.now() });
         // Intentar obtener cardData desde el modelo
-        let cardData = (typeof fieldIndex === 'number' && owner.field[fieldIndex]) ? owner.field[fieldIndex] : null;
+        let cardData = (typeof fieldIndex === 'number' && owner.field.get(fieldIndex)) ? owner.field.get(fieldIndex) : null;
 
         // si hay instanceId y el modelo no coincide, buscar en el modelo por instanceId
         if ((!cardData || (instanceId && cardData.instanceId !== instanceId)) && instanceId) {
-            const foundIdx = owner.field.findIndex(slot => slot && slot.instanceId === instanceId);
+            const foundIdx = owner.field.findIndexByCard(instanceId);
             if (foundIdx !== -1) {
                 fieldIndex = foundIdx;
-                cardData = owner.field[fieldIndex];
+                cardData = owner.field.get(fieldIndex);
             }
         }
 
@@ -1331,9 +1496,9 @@ export default class GameScene extends Phaser.Scene {
                 fallback.destroy();
             }
             // limpiar modelo si había mismatch
-            if (typeof fieldIndex === 'number' && owner.field[fieldIndex]) {
+            if (typeof fieldIndex === 'number' && owner.field.get(fieldIndex)) {
                 console.log('[GameScene] destroyCard: limpiando modelo en slot', fieldIndex);
-                owner.field[fieldIndex] = null;
+                owner.field.clearAt(fieldIndex);
             }
             return;
         }
@@ -1345,9 +1510,9 @@ export default class GameScene extends Phaser.Scene {
             if (finalInstanceId) this._pendingDestroys.add(finalInstanceId);
 
             // llevar carta(s) al cementerio según nivel
-            CardDestructionService.graveyardEntries(cardData).forEach(entry => owner.addCardDataToGraveyard(entry));
+            owner.addCardDataToGraveyard(cardData);
 
-            if (typeof fieldIndex === 'number') owner.field[fieldIndex] = null;
+            if (typeof fieldIndex === 'number') owner.field.clearAt(fieldIndex);
             if (owner.id === 'player') this.refreshPlayerHand();
             this.updateDeckCounts();
 
@@ -1436,10 +1601,10 @@ export default class GameScene extends Phaser.Scene {
 
         // Si tenemos modelo, mover a cementerio con la misma lógica previa
         if (cardData) {
-            CardDestructionService.graveyardEntries(cardData).forEach(entry => owner.addCardDataToGraveyard(entry));
+            owner.addCardDataToGraveyard(cardData);
             if (typeof fieldIndex === 'number') {
-                console.log('[GameScene] destroyCard: limpiando modelo (owner.field) en slot', fieldIndex, 'valor previo:', owner.field[fieldIndex]);
-                owner.field[fieldIndex] = null;
+                console.log('[GameScene] destroyCard: limpiando modelo (owner.field) en slot', fieldIndex, 'valor previo:', owner.field.get(fieldIndex));
+                owner.field.clearAt(fieldIndex);
                 modelCleaned = true;
                 tryFinalize();
             }
@@ -1716,7 +1881,7 @@ export default class GameScene extends Phaser.Scene {
         } // Si no hay carta seleccionada, o la carta ya está en el campo, el clic en el tablero se encargará de deseleccionar.
         // Si hay una carta seleccionada y el oponente no tiene cartas, es un ataque directo.
         else if (this.selectedCard && this.selectedCard.getData('isCardOnField')) {
-            const opponentFieldCards = this.opponent.field.filter(card => card !== null);
+            const opponentFieldCards = this.opponent.field.cards();
             if (opponentFieldCards.length === 0) {
                 this.handleDirectAttack(this.selectedCard);
             }
@@ -1731,7 +1896,7 @@ export default class GameScene extends Phaser.Scene {
         // Si tenemos una carta de nuestro campo seleccionada...
         if (this.selectedCard && this.selectedCard.getData('isCardOnField')) {
             // Y el oponente no tiene cartas en el campo...
-            const opponentHasCards = this.opponent.field.some(card => card !== null);
+            const opponentHasCards = this.opponent.field.hasAny();
             if (!opponentHasCards) {
                 this.handleDirectAttack(this.selectedCard);
             }
@@ -1897,9 +2062,9 @@ export default class GameScene extends Phaser.Scene {
 
                 // Actualizar modelo
                 try {
-                    if (this.debugSync) console.log('[GameScene][debug] handling remote play_card', { cardInstanceId: card && card.instanceId, fieldIndex, targetBefore: targetModel.field.map(f=>f&&f.instanceId), timestamp: Date.now() });
-                    targetModel.field[fieldIndex] = card;
-                    if (this.debugSync) console.log('[GameScene][debug] model updated for remote play_card', { targetAfter: targetModel.field.map(f=>f&&f.instanceId) });
+                    if (this.debugSync) console.log('[GameScene][debug] handling remote play_card', { cardInstanceId: card && card.instanceId, fieldIndex, targetBefore: targetModel.field.snapshot().map(f=>f&&f.instanceId), timestamp: Date.now() });
+                    targetModel.field.set(fieldIndex, card);
+                    if (this.debugSync) console.log('[GameScene][debug] model updated for remote play_card', { targetAfter: targetModel.field.snapshot().map(f=>f&&f.instanceId) });
                 } catch (e) {
                     console.warn('No se pudo actualizar el modelo remoto:', e);
                 }
@@ -1928,10 +2093,10 @@ export default class GameScene extends Phaser.Scene {
                 const resultCard = payload.resultCard;
                 
                 // Actualizar modelo
-                if (this.debugSync) console.log('[GameScene][debug] handling remote fuse_cards', { sourceIndex, targetIndex, resultCardInstanceId: resultCard && resultCard.instanceId, targetBefore: targetModel.field.map(f=>f&&f.instanceId), timestamp: Date.now() });
-                targetModel.field[sourceIndex] = null;
-                targetModel.field[targetIndex] = resultCard;
-                if (this.debugSync) console.log('[GameScene][debug] model updated for remote fuse_cards', { targetAfter: targetModel.field.map(f=>f&&f.instanceId) });
+                if (this.debugSync) console.log('[GameScene][debug] handling remote fuse_cards', { sourceIndex, targetIndex, resultCardInstanceId: resultCard && resultCard.instanceId, targetBefore: targetModel.field.snapshot().map(f=>f&&f.instanceId), timestamp: Date.now() });
+                targetModel.field.clearAt(sourceIndex);
+                targetModel.field.set(targetIndex, resultCard);
+                if (this.debugSync) console.log('[GameScene][debug] model updated for remote fuse_cards', { targetAfter: targetModel.field.snapshot().map(f=>f&&f.instanceId) });
                 
                 // Destruir objetos visuales en ambos índices
                 const cardObjs = this.children.list.filter(c => 
@@ -1965,9 +2130,9 @@ export default class GameScene extends Phaser.Scene {
                 const resultCard = payload.resultCard;
                 
                 // Actualizar modelo
-                if (this.debugSync) console.log('[GameScene][debug] handling remote fuse_from_hand', { targetIndex, resultCardInstanceId: resultCard && resultCard.instanceId, targetBefore: targetModel.field.map(f=>f&&f.instanceId), timestamp: Date.now() });
-                targetModel.field[targetIndex] = resultCard;
-                if (this.debugSync) console.log('[GameScene][debug] model updated for remote fuse_from_hand', { targetAfter: targetModel.field.map(f=>f&&f.instanceId) });
+                if (this.debugSync) console.log('[GameScene][debug] handling remote fuse_from_hand', { targetIndex, resultCardInstanceId: resultCard && resultCard.instanceId, targetBefore: targetModel.field.snapshot().map(f=>f&&f.instanceId), timestamp: Date.now() });
+                targetModel.field.set(targetIndex, resultCard);
+                if (this.debugSync) console.log('[GameScene][debug] model updated for remote fuse_from_hand', { targetAfter: targetModel.field.snapshot().map(f=>f&&f.instanceId) });
                 
                 // Destruir carta anterior en targetIndex
                 const oldCard = this.children.list.find(c => 
@@ -2056,6 +2221,9 @@ export default class GameScene extends Phaser.Scene {
                             const idx = defenderObj.getData('fieldIndex');
                             console.log('[GameScene] Resultado indica defensor perdió; destruyendo objeto encontrado', { owner: owner.id, idx, ownerIsOpponent });
                             this.destroyCard(owner, idx);
+                            // Regla de esencias: el atacante remoto (oponente) gana y llena la esencia de su tipo.
+                            const winnerData = attackerObj.getData('cardData') || attackerObj.cardData;
+                            if (winnerData && winnerData.type) this.opponent.fillEssence(winnerData.type);
                         }
                     }
                 });
@@ -2151,7 +2319,7 @@ export default class GameScene extends Phaser.Scene {
 
     /**
      * Encuentra el objeto visual de una carta en el campo a partir de su índice.
-     * @param {number} fieldIndex El índice de la carta en el array `player.field`.
+     * @param {number} fieldIndex El índice de la carta en el `player.field` (Battlefield).
      * @param {Phaser.GameObjects.Sprite} [excludeObject=null] Un objeto a excluir de la búsqueda.
      * @returns {Phaser.GameObjects.Image|null}
      */
@@ -2201,7 +2369,24 @@ export default class GameScene extends Phaser.Scene {
         console.log('Contadores de mazo actualizados.');
     }
 
-    // Nuevo helper para aplicar cooldowns y contabilizar ataques por nivel
+    // Helper: aplica los resets de restricciones por nivel al iniciar un turno propio.
+    // La regla (nivel 2 descansa, nivel 3 descansa, consecutivos) vive en LevelAttackRule.
+    _refreshCardTurnMetadata(cardObject, ownerType) {
+        const ownTurnNumber = ownerType === 'player' ? this.turn.playerTurnNumber : this.turn.opponentTurnNumber;
+        const state = LevelAttackRule.startOfTurn(
+            {
+                lastAttackedTurn: cardObject.getData('lastAttackedTurn') || null,
+                consecutiveAttacks: cardObject.getData('consecutiveAttacks') || 0,
+                blockedTurn: cardObject.getData('blockedTurn') || null
+            },
+            ownTurnNumber
+        );
+        cardObject.setData('consecutiveAttacks', state.consecutiveAttacks);
+        cardObject.setData('blockedTurn', state.blockedTurn);
+    }
+
+    // Helper para contabilizar ataques por nivel. La transición de estado
+    // (bloqueos del nivel 2/3 y ataques consecutivos) es resuelta por LevelAttackRule.
     _registerCardAttack(cardObject, ownerType) {
         const cardData = cardObject.getData('cardData') || cardObject.cardData;
         const level = cardData.level || 1;
@@ -2214,30 +2399,17 @@ export default class GameScene extends Phaser.Scene {
             recordCollectedCard(username, cardData.type, cardData.level);
         }
 
-        const last = cardObject.getData('lastAttackedTurn') || null;
-        const consecutive = cardObject.getData('consecutiveAttacks') || 0;
-        let newConsecutive = (last === (nowTurn - 1)) ? (consecutive + 1) : 1;
-        cardObject.setData('lastAttackedTurn', nowTurn);
-        cardObject.setData('consecutiveAttacks', newConsecutive);
-
-        if (level === 1) {
-            // sin bloqueo
-            cardObject.setData('blockedTurn', null);
-        } else if (level === 2) {
-            // puede atacar 2 turnos seguidos, luego descansar 1 turno propio
-            if (newConsecutive >= 2) {
-                // bloquea exactamente el siguiente turno propio
-                cardObject.setData('blockedTurn', nowTurn + 1);
-                cardObject.setData('consecutiveAttacks', 0);
-                console.log(`[GameScene] Carta ${cardData.id} bloqueada para el turno ${nowTurn + 1} (nivel 2).`);
-            } else {
-                cardObject.setData('blockedTurn', null);
-            }
-        } else if (level === 3) {
-            // ataca 1 turno -> descansa 1 turno propio
-            cardObject.setData('blockedTurn', nowTurn + 1);
-            cardObject.setData('consecutiveAttacks', 0);
-            console.log(`[GameScene] Carta ${cardData.id} bloqueada para el turno ${nowTurn + 1} (nivel 3).`);
+        const state = LevelAttackRule.registerAttack({
+            level,
+            nowTurn,
+            lastAttackedTurn: cardObject.getData('lastAttackedTurn') || null,
+            consecutiveAttacks: cardObject.getData('consecutiveAttacks') || 0
+        });
+        cardObject.setData('lastAttackedTurn', state.lastAttackedTurn);
+        cardObject.setData('consecutiveAttacks', state.consecutiveAttacks);
+        cardObject.setData('blockedTurn', state.blockedTurn);
+        if (state.blockedTurn !== null) {
+            console.log(`[GameScene] Carta ${cardData.id} bloqueada para el turno ${state.blockedTurn} (nivel ${level}).`);
         }
     }
 

@@ -15,7 +15,7 @@ const RULES_HTML = `
     <ol class="rules">
         <li><strong>Objetivo del Juego:</strong>
             <ul>
-                <li><strong>Principal:</strong> El primer jugador que logre tener los 6 tipos de cartas distintos en su campo gana la partida.</li>
+                <li><strong>Principal:</strong> El primer jugador que complete la <em>Convergencia</em> gana. Para armarla debes tener los 6 tipos de cartas distintos en tu campo; si los conservas durante el turno rival completo, ganas la partida.</li>
                 <li><strong>Secundario:</strong> El jugador que logre llenar las esencias elementales, gana.</li>
             </ul>
         </li>
@@ -108,8 +108,9 @@ const RULES_HTML = `
         </li>
 
         <li><strong>Fusiones:</strong>
-            <p><strong>Requisitos:</strong> Tener 2 cartas iguales (tipo y nivel) en el campo. Fusionar consume tu acción del turno.</p>
+            <p><strong>Requisitos:</strong> Tener 2 cartas iguales (tipo y nivel), ambas en el campo o una en el campo y otra en la mano. Fusionar consume tu acción del turno.</p>
             <p><strong>Efecto:</strong> Se forma una sola carta del mismo tipo y sube un nivel. La carta fusionada se revela.</p>
+            <p><strong>Material:</strong> Las dos cartas usadas se consumen para formar la fusionada (no van al cementerio). Cuando la carta fusionada muere, devuelve su material en cartas base: una de nivel 2 equivale a 2 cartas base y una de nivel 3 a 4 cartas base.</p>
         </li>
 
         <li><strong>Restricciones de Ataques según Nivel:</strong>
@@ -121,7 +122,21 @@ const RULES_HTML = `
         </li>
 
         <li><strong>Esencias Elementales:</strong>
-            <p>Cada jugador tiene 6 esencias, una por cada tipo elemental. Todas las esencias comienzan vacías. Se llenan cuando se cumplen las condiciones de atacar y no haber cartas del oponente para defender.</p>
+            <p>Cada jugador tiene 6 esencias, una por cada tipo elemental. Todas las esencias comienzan vacías. Una esencia se llena de dos maneras:</p>
+            <ul>
+                <li>Cuando una de tus cartas <strong>gana un combate</strong>, llenas la esencia de su tipo.</li>
+                <li>Cuando atacas directo a tu rival por no tener cartas en el campo, llenas la esencia del tipo de tu carta atacante.</li>
+            </ul>
+            <p><strong>Poderes de esencia:</strong> Cada esencia <em>activa</em> (llena) te permite usar una vez por turno propio su poder, pulsando el orbe correspondiente:</p>
+            <ul>
+                <li><strong>Fuego — Ráfaga:</strong> tu próximo ataque también gana si el combate termina en empate.</li>
+                <li><strong>Agua — Rescate:</strong> devuelve a tu mano la carta base (nivel 1) más reciente de tu cementerio.</li>
+                <li><strong>Planta — Brotar:</strong> roba 2 cartas de tu mazo.</li>
+                <li><strong>Luz — Clarividencia:</strong> revela la mano del rival hasta que robe o juegue.</li>
+                <li><strong>Sombra — Robar:</strong> el rival descarta su carta de mayor nivel.</li>
+                <li><strong>Espíritu — Conducto:</strong> bloquea la Convergencia del rival durante su próximo turno.</li>
+            </ul>
+            <p><em>El poder no consume tu acción: después puedes jugar carta, atacar o fusionar.</em></p>
         </li>
 
         <li><strong>Revelación:</strong>
@@ -140,7 +155,7 @@ const RULES_HTML = `
         <li><strong>Fin del Juego:</strong>
             <p>Un jugador gana si:</p>
             <ul>
-                <li>Logra colocar los 6 tipos distintos en su campo (no importa el orden ni si están ocultas).</li>
+                <li>Completa la <strong>Convergencia</strong>: tener los 6 tipos distintos en su campo y conservarlos durante el turno rival completo. Si pierde uno de los 6 tipos antes de eso, la Convergencia se cancela.</li>
                 <li>Logra llenar las esencias elementales (no importa el orden).</li>
                 <li>Por abandono: Si un jugador no actúa durante 3 turnos seguidos → se considera rendido. A los 3 turnos sin acción, derrota automática.</li>
             </ul>

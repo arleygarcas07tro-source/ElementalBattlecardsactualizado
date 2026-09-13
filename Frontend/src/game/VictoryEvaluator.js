@@ -3,8 +3,6 @@ import { GAME_CONFIG } from '../helpers/constants.js';
 const REASON_LOGS = {
     playerInactive: '[GameScene] VICTORIA: OPONENTE (inactividad del jugador)',
     opponentInactive: '[GameScene] VICTORIA: JUGADOR (inactividad del oponente)',
-    playerFieldControl: '[GameScene] VICTORIA: JUGADOR (control de campo - 6 tipos)',
-    opponentFieldControl: '[GameScene] VICTORIA: OPONENTE (control de campo - 6 tipos)',
     playerEssences: '[GameScene] VICTORIA: JUGADOR (llenó las 6 esencias)',
     opponentEssences: '[GameScene] VICTORIA: OPONENTE (llenó las 6 esencias)'
 };
@@ -12,6 +10,10 @@ const REASON_LOGS = {
 /**
  * Evaluador puro de condiciones de victoria. Recibe los estados del jugador,
  * oponente y turno, y decide si hay ganador y por qué. Sin dependencias de Phaser.
+ *
+ * NOTA: la victoria por control de campo (6 tipos) NO se evalúa aquí: vive en
+ * ConvergenceService + la escena, porque ya no es instantánea (exige conservar
+ * los 6 tipos durante un turno rival completo).
  */
 export default class VictoryEvaluator {
     /**
@@ -25,15 +27,6 @@ export default class VictoryEvaluator {
         }
         if (turn.opponentInactiveTurns >= config.INACTIVE_TURNS_TO_LOSE) {
             return { winner: 'player', reason: 'opponentInactive', log: REASON_LOGS.opponentInactive };
-        }
-
-        const playerFieldTypes = new Set(player.field.filter(c => c).map(c => c.type));
-        if (playerFieldTypes.size === config.UNIQUE_TYPES_TO_WIN) {
-            return { winner: 'player', reason: 'playerFieldControl', log: REASON_LOGS.playerFieldControl };
-        }
-        const opponentFieldTypes = new Set(opponent.field.filter(c => c).map(c => c.type));
-        if (opponentFieldTypes.size === config.UNIQUE_TYPES_TO_WIN) {
-            return { winner: 'opponent', reason: 'opponentFieldControl', log: REASON_LOGS.opponentFieldControl };
         }
 
         if (player.essences.size === config.ESSENCES_TO_WIN) {

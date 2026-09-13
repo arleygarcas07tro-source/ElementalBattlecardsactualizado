@@ -174,22 +174,22 @@ export default class BotAI {
 
     /**
      * Busca la mejor fusión de campo posible (dos cartas iguales de nivel < 3).
-     * @param {object[]} opponentField El campo del oponente (array de 6 con nulls).
+     * @param {import('../game_objects/player.js').default} opponentFieldModel Esperado: el Battlefield del oponente.
      * @param {object[]} opponentHand La mano del oponente.
      * @returns {{indices: number[]}|null}
      */
     findBestFusion(opponentField, opponentHand) {
         const samePairs = [];
-        for (let i = 0; i < opponentField.length; i++) {
-            for (let j = i + 1; j < opponentField.length; j++) {
-                const a = opponentField[i], b = opponentField[j];
+        for (let i = 0; i < opponentField.size; i++) {
+            for (let j = i + 1; j < opponentField.size; j++) {
+                const a = opponentField.get(i), b = opponentField.get(j);
                 if (a && b && a.type === b.type && a.level === b.level && a.level < 3) {
                     samePairs.push({ i, j, level: a.level, type: a.type });
                 }
             }
         }
 
-        const currentTypes = new Set(opponentField.filter(c => c).map(c => c.type));
+        const currentTypes = opponentField.types();
         const needed = getBaseCardTypes().filter(t => !currentTypes.has(t));
 
         if (samePairs.length > 0 && (needed.length > 0 || opponentHand.length === 0)) {
@@ -253,9 +253,9 @@ export default class BotAI {
 
         // 6) Jugar carta que cubra tipos faltantes o simplemente ocupar.
         if (!mustAttack) {
-            const emptySlots = opponent.field.map((s, i) => s === null ? i : -1).filter(i => i !== -1);
+            const emptySlots = opponent.field.emptyIndices();
             if (emptySlots.length > 0 && opponent.hand.length > 0) {
-                const types = new Set(opponent.field.filter(c => c).map(c => c.type));
+                const types = opponent.field.types();
                 const missingTypes = getBaseCardTypes().filter(t => !types.has(t));
                 let pickIdx = null;
                 if (missingTypes.length > 0) {

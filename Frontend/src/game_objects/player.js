@@ -2,6 +2,8 @@ import Deck from './deck.js';
 import Card from './card.js'; // CORRECCIÓN: Solo se importa el default, no 'CardTypes'
 import { CardDefinitions } from './card-definitions.js';
 import EssenceManager from './essences.js';
+import CardDestructionService from '../game/CardDestructionService.js';
+import Battlefield from '../game/Battlefield.js';
 
 /**
  * Gestiona el estado completo de un jugador, incluyendo su mazo, mano, campo,
@@ -22,8 +24,8 @@ export default class Player {
         /** @type {Card[]} */
         this.hand = [];
 
-        /** @type {(Card|null)[]} */
-        this.field = new Array(6).fill(null); // 6 espacios en el campo
+        /** @type {import('../game/Battlefield.js').default} Campo de batalla: 6 slots gestionados por Battlefield. */
+        this.field = new Battlefield();
 
         /** @type {object[]} */
         this.graveyard = []; // Guardaremos los datos de las cartas, no los sprites
@@ -84,14 +86,14 @@ export default class Player {
      */
     playCardFromHand(instanceId, fieldIndex) {
         if (this.scene && this.scene.debugSync) {
-            console.log('[Player][debug] playCardFromHand called', { player: this.id, instanceId, fieldIndex, handIds: this.hand.map(h => h && h.instanceId), fieldIds: this.field.map(f => f && f.instanceId), timestamp: Date.now() });
+            console.log('[Player][debug] playCardFromHand called', { player: this.id, instanceId, fieldIndex, handIds: this.hand.map(h => h && h.instanceId), fieldIds: this.field.snapshot().map(f => f && f.instanceId), timestamp: Date.now() });
         }
         const cardIndex = this.hand.findIndex(card => card.instanceId === instanceId);
-        if (cardIndex > -1 && this.field[fieldIndex] === null) {
+        if (cardIndex > -1 && this.field.isEmpty(fieldIndex)) {
             const cardToPlay = this.hand.splice(cardIndex, 1)[0]; // Saca la carta de la mano
 
-            this.field[fieldIndex] = cardToPlay; // Coloca la nueva instancia en el campo
-            if (this.scene && this.scene.debugSync) console.log(`[Player][debug] Carta movida al slot`, { player: this.id, instanceId: cardToPlay.instanceId, fieldIndex, resultingField: this.field.map(f=>f&&f.instanceId) });
+            this.field.set(fieldIndex, cardToPlay); // Coloca la nueva instancia en el campo
+            if (this.scene && this.scene.debugSync) console.log(`[Player][debug] Carta movida al slot`, { player: this.id, instanceId: cardToPlay.instanceId, fieldIndex, resultingField: this.field.snapshot().map(f=>f&&f.instanceId) });
             console.log(`[Player] Carta con instanceId ${instanceId} movida al slot ${fieldIndex} del campo.`);
             return cardToPlay;
         }
@@ -106,19 +108,19 @@ export default class Player {
      * @returns {{newCard: object, emptiedIndex: number}|null} Un objeto con la nueva carta y el índice del slot vaciado.
      */
     fuseCards(draggedIndex, targetIndex) {
-        if (this.scene && this.scene.debugSync) console.log('[Player][debug] fuseCards called', { player: this.id, draggedIndex, targetIndex, fieldSnapshot: this.field.map(f=>f&&f.instanceId), timestamp: Date.now() });
+        if (this.scene && this.scene.debugSync) console.log('[Player][debug] fuseCards called', { player: this.id, draggedIndex, targetIndex, fieldSnapshot: this.field.snapshot().map(f=>f&&f.instanceId), timestamp: Date.now() });
         // Validaciones básicas de índices
         if (typeof draggedIndex !== 'number' || typeof targetIndex !== 'number') {
             console.warn('[Player.fuseCards] Índices inválidos:', draggedIndex, targetIndex);
             return null;
         }
-        if (draggedIndex < 0 || draggedIndex >= this.field.length || targetIndex < 0 || targetIndex >= this.field.length) {
+        if (draggedIndex < 0 || draggedIndex >= this.field.size || targetIndex < 0 || targetIndex >= this.field.size) {
             console.warn('[Player.fuseCards] Índices fuera de rango:', draggedIndex, targetIndex);
             return null;
         }
 
-        const card1 = this.field[draggedIndex];
-        const card2 = this.field[targetIndex];
+        const card1 = this.field.get(draggedIndex);
+        const card2 = this.field.get(targetIndex);
 
         // Comprobar que ambos slots contengan cartas (modelo)
         if (!card1 || !card2) {
@@ -152,10 +154,10 @@ export default class Player {
 
         // Actualizamos el campo: la nueva carta ocupa el lugar de la carta objetivo.
         // El slot de la carta arrastrada se vacía.
-        this.field[targetIndex] = newCardInstance;
-        this.field[draggedIndex] = null;
+        this.field.set(targetIndex, newCardInstance);
+        this.field.clearAt(draggedIndex);
 
-        if (this.scene && this.scene.debugSync) console.log('[Player][debug] fuseCards result', { newCardInstance: newCardInstance.instanceId, targetIndex, emptiedIndex: draggedIndex, fieldAfter: this.field.map(f=>f&&f.instanceId) });
+        if (this.scene && this.scene.debugSync) console.log('[Player][debug] fuseCards result', { newCardInstance: newCardInstance.instanceId, targetIndex, emptiedIndex: draggedIndex, fieldAfter: this.field.snapshot().map(f=>f&&f.instanceId) });
         console.log(`Modelo actualizado: Carta ${newCardInstance.id} (Nivel ${newCardInstance.level}) creada en el slot ${targetIndex}`);
         return { newCard: newCardInstance, emptiedIndex: draggedIndex };
     }
@@ -167,9 +169,9 @@ export default class Player {
      * @returns {object|null} Los datos de la nueva carta fusionada o null si falla.
      */
     fuseFromHand(instanceId, targetIndex) {
-        if (this.scene && this.scene.debugSync) console.log('[Player][debug] fuseFromHand called', { player: this.id, instanceId, targetIndex, handIds: this.hand.map(h=>h&&h.instanceId), targetFieldId: this.field[targetIndex] && this.field[targetIndex].instanceId, timestamp: Date.now() });
+        if (this.scene && this.scene.debugSync) console.log('[Player][debug] fuseFromHand called', { player: this.id, instanceId, targetIndex, handIds: this.hand.map(h=>h&&h.instanceId), targetFieldId: this.field.get(targetIndex) && this.field.get(targetIndex).instanceId, timestamp: Date.now() });
         const cardFromHandIndex = this.hand.findIndex(c => c.instanceId === instanceId);
-        const cardOnField = this.field[targetIndex];
+        const cardOnField = this.field.get(targetIndex);
 
         if (cardFromHandIndex === -1 || !cardOnField) return null;
 
@@ -193,15 +195,15 @@ export default class Player {
             return null;
         }
 
-        // La carta en el campo que se usa para la fusión debe ir al cementerio.
-        // La añadimos al cementerio antes de reemplazarla.
-        this.addCardDataToGraveyard(cardOnField);
+        // Regla simétrica con fuseCards: la carta del campo y la de la mano se
+        // consumen en la fusionada y NADA va al cementerio. Cuando la carta
+        // fusionada muera, CardDestructionService devolverá su material en cartas base.
 
         const newCardInstance = { ...newCardData, instanceId: Phaser.Math.RND.uuid() };
 
         // Reemplazamos la carta en el campo con la nueva carta fusionada
-        this.field[targetIndex] = newCardInstance;
-        if (this.scene && this.scene.debugSync) console.log('[Player][debug] fuseFromHand result', { newCardInstance: newCardInstance.instanceId, targetIndex, fieldAfter: this.field.map(f=>f&&f.instanceId) });
+        this.field.set(targetIndex, newCardInstance);
+        if (this.scene && this.scene.debugSync) console.log('[Player][debug] fuseFromHand result', { newCardInstance: newCardInstance.instanceId, targetIndex, fieldAfter: this.field.snapshot().map(f=>f&&f.instanceId) });
         return newCardInstance;
     }
     /**
@@ -226,17 +228,44 @@ export default class Player {
 
     /**
      * Añade los datos de una carta (objeto de datos, no sprite) al cementerio.
-     * Si la carta es de nivel 2 o 3, la descompone en cartas de nivel 1.
+     * Delega la descomposición por nivel en CardDestructionService
+     * (única fuente de verdad): L1 → 1 base, L2 → 2 bases, L3 → 4 bases.
      * @param {object} cardData Los datos de la carta que ha sido derrotada.
      */
     addCardDataToGraveyard(cardData) {
-        const baseCardsCount = Math.pow(2, cardData.level - 1);
-        console.log(`Añadiendo ${baseCardsCount} carta(s) base de tipo ${cardData.type} al cementerio.`);
+        const baseCards = CardDestructionService.graveyardEntries(cardData);
+        this.graveyard.push(...baseCards);
+        console.log(`Añadiendo ${baseCards.length} carta(s) base de tipo ${cardData.type} al cementerio.`);
+    }
 
-        for (let i = 0; i < baseCardsCount; i++) {
-            // Solo guardamos la información esencial para reconstruir la carta base.
-            const baseCardId = `${cardData.type}-1`;
-            this.graveyard.push({ id: baseCardId, type: cardData.type, level: 1 });
+    /**
+     * Poder AGUA (Rescate): devuelve a la mano la carta base (nivel 1) más
+     * reciente del cementerio. Asigna un instanceId nuevo, como cualquier robo.
+     * @returns {object|null} La carta devuelta a la mano o null si no hay material.
+     */
+    returnTopGraveyardCardToHand() {
+        if (this.graveyard.length === 0) return null;
+        const base = this.graveyard.pop();
+        const card = { ...base, instanceId: Phaser.Math.RND.uuid() };
+        this.hand.push(card);
+        console.log(`[Player] Rescate: carta base ${card.type}-${card.level} devuelta a la mano.`);
+        return card;
+    }
+
+    /**
+     * Poder SOMBRA (Robar): el rival debe descartar la carta de mayor nivel de
+     * su mano. La carta descartada se descompone en material de cementerio.
+     * @returns {object|null} La carta descartada o null si el rival no tiene mano.
+     */
+    discardHighestLevelCard() {
+        if (this.hand.length === 0) return null;
+        let idx = 0;
+        for (let i = 1; i < this.hand.length; i++) {
+            if (this.hand[i].level > this.hand[idx].level) idx = i;
         }
+        const discarded = this.hand.splice(idx, 1)[0];
+        this.addCardDataToGraveyard(discarded);
+        console.log(`[Player] Robar: ${this.id} descartó ${discarded.id} (nivel ${discarded.level}).`);
+        return discarded;
     }
 }

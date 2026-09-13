@@ -11,6 +11,9 @@ export default class UIScene extends Phaser.Scene {
         super('UIScene');
         this.playerOrbs = {};
         this.opponentOrbs = {};
+        // Estado previo de convergencia para emitir avisos solo cuando cambia.
+        this.lastPlayerConvergence = false;
+        this.lastOpponentConvergence = false;
     }
 
     preload() {
@@ -87,6 +90,18 @@ export default class UIScene extends Phaser.Scene {
         this.add.text(barX + barWidth * 0.22, topBarY, 'Jugador', textStyle).setOrigin(0.5);
         this.add.text(barX + barWidth * 0.5, topBarY, "VS", { ...textStyle, fontSize: '18px', fontStyle: 'normal' }).setOrigin(0.5);
         this.add.text(barX + barWidth * 0.78, topBarY, "Oponente", textStyle).setOrigin(0.5);
+
+        // --- TOAST CENTRAL (feedback de poderes de esencia y convergencia) ---
+        this.powerToastText = this.add.text(width / 2, topBarY + 95, '', {
+            fontSize: '18px',
+            fontFamily: 'Arial',
+            color: '#ffd700',
+            fontStyle: 'bold',
+            align: 'center',
+            backgroundColor: 'rgba(20,0,40,0.78)',
+            padding: { x: 14, y: 8 },
+            shadow: { offsetX: 2, offsetY: 2, color: '#000', blur: 3, fill: true }
+        }).setOrigin(0.5).setDepth(1001).setVisible(false);
 
         // --- Botón Iniciar Partida (ahora en la parte superior derecha) ---
         const btnStartWidth = 180;
@@ -178,6 +193,8 @@ export default class UIScene extends Phaser.Scene {
         this.gameScene.events.on('update-timer', this.updateTimer, this);
         this.gameScene.events.on('game-over', this.showGameOverModal, this);
         this.gameScene.events.on('essence-activated', this.handleEssenceActivation, this);
+        this.gameScene.events.on('essence-power-used', this.handleEssencePowerUsed, this);
+        this.gameScene.events.on('convergence-status', this.handleConvergenceStatus, this);
 
         // Nos aseguramos de limpiar el listener cuando la escena se destruya
         this.events.on('shutdown', () => {
@@ -186,6 +203,8 @@ export default class UIScene extends Phaser.Scene {
                 this.gameScene.events.off('update-timer', this.updateTimer, this);
                 this.gameScene.events.off('game-over', this.showGameOverModal, this);
                 this.gameScene.events.off('essence-activated', this.handleEssenceActivation, this);
+                this.gameScene.events.off('essence-power-used', this.handleEssencePowerUsed, this);
+                this.gameScene.events.off('convergence-status', this.handleConvergenceStatus, this);
                 // Nos aseguramos de eliminar también el listener del contador de ataque
                 // para evitar que la UI de una partida anterior reaccione a eventos de una nueva.
                 this.gameScene.events.off('update-attack-counter');
@@ -266,6 +285,17 @@ export default class UIScene extends Phaser.Scene {
             sprite.setData('type', typesArray[i]);
             sprite.setData('owner', ownerId);
             sprite.setData('active', false);
+
+            // Poderes de esencia: el orbe propio activo se puede pulsar para
+            // disparar el poder de esa esencia (una vez por turno propio).
+            if (ownerId === 'player') {
+                const orbType = typesArray[i];
+                sprite.on('pointerdown', () => {
+                    if (this.gameScene && this.gameScene.events) {
+                        this.gameScene.events.emit('request-essence-power', orbType);
+                    }
+                });
+            }
 
             elements.push(sprite);
             orbsContainer.add(sprite);
@@ -450,5 +480,66 @@ export default class UIScene extends Phaser.Scene {
                 ease: 'Power1'
             });
         }
+    }
+
+    /**
+     * Manejador del evento 'essence-power-used'.
+     * @param {string} essenceType Tipo de esencia usada.
+     * @param {string} powerName Nombre del poder ejecutado.
+     */
+    handleEssencePowerUsed(essenceType, powerName) {
+        console.log('[UIScene] Poder de esencia usado', { essenceType, powerName });
+        this.showToast(powerName, 1600);
+        const orb = this.playerOrbs[essenceType];
+        if (orb) {
+            const baseScale = orb.scaleX || 0.08;
+            this.tweens.add({
+                targets: orb,
+                scaleX: baseScale * 1.2,
+                scaleY: baseScale * 1.2,
+                duration: 150,
+                yoyo: true,
+                ease: 'Power1'
+            });
+        }
+    }
+
+    /**
+     * Manejador del evento 'convergence-status'. Avisa solo cuando cambia el
+     * estado: el jugador armó su convergencia o el rival armó la suya.
+     * @param {{player: boolean, opponent: boolean}} status
+     */
+    handleConvergenceStatus(status) {
+        const playerArmed = !!status.player;
+        const opponentArmed = !!status.opponent;
+        const playerChanged = playerArmed !== this.lastPlayerConvergence;
+        const opponentChanged = opponentArmed !== this.lastOpponentConvergence;
+        this.lastPlayerConvergence = playerArmed;
+        this.lastOpponentConvergence = opponentArmed;
+
+        if (playerArmed && playerChanged) {
+            this.showToast('CONVERGENCIA: protege tus 6 tipos hasta tu próximo turno', 4000);
+        } else if (opponentArmed && opponentChanged) {
+            this.showToast('¡El rival selló su Convergencia! Destruye uno de sus tipos', 4000);
+        }
+    }
+
+    /**
+     * Muestra un aviso temporal centrado (poderes y convergencia).
+     * @param {string} text
+     * @param {number} duration ms de visibilidad total.
+     */
+    showToast(text, duration) {
+        if (!this.powerToastText) return;
+        this.powerToastText.setText(text).setVisible(true);
+        this.tweens.killTweensOf(this.powerToastText);
+        this.powerToastText.setAlpha(1);
+        this.tweens.add({
+            targets: this.powerToastText,
+            delay: duration,
+            alpha: 0,
+            duration: 300,
+            onComplete: () => { this.powerToastText.setVisible(false); }
+        });
     }
 }
