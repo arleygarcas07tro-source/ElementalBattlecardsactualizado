@@ -1,6 +1,12 @@
+import Phaser from 'phaser';
+
 /**
- * Representa una carta en el juego. Extiende de Phaser.GameObjects.Sprite para tener
- * una representación visual y manejar la interacción.
+ * Representación visual de una carta (sprite de Phaser). Extiende de
+ * Phaser.GameObjects.Sprite y gestiona textura e interacción.
+ *
+ * Es solo presentación: los datos de dominio (instancia con `instanceId`,
+ * `type`, `level`, `owner`) viven en `cardData` y se construyen con
+ * `game/CardEntity.js`. No añadir aquí reglas de negocio.
  */
 export default class Card extends Phaser.GameObjects.Sprite {
 

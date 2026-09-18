@@ -1,6 +1,8 @@
 'use strict';
 
-class Logger {
+const ILogger = require('./ILogger');
+
+class Logger extends ILogger {
   info(...args) {
     console.log(...args);
   }

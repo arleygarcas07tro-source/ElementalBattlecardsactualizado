@@ -19,13 +19,13 @@ class ValidationError extends AppError {
 
 class UnauthorizedError extends AppError {
   constructor(message) {
-    super(message, 400);
+    super(message, 401);
   }
 }
 
 class ConflictError extends AppError {
   constructor(message) {
-    super(message, 400);
+    super(message, 409);
   }
 }
 

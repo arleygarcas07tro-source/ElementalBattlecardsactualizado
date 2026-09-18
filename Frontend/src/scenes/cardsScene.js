@@ -1,3 +1,5 @@
+import Phaser from 'phaser';
+
 import { play as playSfx } from '../helpers/audioManager.js';
 
 const ELEMENTS = [

@@ -1,3 +1,5 @@
+import Phaser from 'phaser';
+
 import { CARD_TYPES } from './constants.js';
 import { play as playSfx } from './audioManager.js';
 

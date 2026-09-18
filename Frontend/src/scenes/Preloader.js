@@ -1,3 +1,5 @@
+import Phaser from 'phaser';
+
 import { CARD_TYPES as CardTypes } from '../helpers/constants.js';
 
 /**

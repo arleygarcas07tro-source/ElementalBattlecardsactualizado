@@ -29,7 +29,7 @@ export default class EssenceManager {
      * @param {string} type El tipo de esencia a activar (usando CardTypes).
      */
     activate(type) {
-        if (this._essences.hasOwnProperty(type)) {
+        if (Object.prototype.hasOwnProperty.call(this._essences, type)) {
             this._essences[type] = true;
             console.log(`Esencia de ${type} activada.`);
         } else {

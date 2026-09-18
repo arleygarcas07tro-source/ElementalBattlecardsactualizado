@@ -1,3 +1,5 @@
+import Phaser from 'phaser';
+
 /**
  * Escena de Pausa - Se superpone a la GameScene cuando el jugador pausa
  * Muestra un menú elegante con opciones de continuar, reiniciar, configuración y salir

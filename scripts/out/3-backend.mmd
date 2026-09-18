@@ -1,0 +1,218 @@
+%% diagrama 3-backend
+classDiagram
+    direction TB
+
+    %% ============ core ============
+    class AppConfig {
+        -object env
+        +constructor(env)
+        +getPort() number
+        +getNodeEnv() string
+        +getCorsOrigin() string
+        +getDbEnabled() boolean
+        +getUseSqlite() boolean
+        +getDbRequireSSL() boolean
+        +getDbHost() string
+        +getDbPort() number
+        +getDbName() string
+        +getDbUser() string
+        +getDbPass() string
+        +getJwtSecret() string
+        +getJwtExpiresIn() string
+    }
+    class ILogger {
+        <<interface>>
+        +$assert(implementation) void
+        +info(args) void
+        +warn(args) void
+        +error(args) void
+    }
+    class Logger {
+        +info(args) void
+        +warn(args) void
+        +error(args) void
+    }
+    class AppError {
+        -string name
+        -number statusCode
+        +constructor(message, statusCode)
+    }
+    class ValidationError
+    class UnauthorizedError
+    class ConflictError
+    ValidationError : +constructor(message)
+    UnauthorizedError : +constructor(message)
+    ConflictError : +constructor(message)
+
+    %% ============ database ============
+    class DatabaseFactory {
+        -AppConfig config
+        +constructor(config)
+        +build() Sequelize
+    }
+    class DatabaseInitializer {
+        -Sequelize sequelize
+        -ILogger logger
+        -boolean dbRequireSSL
+        +constructor(options)
+        +connect() Promise
+        +sync() Promise
+    }
+    class UserModel {
+        +$define(sequelize, DataTypes) Model
+    }
+
+    %% ============ repositories ============
+    class IUserRepository {
+        <<interface>>
+        +$assert(implementation) void
+        +findByUsername(username) Promise
+        +findByEmail(email) Promise
+        +create(data) Promise
+    }
+    class SequelizeUserRepository {
+        -Model userModel
+        +constructor(userModel)
+        +findByUsername(username) Promise
+        +findByEmail(email) Promise
+        +create(data) Promise
+    }
+
+    %% ============ services ============
+    class IPasswordHasher {
+        <<interface>>
+        +$assert(implementation) void
+        +hash(password) Promise
+        +compare(password, hashedPassword) Promise
+    }
+    class BcryptPasswordHasher {
+        -number saltRounds
+        +constructor(saltRounds)
+        +hash(password) Promise
+        +compare(password, hashedPassword) Promise
+    }
+    class ITokenService {
+        <<interface>>
+        +$assert(implementation) void
+        +sign(payload) Promise
+        +verify(token) Promise
+    }
+    class JwtTokenService {
+        -string secret
+        -string expiresIn
+        +constructor(secret, options)
+        +sign(payload) Promise
+        +verify(token) Promise
+    }
+    class AuthService {
+        -IUserRepository userRepository
+        -IPasswordHasher passwordHasher
+        -ITokenService tokenService
+        -ILogger logger
+        +constructor(options)
+        +register(data) Promise
+        +login(data) Promise
+    }
+
+    %% ============ http ============
+    class AuthController {
+        -AuthService authService
+        +constructor(authService)
+        +register(req, res, next) Promise
+        +login(req, res, next) Promise
+    }
+    class AppFactory {
+        -AppConfig config
+        -ILogger logger
+        +constructor(options)
+        +build(options) ExpressApp
+    }
+
+    %% ============ socketio ============
+    class IRoomStore {
+        <<interface>>
+        +$assert(implementation) void
+        +get(code) object
+        +set(code, room) object
+        +delete(code) boolean
+        +all() object
+    }
+    class InMemoryRoomStore {
+        -object rooms
+        +get(code) object
+        +set(code, room) object
+        +delete(code) boolean
+        +all() object
+    }
+    class IRoomManager {
+        <<interface>>
+        +$assert(implementation) void
+        +createRoom(socketId) object
+        +getRoom(code) object
+        +exists(code) boolean
+        +joinRoom(code, socketId) object
+        +hostId(room) string
+        +guestId(room) string
+        +toggleTurn(code, currentRole) object
+        +removePlayer(code, socketId) object
+        +playerCount(code) number
+        +activeRooms() object
+    }
+    class RoomCodeGenerator {
+        +generate() string
+    }
+    class RoomManager {
+        -IRoomStore roomStore
+        -RoomCodeGenerator codeGenerator
+        -ILogger logger
+        +constructor(options)
+        +createRoom(socketId) object
+        +getRoom(code) object
+        +exists(code) boolean
+        +joinRoom(code, socketId) object
+        +hostId(room) string
+        +guestId(room) string
+        +toggleTurn(code, currentRole) object
+        +removePlayer(code, socketId) object
+        +playerCount(code) number
+        +activeRooms() object
+    }
+    class SocketGateway {
+        -Server io
+        -IRoomManager roomManager
+        -ILogger logger
+        +constructor(options)
+        +registerHandlers() void
+        +handleCreateRoom(socket, cb) void
+        +handleJoinRoom(socket, data, cb) void
+        +handleGameEvent(socket, payload) void
+        +handleEndTurn(socket, payload) void
+        +handleDisconnect(socket) void
+    }
+    class NetworkInfo {
+        +getAddresses() array
+        +display(port) void
+    }
+
+    %% ============ relaciones ============
+    AppError <|-- ValidationError
+    AppError <|-- UnauthorizedError
+    AppError <|-- ConflictError
+    ILogger <|.. Logger : implementa
+    DatabaseFactory ..> AppConfig : usa
+    DatabaseInitializer ..> ILogger : valida
+    IUserRepository <|.. SequelizeUserRepository : implementa
+    IPasswordHasher <|.. BcryptPasswordHasher : implementa
+    ITokenService <|.. JwtTokenService : implementa
+    AuthService *-- IUserRepository : inyecta
+    AuthService *-- IPasswordHasher : inyecta
+    AuthService *-- ITokenService : inyecta
+    AuthService *-- ILogger : inyecta
+    AuthService ..> AppError : lanza
+    AuthController *-- AuthService : usa
+    AppFactory ..> AppConfig : inyecta
+    IRoomStore <|.. InMemoryRoomStore : implementa
+    IRoomManager <|.. RoomManager : implementa
+    RoomManager *-- IRoomStore : inyecta
+    RoomManager o-- RoomCodeGenerator : compone
+    SocketGateway *-- IRoomManager : inyecta

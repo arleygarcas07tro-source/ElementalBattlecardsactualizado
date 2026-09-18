@@ -1,27 +1,28 @@
 import Deck from './deck.js';
-import Card from './card.js'; // CORRECCIÓN: Solo se importa el default, no 'CardTypes'
-import { CardDefinitions } from './card-definitions.js';
 import EssenceManager from './essences.js';
 import CardDestructionService from '../game/CardDestructionService.js';
+import CardEntity from '../game/CardEntity.js';
 import Battlefield from '../game/Battlefield.js';
 
 /**
  * Gestiona el estado completo de un jugador, incluyendo su mazo, mano, campo,
- * cementerio y esencias.
+ * cementerio y esencias. Es lógica de dominio: puede usarse sin Phaser.
+ * Los cambios que la UI necesita notificar se emiten por un emitter opcional.
  */
 export default class Player {
     /**
-     * @param {string} id El identificador del jugador ('player1' o 'player2').
-     * @param {Phaser.Scene} scene La escena principal del juego.
+     * @param {string} id El identificador del jugador ('player' u 'opponent').
+     * @param {object} [opts]
+     * @param {object} [opts.scene] Escena opcional (solo para logs de sync).
      */
-    constructor(id, scene) {
+    constructor(id, { scene = null } = {}) {
         this.id = id;
         this.scene = scene;
 
         this.deck = new Deck(id);
         this.essences = new EssenceManager();
 
-        /** @type {Card[]} */
+        /** @type {object[]} */
         this.hand = [];
 
         /** @type {import('../game/Battlefield.js').default} Campo de batalla: 6 slots gestionados por Battlefield. */
@@ -59,10 +60,9 @@ export default class Player {
         if (cardData) {
             // En lugar de crear el sprite aquí, lo añadimos a la mano como datos.
             // La escena se encargará de crear el sprite cuando sea necesario mostrarlo.
-            // --- ¡AQUÍ ESTÁ LA CORRECCIÓN CLAVE! ---
             // Asignamos un ID de instancia único en el momento en que la carta entra en la mano.
             // Esto nos permite rastrearla de forma única a lo largo de todo su ciclo de vida.
-            cardData.instanceId = Phaser.Math.RND.uuid();
+            CardEntity.ensureInstance(cardData);
             this.hand.push(cardData);
         }
         return cardData;
@@ -82,7 +82,7 @@ export default class Player {
      * Mueve una carta de la mano a un slot específico del campo de batalla.
      * @param {string} instanceId El ID de instancia único de la carta a jugar.
      * @param {number} fieldIndex El índice del slot en el campo (0-5).
-     * @returns {Card|null} La carta jugada o null si no se pudo.
+     * @returns {object|null} Los datos de la carta jugada (instancia de dominio) o null si no se pudo.
      */
     playCardFromHand(instanceId, fieldIndex) {
         if (this.scene && this.scene.debugSync) {
@@ -139,18 +139,9 @@ export default class Player {
             return null;
         }
 
-        // Buscamos la definición de la carta de nivel superior en nuestra base de datos.
-        const newLevel = card1.level + 1;
-        const newCardId = `${card1.type}-${newLevel}`; // Ej: 'sombra-2'
-        const newCardData = CardDefinitions[newCardId];
-
-        if (!newCardData) {
-            console.error(`[Player] No se encontró la definición para la carta fusionada con ID: ${newCardId}`);
-            return null;
-        }
-
-        // Creamos una nueva instancia de la carta fusionada.
-        const newCardInstance = { ...newCardData, instanceId: Phaser.Math.RND.uuid() };
+        // Creamos una nueva instancia de la carta fusionada (definición + instanceId).
+        const newCardInstance = CardEntity.fused(card1);
+        if (!newCardInstance) return null;
 
         // Actualizamos el campo: la nueva carta ocupa el lugar de la carta objetivo.
         // El slot de la carta arrastrada se vacía.
@@ -178,28 +169,19 @@ export default class Player {
         const cardFromHand = this.hand[cardFromHandIndex];
 
         // Validación de compatibilidad
-        if (cardFromHand.type !== cardOnField.type || cardFromHand.level !== cardOnField.level) {
+        if (!CardEntity.areFusionable(cardFromHand, cardOnField)) {
             return null;
         }
 
         // Saca la carta de la mano
         this.hand.splice(cardFromHandIndex, 1);
 
-        // Buscamos la definición de la carta de nivel superior.
-        const newLevel = cardOnField.level + 1;
-        const newCardId = `${cardOnField.type}-${newLevel}`; // Ej: 'fuego-3'
-        const newCardData = CardDefinitions[newCardId];
-
-        if (!newCardData) {
-            console.error(`[Player] No se encontró la definición para la carta fusionada con ID: ${newCardId}`);
-            return null;
-        }
-
         // Regla simétrica con fuseCards: la carta del campo y la de la mano se
         // consumen en la fusionada y NADA va al cementerio. Cuando la carta
         // fusionada muera, CardDestructionService devolverá su material en cartas base.
 
-        const newCardInstance = { ...newCardData, instanceId: Phaser.Math.RND.uuid() };
+        const newCardInstance = CardEntity.fused(cardOnField);
+        if (!newCardInstance) return null;
 
         // Reemplazamos la carta en el campo con la nueva carta fusionada
         this.field.set(targetIndex, newCardInstance);
@@ -208,21 +190,19 @@ export default class Player {
     }
     /**
      * Llena la esencia de un tipo elemental para este jugador.
-     * Si la esencia ya estaba activa, no hace nada y no emite el evento.
+     * Regla pura de dominio: si la esencia ya estaba activa, no hace nada.
+     * La notificación a la UI ('essence-activated') la emite la capa de
+     * presentación que ejecuta la acción.
      * @param {string} essenceType El tipo de esencia a activar.
      * @returns {boolean} `true` si la esencia se activó ahora, `false` si ya estaba activa.
      */
     fillEssence(essenceType) {
         if (this.essences.has(essenceType)) {
-            console.log('[GameScene] Esencia ya activada previamente', { playerId: this.id, essenceType });
+            console.log(`[Player] Esencia ya activada previamente`, { playerId: this.id, essenceType });
             return false;
         }
         this.essences.activate(essenceType);
-        console.log('[GameScene] Esencia activada', { playerId: this.id, essenceType, total: this.essences.size });
-        // Notificamos a la escena para que la UIScene actualice los orbes.
-        if (this.scene && this.scene.events) {
-            this.scene.events.emit('essence-activated', this.id, essenceType);
-        }
+        console.log(`[Player] Esencia activada`, { playerId: this.id, essenceType, total: this.essences.size });
         return true;
     }
 
@@ -236,36 +216,5 @@ export default class Player {
         const baseCards = CardDestructionService.graveyardEntries(cardData);
         this.graveyard.push(...baseCards);
         console.log(`Añadiendo ${baseCards.length} carta(s) base de tipo ${cardData.type} al cementerio.`);
-    }
-
-    /**
-     * Poder AGUA (Rescate): devuelve a la mano la carta base (nivel 1) más
-     * reciente del cementerio. Asigna un instanceId nuevo, como cualquier robo.
-     * @returns {object|null} La carta devuelta a la mano o null si no hay material.
-     */
-    returnTopGraveyardCardToHand() {
-        if (this.graveyard.length === 0) return null;
-        const base = this.graveyard.pop();
-        const card = { ...base, instanceId: Phaser.Math.RND.uuid() };
-        this.hand.push(card);
-        console.log(`[Player] Rescate: carta base ${card.type}-${card.level} devuelta a la mano.`);
-        return card;
-    }
-
-    /**
-     * Poder SOMBRA (Robar): el rival debe descartar la carta de mayor nivel de
-     * su mano. La carta descartada se descompone en material de cementerio.
-     * @returns {object|null} La carta descartada o null si el rival no tiene mano.
-     */
-    discardHighestLevelCard() {
-        if (this.hand.length === 0) return null;
-        let idx = 0;
-        for (let i = 1; i < this.hand.length; i++) {
-            if (this.hand[i].level > this.hand[idx].level) idx = i;
-        }
-        const discarded = this.hand.splice(idx, 1)[0];
-        this.addCardDataToGraveyard(discarded);
-        console.log(`[Player] Robar: ${this.id} descartó ${discarded.id} (nivel ${discarded.level}).`);
-        return discarded;
     }
 }

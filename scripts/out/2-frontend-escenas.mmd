@@ -1,0 +1,233 @@
+%% diagrama 2-frontend-escenas
+classDiagram
+    direction TB
+
+    class BootScene {
+        +constructor()
+        +preload() void
+        +create() void
+    }
+    class PreloaderScene {
+        +constructor()
+        +preload() void
+        +create() void
+    }
+    class LoginScene {
+        -string scriptURL
+        +constructor()
+        +preload() void
+        +create() void
+        +resize(gameSize) void
+    }
+    class RegisterSceneUpdated {
+        -string scriptURL
+        +constructor()
+        +preload() void
+        +create() void
+        +resize(gameSize) void
+    }
+    class HomeScenes {
+        -object playerData
+        -object settings
+        +constructor()
+        +init(data) void
+        +preload() void
+        +create() void
+        +onResize(gameSize) void
+    }
+    class SettingsScene {
+        -object playerData
+        -string returnScene
+        -object settings
+        -array listeners
+        +constructor()
+        +init(data) void
+        +create() void
+        +onResize(gameSize) void
+        +onShutdown() void
+    }
+    class StatsScene {
+        -object playerData
+        -string returnScene
+        -object stats
+        +constructor()
+        +init(data) void
+        +create() void
+        +rankFor(wins) number
+    }
+    class DifficultySelectScene {
+        -object playerData
+        -object LEVELS
+        +constructor()
+        +init(data) void
+        +preload() void
+        +create() void
+        +onResize(gameSize) void
+    }
+    class CreateRoomScene {
+        -object playerData
+        +constructor()
+        +init(data) void
+        +preload() void
+        +create() void
+        +onResize(gameSize) void
+    }
+    class GameSceneLAN {
+        -socket socket
+        -string roomCode
+        -object playerData
+        -string playerRole
+        -object gameStartData
+        +constructor()
+        +init(data) void
+        +create() void
+    }
+    class UIScene {
+        -object playerOrbs
+        -object opponentOrbs
+        -object lastPlayerConvergence
+        -object lastOpponentConvergence
+        +constructor()
+        +preload() void
+        +create(data) void
+        +createEssenceOrbs() void
+        +createEssenceTriangle() void
+        +drawArrowLine() void
+        +updateTimer(time) void
+        +showGameOverModal(winner) void
+        +handleEssenceActivation(playerId, essenceType) void
+        +handleEssencePowerUsed(essenceType, powerName) void
+        +handleConvergenceStatus(status) void
+        +showToast(text) void
+    }
+    class PauseScene {
+        -boolean isPaused
+        -object playerData
+        +constructor()
+        +init(data) void
+        +create(data) void
+    }
+    class LoadingScene {
+        -object playerData
+        +constructor()
+        +init(data) void
+        +create() void
+    }
+    class CardsScene {
+        -object playerData
+        -object ELEMENTS
+        -object CARD_NAMES
+        -object elementByKey
+        +constructor()
+        +init(data) void
+        +create() void
+        +onResize(gameSize) void
+        +onShutdown() void
+    }
+    class MissionsScene {
+        -array MISSIONS
+        -object playerData
+        -array listeners
+        +constructor()
+        +init(data) void
+        +create() void
+        +onResize(gameSize) void
+        +onShutdown() void
+    }
+    class ProfileScene {
+        -object playerData
+        -array listeners
+        -function imageChangeListener
+        -object domUI
+        +constructor()
+        +init(data) void
+        +create() void
+        +onResize(gameSize) void
+        +onShutdown() void
+        +formatProfileId(id) string
+    }
+    class AboutScene {
+        -object playerData
+        -array listeners
+        -object domUI
+        +constructor()
+        +init(data) void
+        +create() void
+        +onResize(gameSize) void
+        +onShutdown() void
+    }
+    class MechanicsScene {
+        -object playerData
+        -array listeners
+        -object domUI
+        -object RULES_HTML
+        +constructor()
+        +init(data) void
+        +create() void
+        +onResize(gameSize) void
+        +onShutdown() void
+    }
+    class GameScene {
+        -object playerData
+        -socket socket
+        -boolean isLAN
+        -string roomCode
+        -string playerRole
+        -boolean vsBot
+        -Card selectedCard
+        -object cardHandSize
+        -object cardFieldSize
+        -TurnManager turn
+        -object turnTimer
+        -BotAI bot
+        +init(data) void
+        +preload() void
+        +create() void
+        +update(time) void
+        +startPlayerTurn() void
+        +endPlayerTurn(forcedAttackSkip) void
+        +startOpponentTurn() void
+        +endOpponentTurn(opponentActed) void
+        +checkVictoryConditions() void
+        +endGame(winner) void
+        +handlePlayCard(cardObject, dropZone) void
+        +attemptToFuse(selectedCardObject, targetCardObject) void
+        +attemptToFuseFromHand(handCardObject, fieldCardObject) void
+        +handleAttack(attackingCardObject, defendingCardObject) void
+        +handleDirectAttack(attackingCardObject) void
+        +animateAttack(attackingCardObject, target, result) void
+        +revPlayerCard(cardObject) void
+        +revealOpponentCard(cardObject) void
+        +destroyCard(owner, fieldIndex, instanceId) void
+        +buildBotContext() object
+        +executeBotPlan(plan) void
+        +useEssencePower(essenceType) void
+        +revealOpponentHandForTurn() void
+        +createFieldDecor() void
+        +createSlotsRow(y, name, numSlots) void
+        +createCardsRow(y, name, hand) void
+        +createPlayerCard(x, y, cardData) void
+        +createOpponentCard(x, y, cardData) void
+        +createFieldCard(slotObj, cardData, options) void
+        +createDecks() void
+        +updateDeckCounts() void
+        +onCardClicked(clickedCard) void
+        +onSlotClicked(clickedSlot) void
+        +onOpponentSlotClicked(clickedSlot) void
+        +selectCard(cardObject) void
+        +deselectCard(animate) void
+        +refreshPlayerHand() void
+        +refreshOpponentHand() void
+        +handleRemoteGameEvent(payload) void
+    }
+
+    GameScene *-- Player : 2 jugadores
+    GameScene *-- TurnManager : controla turnos
+    GameScene *-- BotAI : vs bot
+    GameScene *-- LANClient : vs LAN
+    GameScene ..> VictoryEvaluator : consulta
+    GameScene ..> LevelAttackRule : delega reglas de ataque
+    GameScene ..> EssencePowerService : valida poderes
+    GameScene ..> ConvergenceService : valida convergencia
+    GameScene --> UIScene : corre en paralelo
+    UIScene ..> GameScene : lee estado y escucha eventos

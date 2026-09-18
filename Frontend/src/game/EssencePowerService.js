@@ -1,9 +1,12 @@
 import { CARD_TYPES } from '../helpers/constants.js';
+import CardEntity from './CardEntity.js';
 
 /**
- * Catálogo de poderes de esencia. Cada esencia activada desbloquea un poder
- * que el jugador puede usar UNA vez por turno propio (clic en el orbe).
- * Responsabilidad: reglas puras (qué poder existe y cuándo se puede usar).
+ * Catálogo y ejecución de poderes de esencia. Cada esencia activada desbloquea
+ * un poder que el jugador puede usar UNA vez por turno propio (clic en el orbe).
+ * Responsabilidad: reglas puras (qué poder existe, cuándo se puede usar y cómo
+ * se ejecutan los efectos AGUA/SOMBRA sobre el estado del jugador). La
+ * notificación a la UI queda fuera de este servicio.
  * Sin dependencias de Phaser ni de la escena.
  */
 const POWERS = {
@@ -83,5 +86,40 @@ export default class EssencePowerService {
             return { ok: false, reason: 'rival-sin-mano' };
         }
         return { ok: true, name: POWERS[type].name };
+    }
+
+    /**
+     * Ejecuta el poder AGUA (Rescate): devuelve a la mano la carta base
+     * (nivel 1) más reciente del cementerio. Asigna un instanceId nuevo,
+     * como cualquier robo.
+     * @param {object} player Estado del jugador que recibe el rescate.
+     * @returns {object|null} La carta devuelta a la mano o null si no hay material.
+     */
+    static rescueGraveyardCard(player) {
+        if (player.graveyard.length === 0) return null;
+        const base = player.graveyard.pop();
+        const card = CardEntity.create(base, { forceNewId: true });
+        player.hand.push(card);
+        console.log(`[EssencePowerService] Rescate: carta base ${card.type}-${card.level} devuelta a la mano.`);
+        return card;
+    }
+
+    /**
+     * Ejecuta el poder SOMBRA (Robar): el rival descarta la carta de mayor
+     * nivel de su mano. La carta descartada se descompone en material de
+     * cementerio a través de Player.addCardDataToGraveyard.
+     * @param {object} opponent Estado del jugador rival que debe descartar.
+     * @returns {object|null} La carta descartada o null si el rival no tiene mano.
+     */
+    static stealHighestCard(opponent) {
+        if (opponent.hand.length === 0) return null;
+        let idx = 0;
+        for (let i = 1; i < opponent.hand.length; i++) {
+            if (opponent.hand[i].level > opponent.hand[idx].level) idx = i;
+        }
+        const discarded = opponent.hand.splice(idx, 1)[0];
+        opponent.addCardDataToGraveyard(discarded);
+        console.log(`[EssencePowerService] Robar: ${opponent.id} descartó ${discarded.id} (nivel ${discarded.level}).`);
+        return discarded;
     }
 }

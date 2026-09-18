@@ -42,16 +42,16 @@ cd Frontend; npm install; npm run dev
 
 ## Backend Key Facts (estructura OOP + SOLID)
 
-- **Entry point:** `Backend/server.js` es un thin wrapper → `Backend/src/bootstrap.js` (composition root). Boot order: dotenv → `AppConfig`/`Logger` → `DatabaseFactory` crea Sequelize → `DatabaseInitializer` conecta y sincroniza → arma auth router → `AppFactory` crea la app Express → crea socket.io → `SocketGateway` registra eventos → listen.
-- **Arquitectura por capas en `Backend/src/`:** `core/` (AppConfig, Logger, errores AppError, assertContract), `database/` (DatabaseFactory, DatabaseInitializer, models), `repositories/` (interfaz IUserRepository + SequelizeUserRepository), `services/` (interfaces IPasswordHasher/ITokenService + BcryptPasswordHasher/JwtTokenService + AuthService), `http/` (AuthController, rutas, middleware errorHandler, AppFactory), `socketio/` (IRoomStore + InMemoryRoomStore, RoomCodeGenerator, RoomManager, SocketGateway), `utils/` (NetworkInfo).
-- **DI estricto:** las clases altas dependen de interfaces (JSDoc/`assertContract`) inyectadas por constructor. Los contratos (`IUserRepository`, `IPasswordHasher`, `ITokenService`, `IRoomStore`) viven en un archivo aparte con `static assert()` (fail-fast en bootstrap).
+- **Entry point:** `Backend/server.js` es un thin wrapper → `Backend/src/bootstrap.js` (thin) → `AppComposer` (`src/app/AppComposer.js`, composition root). Boot order: dotenv → `AppComposer.build()` → `AppConfig`/`Logger` → `DatabaseFactory` crea Sequelize → `DatabaseInitializer` conecta y sincroniza → arma auth router → `AppFactory` crea la app Express → crea socket.io → `SocketGateway` registra eventos → listen.
+- **Arquitectura por capas en `Backend/src/`:** `core/` (AppConfig, Logger, errores AppError, assertContract), `domain/` (entities `Room`/`Player`/`TurnState` con comportamiento; `contracts/IRoomService`; services `RoomService`, `AuthService`), `infrastructure/` (database `DatabaseFactory`/`DatabaseInitializer`/models, repositories `SequelizeUserRepository`, services `BcryptPasswordHasher`/`JwtTokenService`, socketio `InMemoryRoomStore`/`RoomCodeGenerator`), `presentation/` (`http/`: AuthController + rutas + middleware errorHandler + AppFactory; `socket/`: SocketGateway + `dto/JoinRoomRequest`), `app/` (`AppComposer`), `utils/` (NetworkInfo).
+- **DI estricto:** las clases altas dependen de interfaces (JSDoc/`assertContract`) inyectadas por constructor. Los contratos (`ILogger`, `IUserRepository`, `IPasswordHasher`, `ITokenService`, `IRoomStore` in their own files; `IRoomService` en `domain/contracts/`) tienen `static assert()` (fail-fast en el composer).
 - **DB:** Sequelize. SQLite por defecto (`DB_USE_SQLITE=true` en `.env`). File at `Backend/database.sqlite`. Supports Postgres via env vars.
 - **Schema management:** `sequelize.sync({ alter: true })` on every boot. Migrations in `migrations/` are **dead code** — never run. New models auto-create/alter tables at startup.
 - **Auth routes** (`/api/auth/register`, `/api/auth/login`) only mount if `DB_ENABLED=true` AND db connected.
 - **Login uses `username`**, not `email` (contradicts the README). Register uses `email`.
-- **Socket.io rooms** (`src/socketio/RoomManager.js`): in-memory only. 6-digit numeric codes, 2-player rooms, `game_event` relay only (no server-side game logic). Room state resets on server restart. `global.activeRooms` enlaza al store vivo para debug.
+- **Socket.io rooms** (`src/domain/services/RoomService.js` sobre las entidades `Room`/`Player`/`TurnState` + `src/infrastructure/socketio/InMemoryRoomStore`): in-memory only. 6-digit numeric codes, 2-player rooms, `game_event` relay only (no server-side game logic). Room state resets on server restart. No hay estado global: el store se inyecta vía `AppComposer`.
 - **CORS is wide open** (`*`) on both HTTP and sockets (via `config.corsOrigin`). JWT secret has a hardcoded fallback.
-- **Error handling:** `src/http/middleware/errorHandler.js` traduce `AppError` → `{ message }` con su status; errores inesperados → 500 `{ message: 'Error en el servidor.' }` y se loguean.
+- **Error handling:** `src/presentation/http/middleware/errorHandler.js` traduce `AppError` → `{ message }` con su status; errores inesperados → 500 `{ message: 'Error en el servidor.' }` y se loguean.
 
 ## Frontend Key Facts
 

@@ -1,4 +1,4 @@
-import { ADVANTAGES } from "./constants";
+import { ADVANTAGES } from "./constants.js";
 
 /**
  * Determina el resultado de un combate entre dos cartas.
