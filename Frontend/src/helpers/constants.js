@@ -25,4 +25,6 @@ export const GAME_CONFIG = {
     INACTIVE_TURNS_TO_LOSE: 3,
     UNIQUE_TYPES_TO_WIN: 6,
     ESSENCES_TO_WIN: 6,
+    // La victoria por 6 tipos exige conservarlos durante un turno rival completo.
+    CONVERGENCE_TURNS_TO_WIN: 1,
 };

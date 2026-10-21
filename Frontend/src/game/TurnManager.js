@@ -34,6 +34,17 @@ export default class TurnManager {
         this.opponentInactiveTurns = 0;
         this.blockingAnimations = 0;
         this.pendingTurnChange = null;
+        // Poderes de esencia: un uso por turno propio.
+        this.playerEssencePowerUsed = false;
+        this.opponentEssencePowerUsed = false;
+        // Poder FUEGO (Ráfaga): el próximo ataque del jugador rompe el empate.
+        this.playerNextAttackBreaksTie = false;
+        // Convergencia (victoria por 6 tipos): el jugador armó los 6 tipos y debe
+        // conservarlos durante el turno rival para ganar.
+        this.playerConvergenceArmed = false;
+        this.opponentConvergenceArmed = false;
+        // Poder ESPÍRITU (Conducto): bloquea la convergencia del rival 1 turno.
+        this.opponentConvergenceBlocked = false;
     }
 
     /**
@@ -46,6 +57,7 @@ export default class TurnManager {
         this.playerTurnNumber++;
         this.playerHasActed = false;
         this.playerPerformedAttackThisTurn = false;
+        this.playerEssencePowerUsed = false;
         this.playerMustAttackThisTurn = (this.playerTurnsSinceLastAttack >= this.config.MANDATORY_ATTACK_TURN - 1);
         return {
             turnNumber: this.playerTurnNumber,
@@ -64,6 +76,7 @@ export default class TurnManager {
         this.opponentTurnNumber++;
         this.opponentHasActed = false;
         this.opponentPerformedAttackThisTurn = false;
+        this.opponentEssencePowerUsed = false;
         this.opponentMustAttackThisTurn = (this.opponentTurnsSinceLastAttack >= this.config.MANDATORY_ATTACK_TURN - 1);
         return {
             turnNumber: this.opponentTurnNumber,
@@ -167,10 +180,19 @@ export default class TurnManager {
     }
 
     /**
-     * Reinicia el contador de turnos sin atacar del jugador
-     * (usado cuando se salta un turno por obligación de atacar sin cartas).
+     * Contabilidad del turno saltado por obligación de atacar sin cartas en campo.
+     * No incrementa la inactividad ni el contador de turnos sin atacar:
+     * el salto es forzado, no es una acción voluntaria del jugador.
+     * @returns {{inactiveTurns: number, turnsSinceLastAttack: number}}
      */
-    resetForcedAttackSkip() {
+    finishForcedAttackSkip() {
+        this.playerHasActed = true;
+        this.playerInactiveTurns = 0;
         this.playerTurnsSinceLastAttack = 0;
+        this.playerMustAttackThisTurn = false;
+        return {
+            inactiveTurns: this.playerInactiveTurns,
+            turnsSinceLastAttack: this.playerTurnsSinceLastAttack
+        };
     }
 }

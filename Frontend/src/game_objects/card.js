@@ -1,3 +1,4 @@
+import Phaser from 'phaser';
 import { createGemVisual } from '../helpers/gemVisual.js';
 import { ensureFxTextures } from '../helpers/cardFx.js';
 import {
@@ -10,8 +11,12 @@ import {
 } from '../helpers/battlefieldArt.js';
 
 /**
- * Representa una carta en el juego. Extiende de Phaser.GameObjects.Sprite para tener
- * una representación visual y manejar la interacción.
+ * Representación visual de una carta (sprite de Phaser). Extiende de
+ * Phaser.GameObjects.Sprite y gestiona textura e interacción.
+ *
+ * Es solo presentación: los datos de dominio (instancia con `instanceId`,
+ * `type`, `level`, `owner`) viven en `cardData` y se construyen con
+ * `game/CardEntity.js`. No añadir aquí reglas de negocio.
  */
 export default class Card extends Phaser.GameObjects.Sprite {
 
@@ -52,10 +57,10 @@ export default class Card extends Phaser.GameObjects.Sprite {
             this.setData('instanceId', cardData.instanceId);
         }
 
-        // Propiedades para las reglas de ataque
-        this.canAttack = true;
-        this.attackCooldown = 0; // Turnos que debe esperar para atacar
-        this.consecutiveAttacks = 0; // Para la regla del nivel 2
+        // Propiedades para las reglas de ataque.
+        // NOTA: la restricción por nivel (L2=ataca 2 turnos y descansa 1, L3=ataca 1 y descansa 1)
+        // se calcula en GameScene._registerCardAttack usando metadatos en el GameObject
+        // (blockedTurn / consecutiveAttacks / lastAttackedTurn). No duplicar aquí.
 
         // 1. Añadimos la carta a la escena PRIMERO.
         scene.add.existing(this);
@@ -367,43 +372,5 @@ export default class Card extends Phaser.GameObjects.Sprite {
         }
         this.refreshPresentation();
         if (!this.isFaceDown && this.level === 3) this.addGemBadge();
-    }
-
-    /**
-     * Se llama al final del turno del propietario para actualizar los contadores de ataque.
-     */
-    updateAttackState() {
-        // Regla Nivel 3: Ataca 1 turno, descansa 1.
-        if (this.level === 3) {
-            if (this.attackCooldown > 0) {
-                this.attackCooldown--;
-            }
-            this.canAttack = (this.attackCooldown === 0);
-        }
-
-        // Regla Nivel 2: Ataca 2 turnos seguidos, descansa 1.
-        if (this.level === 2) {
-            if (this.attackCooldown > 0) {
-                this.attackCooldown--;
-            } else if (this.consecutiveAttacks >= 2) {
-                this.attackCooldown = 1; // Inicia el descanso
-                this.consecutiveAttacks = 0;
-            }
-            this.canAttack = (this.attackCooldown === 0);
-        }
-        // Las cartas de Nivel 1 siempre pueden atacar (this.canAttack es true por defecto).
-    }
-
-    /**
-     * Registra que la carta ha realizado un ataque y actualiza su estado.
-     */
-    registerAttack() {
-        if (this.level === 2) {
-            this.consecutiveAttacks++;
-        }
-        if (this.level === 3) {
-            this.attackCooldown = 1; // Debe descansar el próximo turno
-        }
-        this.updateAttackState();
     }
 }

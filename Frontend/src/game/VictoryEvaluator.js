@@ -3,8 +3,6 @@ import { GAME_CONFIG } from '../helpers/constants.js';
 const REASON_LOGS = {
     playerInactive: '[GameScene] VICTORIA: OPONENTE (inactividad del jugador)',
     opponentInactive: '[GameScene] VICTORIA: JUGADOR (inactividad del oponente)',
-    playerFieldControl: '[GameScene] VICTORIA: JUGADOR (control de campo - 6 tipos)',
-    opponentFieldControl: '[GameScene] VICTORIA: OPONENTE (control de campo - 6 tipos)',
     playerEssences: '[GameScene] VICTORIA: JUGADOR (llenó las 6 esencias)',
     opponentEssences: '[GameScene] VICTORIA: OPONENTE (llenó las 6 esencias)',
     playerObjectives: '[GameScene] VICTORIA: JUGADOR (gemas + control de campo)',
@@ -18,6 +16,11 @@ const REASON_LOGS = {
  * Evaluador puro de condiciones de victoria. Recibe los estados del jugador,
  * oponente, turno, gemas y modo de juego, y decide si hay ganador y por qué.
  * Sin dependencias de Phaser.
+ *
+ * NOTA: en modo clásico la victoria por control de campo (6 tipos) NO se
+ * evalúa aquí: vive en ConvergenceService + GameMatch, porque ya no es
+ * instantánea (exige conservar los 6 tipos durante un turno rival completo).
+ * Los modos con gemas/contrarreloj/turnos máximos sí se evalúan aquí.
  */
 export default class VictoryEvaluator {
     /**
@@ -47,12 +50,17 @@ export default class VictoryEvaluator {
             return { winner: 'player', reason: 'opponentInactive', log: REASON_LOGS.opponentInactive };
         }
 
-        const fieldTypeCount = (p) => new Set(p.field.filter(c => c).map(c => c.type)).size;
+        // Compatible con Battlefield (dominio) y con arreglos crudos (tests/legacy).
+        const fieldTypeCount = (p) => {
+            if (!p || !p.field) return 0;
+            if (typeof p.field.types === 'function') return p.field.types().size;
+            if (Array.isArray(p.field)) return new Set(p.field.filter(c => c).map(c => c.type)).size;
+            return 0;
+        };
         const usesGems = !!(mode && mode.usesGems && gems);
 
-        // 2) Cumplimiento del objetivo.
+        // 2) Objetivo del modo con gemas: reunir las gemas Y dominar los 6 elementos.
         if (usesGems) {
-            // Modo con gemas: se exige reunir las gemas Y dominar los 6 elementos.
             if (gems.player.meetsAll() && fieldTypeCount(player) >= config.UNIQUE_TYPES_TO_WIN) {
                 return { winner: 'player', reason: 'playerObjectives', log: REASON_LOGS.playerObjectives };
             }
@@ -60,13 +68,8 @@ export default class VictoryEvaluator {
                 return { winner: 'opponent', reason: 'opponentObjectives', log: REASON_LOGS.opponentObjectives };
             }
         } else {
-            // Modo clásico: control de campo (6 tipos) o llenar las 6 esencias.
-            if (fieldTypeCount(player) >= config.UNIQUE_TYPES_TO_WIN) {
-                return { winner: 'player', reason: 'playerFieldControl', log: REASON_LOGS.playerFieldControl };
-            }
-            if (fieldTypeCount(opponent) >= config.UNIQUE_TYPES_TO_WIN) {
-                return { winner: 'opponent', reason: 'opponentFieldControl', log: REASON_LOGS.opponentFieldControl };
-            }
+            // Modo clásico: el control de campo lo resuelve ConvergenceService
+            // (no es instantáneo). Solo cuentan las esencias aquí.
             if (player.essences.size >= config.ESSENCES_TO_WIN) {
                 return { winner: 'player', reason: 'playerEssences', log: REASON_LOGS.playerEssences };
             }

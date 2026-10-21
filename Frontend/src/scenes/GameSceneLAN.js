@@ -36,7 +36,6 @@ export default class GameSceneLAN extends Phaser.Scene {
       // crear socket si no se pasó desde la escena anterior
       // cargamos dinámicamente para evitar cargarlo si no es necesario
       try {
-        // eslint-disable-next-line global-require
         const { io } = require('socket.io-client');
         this.socket = io(SERVER_URL);
       } catch (e) {

@@ -1,0 +1,159 @@
+%% diagrama 1-frontend-dominio
+classDiagram
+    direction LR
+
+    class Card {
+        -Phaser.Scene scene
+        -object cardData
+        -string type
+        -number level
+        -boolean isFaceDown
+        -object startPosition
+        +constructor(scene, x, y, cardData, isFaceDown)
+        +reveal() void
+        +levelUp() void
+    }
+
+    class Deck {
+        -string ownerId
+        -array cards
+        +constructor(ownerId)
+        +createInitialDeck() array
+        +shuffle(deck) array
+        +draw() object
+        +getCardsCount() number
+    }
+
+    class Player {
+        -string id
+        -Phaser.Scene scene
+        -Deck deck
+        -EssenceManager essences
+        -array hand
+        -Battlefield field
+        -array graveyard
+        -number turnsWithoutAttacking
+        +constructor(id, scene)
+        +drawInitialHand() void
+        +drawCard() object
+        +refillDeckFromGraveyard() void
+        +playCardFromHand(instanceId, fieldIndex) Card
+        +fuseCards(draggedIndex, targetIndex) object
+        +fuseFromHand(instanceId, targetIndex) object
+        +fillEssence(essenceType) boolean
+        +addCardDataToGraveyard(cardData) void
+        +returnTopGraveyardCardToHand() object
+        +discardHighestLevelCard() object
+    }
+
+    class EssenceManager {
+        -Map essences
+        +activate(type) void
+        +has(type) boolean
+        +getAll() object
+        +size (getter) number
+    }
+
+    class Battlefield {
+        -array slots
+        +constructor(size)
+        +size (getter) number
+        +get(index) object
+        +set(index, card) void
+        +clearAt(index) void
+        +isEmpty(index) boolean
+        +hasAny() boolean
+        +count() number
+        +cards() array
+        +types() Set
+        +emptyIndices() array
+        +findIndexByCard(instanceId) number
+        +snapshot() array
+    }
+
+    class CardDefinitions {
+        +catalog (object, 18 cartas)
+        +$getBaseCardTypes() array
+    }
+
+    class CardDestructionService {
+        +$graveyardEntries(cardData) array
+    }
+
+    class ConvergenceService {
+        +$isConverged(fieldTypes, required) boolean
+        +$missingCount(fieldTypes, required) number
+    }
+
+    class EssencePowerService {
+        +$getPOWERS() object
+        +$getInfo(type) object
+        +$plan(type, ctx) object
+    }
+
+    class LevelAttackRule {
+        +$registerAttack(params) object
+        +$startOfTurn(state, ownTurnNumber) object
+    }
+
+    class VictoryEvaluator {
+        +$evaluate(players, turn) object
+    }
+
+    class BotAI {
+        -number difficulty
+        -number delay
+        -number scoreModifier
+        +constructor(difficulty)
+        +setDifficulty(difficulty) void
+        +shouldAttemptFusion() boolean
+        +getAttackThreshold() number
+        +computeActionDelay() number
+        +computeScoreModifier() number
+        +refreshActionDelay() void
+        +refreshScoreModifier() void
+        +findBestAttack(opponentAttackers, revealedDefenders) object
+        +findBestFusion(opponentField, opponentHand) object
+        +decideAction(context) object
+    }
+
+    class LANClient {
+        -socket socket
+        -string playerRole
+        +constructor(socket, playerRole)
+        +onGameEvent(handler) void
+        +onTurnChanged(handler) void
+        +emitGameEvent(payload) boolean
+        +emitEndTurn() boolean
+    }
+
+    class TurnManager {
+        -object config
+        -string state
+        -boolean playerHasActed
+        -boolean opponentHasActed
+        -boolean playerMustAttackThisTurn
+        -boolean opponentMustAttackThisTurn
+        -number playerTurnNumber
+        -number opponentTurnNumber
+        -number playerInactiveTurns
+        -number opponentInactiveTurns
+        -array blockingAnimations
+        -boolean pendingTurnChange
+        +reset() void
+        +beginPlayerTurn() object
+        +beginOpponentTurn() object
+        +beginOpponentWait() string
+        +requestTurnEnd(nextTurn) boolean
+        +finishPlayerTurn() object
+        +finishOpponentTurn(opponentActed) object
+        +onBlockingAnimationStarted() number
+        +onBlockingAnimationCompleted() string
+        +finishForcedAttackSkip() object
+    }
+
+    Player *-- Deck : compone
+    Player *-- EssenceManager : compone
+    Player *-- Battlefield : 6 slots
+    Player ..> CardDestructionService : delega
+    Deck ..> CardDefinitions : usa

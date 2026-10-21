@@ -1,3 +1,5 @@
+import Phaser from 'phaser';
+
 /**
  * Esta escena se encarga de cargar todos los recursos necesarios para el juego
  * antes de que comience. Muestra una barra de progreso durante la carga.

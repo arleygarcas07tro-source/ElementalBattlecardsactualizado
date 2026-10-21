@@ -53,6 +53,7 @@ export default class HomeScenes extends DomSceneBase {
                     <span class="eyebrow">${card.eyebrow}</span>
                     <h3>${card.title}</h3>
                     <p>${card.desc}</p>
+                    <div class="icon" aria-hidden="true">${card.icon}</div>
                 </div>
                 <div class="card-edge"></div>
             </div>
@@ -526,6 +527,25 @@ export default class HomeScenes extends DomSceneBase {
                 margin: 0 0 16px 0;
                 max-width: 90%;
                 text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+            }
+            .icon {
+                position: absolute;
+                top: 42%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                width: 86px;
+                height: 86px;
+                display: inline-flex;
+                justify-content: center;
+                align-items: center;
+                border-radius: 20px;
+                background: linear-gradient(160deg, rgba(10, 18, 48, 0.72), rgba(6, 10, 30, 0.66));
+                border: 1px solid rgba(230, 200, 115, 0.5);
+                color: #f5ecd2;
+                font-family: Georgia, 'Times New Roman', serif;
+                font-weight: 700;
+                font-size: 30px;
+                box-shadow: 0 0 34px rgba(143, 183, 255, 0.30), inset 0 0 18px rgba(143, 183, 255, 0.10);
             }
 
             /* BOTTOM ACTIONS (Cartas / Misiones) */

@@ -13,6 +13,10 @@ class AppConfig {
     return this.env.NODE_ENV || 'development';
   }
 
+  get isProduction() {
+    return this.nodeEnv === 'production';
+  }
+
   get corsOrigin() {
     return this.env.CORS_ORIGIN || '*';
   }
@@ -50,7 +54,13 @@ class AppConfig {
   }
 
   get jwtSecret() {
-    return this.env.JWT_SECRET || 'tu_secreto_super_secreto_y_largo';
+    if (this.env.JWT_SECRET) {
+      return this.env.JWT_SECRET;
+    }
+    if (this.isProduction) {
+      throw new Error('[AppConfig] JWT_SECRET es obligatorio en producción.');
+    }
+    return 'dev-secret-cambiar-en-produccion';
   }
 
   get jwtExpiresIn() {

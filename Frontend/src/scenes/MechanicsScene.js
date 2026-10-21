@@ -1,4 +1,4 @@
-import Phaser from 'phaser';
+﻿import Phaser from 'phaser';
 import { play as playSfx } from '../helpers/audioManager.js';
 import DomSceneBase from './ui/DomSceneBase.js';
 import { elementsNavHTML, energyParticlesHTML } from './ui/elementCatalog.js';
@@ -41,7 +41,7 @@ export default class MechanicsScene extends DomSceneBase {
                     url('/assets/images/Mecanicas/Mecanicas.jpeg') center / cover no-repeat;
             }
 
-            /* ---------- FONDO: montañas, castillo, islas y energía ---------- */
+            /* ---------- FONDO: montaÃ±as, castillo, islas y energÃ­a ---------- */
             .bg-layer { position: absolute; inset: 0; pointer-events: none; }
             .mountains {
                 position: absolute;
@@ -354,7 +354,7 @@ export default class MechanicsScene extends DomSceneBase {
             }
             .rules li ul li { position: relative; padding-left: 18px; }
             .rules li ul li::before {
-                content: "▸";
+                content: "â–¸";
                 position: absolute;
                 left: 0;
                 color: #5ce3ff;
@@ -450,22 +450,22 @@ export default class MechanicsScene extends DomSceneBase {
                     <img class="logo" src="/assets/images/logotipomenu.jpg" alt="Elemental Battlecards">
                     <div class="brand-block">
                         <span class="brand-kicker">Elemental Battle Cards</span>
-                        <h1>Mecánicas</h1>
-                        <p>Domina las reglas, los triángulos elementales y el arte de la fusión.</p>
+                        <h1>MecÃ¡nicas</h1>
+                        <p>Domina las reglas, los triÃ¡ngulos elementales y el arte de la fusiÃ³n.</p>
                     </div>
                 </div>
                 <nav class="top-nav">
-                    <button class="tn" data-nav="home">🏠 Inicio</button>
-                    <button class="tn" data-nav="settings">⚙️ Configuración</button>
-                    <button class="tn active">📖 Mecánicas</button>
+                    <button class="tn" data-nav="home">ðŸ  Inicio</button>
+                    <button class="tn" data-nav="settings">âš™ï¸ ConfiguraciÃ³n</button>
+                    <button class="tn active">ðŸ“– MecÃ¡nicas</button>
                 </nav>
             </header>
 
             <main class="mech-body">
                 <section class="mech-panel">
-                    <span class="panel-kicker">✦ Manual elemental</span>
+                    <span class="panel-kicker">âœ¦ Manual elemental</span>
                     <h2 class="panel-title">Reglas del juego</h2>
-                    <p class="panel-sub">Las 16 reglas del mundo elemental, siempre visibles. Desplázate para descubrirlas.</p>
+                    <p class="panel-sub">Las 16 reglas del mundo elemental, siempre visibles. DesplÃ¡zate para descubrirlas.</p>
                     <div class="panel-glow"></div>
                     <div class="rules-wrap">${RULES_HTML}</div>
                 </section>
@@ -474,7 +474,7 @@ export default class MechanicsScene extends DomSceneBase {
             <nav class="bottom-nav">
                 <div class="nav-elements">${elementsNavHtml}</div>
                 <div class="nav-items">
-                    <button class="nav-item" data-nav="cards">🃏 Cartas</button>
+                    <button class="nav-item" data-nav="cards">ðŸƒ Cartas</button>
                 </div>
             </nav>
         </div>`;

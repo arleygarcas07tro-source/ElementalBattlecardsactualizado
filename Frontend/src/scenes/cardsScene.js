@@ -1,3 +1,5 @@
+import Phaser from 'phaser';
+
 import { play as playSfx } from '../helpers/audioManager.js';
 import DomSceneBase from './ui/DomSceneBase.js';
 import { ELEMENTS, elementByKey, elementsNavHTML, energyParticlesHTML } from './ui/elementCatalog.js';

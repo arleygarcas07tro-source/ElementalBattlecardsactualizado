@@ -1,4 +1,4 @@
-import Phaser from 'phaser';
+﻿import Phaser from 'phaser';
 import { createGemVisual, ELEMENT_ORDER } from '../helpers/gemVisual.js';
 import { drawOrnatePanel, ornateLabel } from '../helpers/battlefieldArt.js';
 
@@ -16,8 +16,8 @@ const COLORS = {
 /**
  * La escena de la interfaz de usuario (UI) se ejecuta sobre la GameScene.
  * Presenta perfiles (datos reales de mazo/mano/campo), fase de turno, relojes,
- * botones y el panel de gemas elementales. Rediseñada con estética de fantasía
- * (marcos ornamentales, gemas cristalinas) sin alterar eventos ni lógica.
+ * botones y el panel de gemas elementales. RediseÃ±ada con estÃ©tica de fantasÃ­a
+ * (marcos ornamentales, gemas cristalinas) sin alterar eventos ni lÃ³gica.
  */
 export default class UIScene extends Phaser.Scene {
     constructor() {
@@ -28,6 +28,9 @@ export default class UIScene extends Phaser.Scene {
         this.gemShelves = {};
         this.gemTotals = {};
         this.profileTexts = { player: null, opponent: null };
+        // Estado previo de convergencia para emitir avisos solo cuando cambia.
+        this.lastPlayerConvergence = false;
+        this.lastOpponentConvergence = false;
     }
 
     preload() {
@@ -50,10 +53,10 @@ export default class UIScene extends Phaser.Scene {
         this.H = height;
 
         // Reloj de turno: sobre la bandeja de la mano, a la izquierda de las
-        // cartas (que ahora llegan hasta x≈1110).
+        // cartas (que ahora llegan hasta xâ‰ˆ1110).
         this.turnTimerPos = { x: 300, y: this.H - 125 };
 
-        // --- Construcción del HUD ---
+        // --- Construccion del HUD ---
         this.createProfiles();
         this.createPhaseBanner();
         this.createButtons();
@@ -61,6 +64,18 @@ export default class UIScene extends Phaser.Scene {
         this.createMatchTimer();
         this.createEssenceOrbs();
         this.createGemPanels();
+
+        // --- TOAST CENTRAL (feedback de poderes de esencia y convergencia) ---
+        this.powerToastText = this.add.text(width / 2, 100, '', {
+            fontSize: '18px',
+            fontFamily: 'Arial',
+            color: '#ffd700',
+            fontStyle: 'bold',
+            align: 'center',
+            backgroundColor: 'rgba(20,0,40,0.78)',
+            padding: { x: 14, y: 8 },
+            shadow: { offsetX: 2, offsetY: 2, color: '#000', blur: 3, fill: true }
+        }).setOrigin(0.5).setDepth(1001).setVisible(false);
 
         // --- LISTENER DE EVENTOS ---
         this.gameScene.events.on('update-timer', this.updateTimer, this);
@@ -70,12 +85,14 @@ export default class UIScene extends Phaser.Scene {
         this.gameScene.events.on('gem-collected', this.handleGemCollected, this);
         this.gameScene.events.on('update-match-timer', this.updateMatchTimer, this);
         this.gameScene.events.on('update-turn-indicator', this.handleTurnIndicator, this);
+        this.gameScene.events.on('essence-power-used', this.handleEssencePowerUsed, this);
+        this.gameScene.events.on('convergence-status', this.handleConvergenceStatus, this);
 
         this.scene.get('GameScene').events.on('update-attack-counter', (owner, turnIndex, mustAttack) => {
             const textObj = this.attackCounterTexts && this.attackCounterTexts[owner];
             if (!textObj) return;
             const label = owner === 'player' ? `${this.username}` : (this.gameScene && this.gameScene.vsBot ? 'Bot' : 'Rival');
-            const obliged = mustAttack ? '  ·  ¡OBLIGADO!' : '';
+            const obliged = mustAttack ? '  Â·  Â¡OBLIGADO!' : '';
             textObj.setText(`${label}: turno de ataque ${turnIndex}${obliged}`);
             textObj.setColor(mustAttack ? '#ff6b6b' : '#d7e6ff');
         });
@@ -90,6 +107,10 @@ export default class UIScene extends Phaser.Scene {
                 this.gameScene.events.off('gem-collected', this.handleGemCollected, this);
                 this.gameScene.events.off('update-match-timer', this.updateMatchTimer, this);
                 this.gameScene.events.off('update-turn-indicator', this.handleTurnIndicator, this);
+                this.gameScene.events.off('essence-power-used', this.handleEssencePowerUsed, this);
+                this.gameScene.events.off('convergence-status', this.handleConvergenceStatus, this);
+                // Nos aseguramos de eliminar también el listener del contador de ataque
+                // para evitar que la UI de una partida anterior reaccione a eventos de una nueva.
                 this.gameScene.events.off('update-attack-counter');
                 this.gameScene.events.off('update-turn-counter');
             }
@@ -100,14 +121,14 @@ export default class UIScene extends Phaser.Scene {
 
     /**
      * Actualiza cada frame los datos reales de los perfiles (mazo, mano, campo,
-     * gemas) leídos del modelo de la GameScene. No altera la lógica del juego.
+     * gemas) leÃ­dos del modelo de la GameScene. No altera la lÃ³gica del juego.
      */
     update() {
         this.refreshProfiles();
     }
 
     /* ------------------------------------------------------------------ *
-     * Construcción del HUD
+     * ConstrucciÃ³n del HUD
      * ------------------------------------------------------------------ */
 
     createProfiles() {
@@ -116,7 +137,7 @@ export default class UIScene extends Phaser.Scene {
     }
 
     /**
-     * Construye un panel de perfil con nombre y estadísticas reales.
+     * Construye un panel de perfil con nombre y estadÃ­sticas reales.
      * @param {'player'|'opponent'} owner
      */
     buildProfile(owner) {
@@ -124,8 +145,8 @@ export default class UIScene extends Phaser.Scene {
         const w = 330;
         const h = 124;
         // Rival arriba-izquierda (sobre su bandeja de mano, a la derecha del
-        // botón de pausa), jugador abajo-derecha. El rival se baja a y=88 para
-        // no asomar por encima de la bandeja (como sí hace el del jugador).
+        // botÃ³n de pausa), jugador abajo-derecha. El rival se baja a y=88 para
+        // no asomar por encima de la bandeja (como sÃ­ hace el del jugador).
         const x = isPlayer ? this.W - w - 30 : 100;
         const y = isPlayer ? this.H - h - 24 : 88;
         const accent = isPlayer ? COLORS.blue : COLORS.red;
@@ -135,15 +156,15 @@ export default class UIScene extends Phaser.Scene {
         const name = isPlayer
             ? this.username
             : (this.gameScene && this.gameScene.vsBot
-                ? 'BOT · NIVEL ' + ((this.gameScene.bot && this.gameScene.bot.difficulty) || 3)
-                : (this.gameScene && this.gameScene.isLAN ? 'RIVAL · LAN' : 'RIVAL · EN LÍNEA'));
+                ? 'BOT Â· NIVEL ' + ((this.gameScene.bot && this.gameScene.bot.difficulty) || 3)
+                : (this.gameScene && this.gameScene.isLAN ? 'RIVAL Â· LAN' : 'RIVAL Â· EN LÃNEA'));
 
         const title = ornateLabel(this, x + 20, y + 22, name.toUpperCase(), {
             fontSize: '16px', color: isPlayer ? '#bfe1ff' : '#ffc2ad', originX: 0, originY: 0.5
         });
         title.setDepth(5);
 
-        const role = this.add.text(x + w - 20, y + 22, isPlayer ? 'TÚ' : 'RIVAL', {
+        const role = this.add.text(x + w - 20, y + 22, isPlayer ? 'TÃš' : 'RIVAL', {
             fontFamily: 'Georgia, serif', fontSize: '13px', fontStyle: 'bold',
             color: isPlayer ? '#8fd4ff' : '#ffb08f', stroke: '#000', strokeThickness: 3
         }).setOrigin(1, 0.5).setDepth(5);
@@ -186,7 +207,10 @@ export default class UIScene extends Phaser.Scene {
             try {
                 profile.deck.value.setText(String(player.deck.getCardsCount()));
                 profile.hand.value.setText(String((player.hand || []).length));
-                profile.field.value.setText(String((player.field || []).filter(Boolean).length));
+                const fieldCount = typeof player.field?.count === 'function'
+                    ? player.field.count()
+                    : (player.field || []).filter(Boolean).length;
+                profile.field.value.setText(String(fieldCount));
             } catch (e) { /* modelo aún no listo */ }
         };
 
@@ -229,7 +253,7 @@ export default class UIScene extends Phaser.Scene {
     }
 
     createButtons() {
-        // --- BOTÓN DE PAUSA ---
+        // --- BOTÃ“N DE PAUSA ---
         const px = 62;
         const py = 54;
         const ring = this.add.graphics().setDepth(1000);
@@ -237,7 +261,7 @@ export default class UIScene extends Phaser.Scene {
         ring.lineStyle(3, COLORS.gold, 0.9).strokeCircle(px, py, 28);
         ring.lineStyle(1, COLORS.goldBright, 0.4).strokeCircle(px, py, 22);
 
-        const pauseBtn = this.add.text(px, py, '⏸', {
+        const pauseBtn = this.add.text(px, py, 'â¸', {
             fontSize: '32px', color: '#e8cf8f', fontStyle: 'bold'
         }).setOrigin(0.5).setDepth(1001);
 
@@ -251,7 +275,7 @@ export default class UIScene extends Phaser.Scene {
             this.scene.launch('PauseScene');
         });
 
-        // --- BOTÓN INICIAR PARTIDA ---
+        // --- BOTÃ“N INICIAR PARTIDA ---
         const bw = 210;
         const bh = 48;
         const bx = this.W - bw / 2 - 24;
@@ -337,7 +361,7 @@ export default class UIScene extends Phaser.Scene {
     createMatchTimer() {
         const w = 210;
         const h = 56;
-        // Entre el estandarte de fase y el botón de inicio, en la franja
+        // Entre el estandarte de fase y el botÃ³n de inicio, en la franja
         // superior. Arriba-derecha chocaba con el orbe superior del rival.
         const x = this.W - w - 340;
         const y = 24;
@@ -379,7 +403,7 @@ export default class UIScene extends Phaser.Scene {
     }
 
     /**
-     * Crea un triángulo de 3 orbes con flechas (línea + punta).
+     * Crea un triÃ¡ngulo de 3 orbes con flechas (lÃ­nea + punta).
      */
     createEssenceTriangle(cx, cy, r, typesArray, ownerId, arrowColor = 0xff3333, orbSize = 40) {
         const anglesDeg = [-90, 30, 150];
@@ -410,6 +434,17 @@ export default class UIScene extends Phaser.Scene {
             sprite.setData('owner', ownerId);
             sprite.setData('active', false);
             sprite.setData('ring', ring);
+
+            // Poderes de esencia: el orbe propio activo se puede pulsar para
+            // disparar el poder de esa esencia (una vez por turno propio).
+            if (ownerId === 'player') {
+                const orbType = typesArray[i];
+                sprite.on('pointerdown', () => {
+                    if (this.gameScene && this.gameScene.events) {
+                        this.gameScene.events.emit('request-essence-power', orbType);
+                    }
+                });
+            }
 
             elements.push(sprite);
             orbsContainer.add(sprite);
@@ -495,7 +530,7 @@ export default class UIScene extends Phaser.Scene {
 
     /**
      * Actualiza el indicador de fase (turno propio / del rival) y el color del
-     * anillo del temporizador. Presentación basada en el evento real del juego.
+     * anillo del temporizador. PresentaciÃ³n basada en el evento real del juego.
      * @param {'player'|'opponent'} side
      */
     handleTurnIndicator(side) {
@@ -505,7 +540,7 @@ export default class UIScene extends Phaser.Scene {
             this.phaseText.setColor(mine ? '#bfe1ff' : '#ffc2ad');
         }
         if (this.phaseSub) {
-            this.phaseSub.setText(mine ? 'Coloca, fusiona o ataca' : 'El oponente está actuando...');
+            this.phaseSub.setText(mine ? 'Coloca, fusiona o ataca' : 'El oponente estÃ¡ actuando...');
         }
         this.drawTurnRing(mine ? COLORS.blue : COLORS.red);
     }
@@ -645,8 +680,8 @@ export default class UIScene extends Phaser.Scene {
     }
 
     /**
-     * Resume en una sola línea el objetivo de victoria del modo activo:
-     * gemas requeridas, límite de turnos o reloj global. Solo presentación.
+     * Resume en una sola lÃ­nea el objetivo de victoria del modo activo:
+     * gemas requeridas, lÃ­mite de turnos o reloj global. Solo presentaciÃ³n.
      * @param {object} payload Estado de objetivos emitido por GameScene.
      */
     updateObjectiveText(payload) {
@@ -657,13 +692,13 @@ export default class UIScene extends Phaser.Scene {
             const reqs = Object.values(payload.requirements).filter((v) => v > 0);
             const total = reqs.reduce((a, b) => a + b, 0);
             const distinct = reqs.length;
-            parts.push(`OBJETIVO · 6 elementos en campo · ${total} GEMAS (${distinct} TIPOS)`);
+            parts.push(`OBJETIVO Â· 6 elementos en campo Â· ${total} GEMAS (${distinct} TIPOS)`);
         } else {
-            parts.push('OBJETIVO · 6 elementos en campo');
+            parts.push('OBJETIVO Â· 6 elementos en campo');
         }
         if (mode.maxTurns) parts.push(`${mode.maxTurns} TURNOS`);
         if (mode.matchTimeMs) parts.push(`${Math.round(mode.matchTimeMs / 60000)} MIN`);
-        this.objectiveSub.setText(parts.join('   ·   '));
+        this.objectiveSub.setText(parts.join('   Â·   '));
     }
 
     setGemPanelsVisible(visible) {
@@ -724,17 +759,17 @@ export default class UIScene extends Phaser.Scene {
         const track = (obj) => { modalObjects.push(obj); return obj; };
 
         const REASON_LABELS = {
-            timeExpired: 'Se agotó el tiempo: ambos pierden',
+            timeExpired: 'Se agotÃ³ el tiempo: ambos pierden',
             playerInactive: 'Victoria por inactividad del rival',
             opponentInactive: 'El rival estuvo inactivo',
             playerObjectives: 'Gemas + control de campo cumplidos',
-            opponentObjectives: 'El rival cumplió gemas y control de campo',
+            opponentObjectives: 'El rival cumpliÃ³ gemas y control de campo',
             playerFieldControl: 'Control de campo: 6 elementos',
-            opponentFieldControl: 'El rival logró 6 elementos en campo',
+            opponentFieldControl: 'El rival logrÃ³ 6 elementos en campo',
             playerEssences: 'Las 6 esencias han sido activadas',
-            opponentEssences: 'El rival activó las 6 esencias',
+            opponentEssences: 'El rival activÃ³ las 6 esencias',
             playerTurnLimit: 'Se agotaron tus turnos sin cumplir el objetivo',
-            opponentTurnLimit: 'El rival agotó sus turnos'
+            opponentTurnLimit: 'El rival agotÃ³ sus turnos'
         };
 
         const overlay = track(this.add.rectangle(0, 0, width, height, 0x000000, 0.75).setOrigin(0).setDepth(100));
@@ -756,13 +791,13 @@ export default class UIScene extends Phaser.Scene {
         let resultText;
         let resultColor;
         if (winner === 'player') {
-            resultText = '¡Has Ganado!';
+            resultText = 'Â¡Has Ganado!';
             resultColor = '#49d17a';
         } else if (winner === 'opponent') {
-            resultText = '¡Has Perdido!';
+            resultText = 'Â¡Has Perdido!';
             resultColor = '#ff5a3c';
         } else if (reason === 'timeExpired') {
-            resultText = '¡Tiempo Agotado!';
+            resultText = 'Â¡Tiempo Agotado!';
             resultColor = '#ffb300';
         } else {
             resultText = 'Empate';
@@ -830,7 +865,7 @@ export default class UIScene extends Phaser.Scene {
                     have += payload.player[type].have;
                     need += payload.player[type].need;
                 });
-                text += ` · Gemas ${have}/${need}`;
+                text += ` Â· Gemas ${have}/${need}`;
             }
             return text;
         } catch (e) {
@@ -859,5 +894,66 @@ export default class UIScene extends Phaser.Scene {
                 ease: 'Power1'
             });
         }
+    }
+
+    /**
+     * Manejador del evento 'essence-power-used'.
+     * @param {string} essenceType Tipo de esencia usada.
+     * @param {string} powerName Nombre del poder ejecutado.
+     */
+    handleEssencePowerUsed(essenceType, powerName) {
+        console.log('[UIScene] Poder de esencia usado', { essenceType, powerName });
+        this.showToast(powerName, 1600);
+        const orb = this.playerOrbs[essenceType];
+        if (orb) {
+            const baseScale = orb.scaleX || 0.08;
+            this.tweens.add({
+                targets: orb,
+                scaleX: baseScale * 1.2,
+                scaleY: baseScale * 1.2,
+                duration: 150,
+                yoyo: true,
+                ease: 'Power1'
+            });
+        }
+    }
+
+    /**
+     * Manejador del evento 'convergence-status'. Avisa solo cuando cambia el
+     * estado: el jugador armÃ³ su convergencia o el rival armÃ³ la suya.
+     * @param {{player: boolean, opponent: boolean}} status
+     */
+    handleConvergenceStatus(status) {
+        const playerArmed = !!status.player;
+        const opponentArmed = !!status.opponent;
+        const playerChanged = playerArmed !== this.lastPlayerConvergence;
+        const opponentChanged = opponentArmed !== this.lastOpponentConvergence;
+        this.lastPlayerConvergence = playerArmed;
+        this.lastOpponentConvergence = opponentArmed;
+
+        if (playerArmed && playerChanged) {
+            this.showToast('CONVERGENCIA: protege tus 6 tipos hasta tu prÃ³ximo turno', 4000);
+        } else if (opponentArmed && opponentChanged) {
+            this.showToast('Â¡El rival sellÃ³ su Convergencia! Destruye uno de sus tipos', 4000);
+        }
+    }
+
+    /**
+     * Muestra un aviso temporal centrado (poderes y convergencia).
+     * @param {string} text
+     * @param {number} duration ms de visibilidad total.
+     */
+    showToast(text, duration) {
+        if (!this.powerToastText) return;
+        this.powerToastText.setText(text).setVisible(true);
+        this.tweens.killTweensOf(this.powerToastText);
+        this.powerToastText.setAlpha(1);
+        this.tweens.add({
+            targets: this.powerToastText,
+            delay: duration,
+            alpha: 0,
+            duration: 300,
+            onComplete: () => { this.powerToastText.setVisible(false); }
+        });
     }
 }
