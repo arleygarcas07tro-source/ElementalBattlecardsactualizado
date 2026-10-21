@@ -3,6 +3,9 @@
 const IRoomStore = require('./IRoomStore');
 const assertContract = require('../core/assertContract');
 
+const ALLOWED_GAME_MODES = ['clasico', 'gemas', 'contrarreloj', 'turnos30'];
+const DEFAULT_GAME_MODE = 'clasico';
+
 class RoomManager {
   constructor({ roomStore, codeGenerator, logger }) {
     IRoomStore.assert(roomStore);
@@ -14,23 +17,26 @@ class RoomManager {
     this.logger = logger;
   }
 
-  createRoom(socketId) {
+  createRoom(socketId, gameMode = DEFAULT_GAME_MODE) {
     let code;
     do {
       code = this.codeGenerator.generate();
     } while (this.roomStore.get(code));
+
+    const mode = ALLOWED_GAME_MODES.includes(gameMode) ? gameMode : DEFAULT_GAME_MODE;
 
     const room = {
       players: [{ socketId, role: 'host' }],
       gameState: {
         currentTurn: 'host',
         turnNumber: 0,
+        gameMode: mode,
       },
       createdAt: Date.now(),
     };
 
     this.roomStore.set(code, room);
-    return { code, room, role: 'host' };
+    return { code, room, role: 'host', gameMode: mode };
   }
 
   getRoom(code) {

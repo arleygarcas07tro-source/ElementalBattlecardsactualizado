@@ -1,82 +1,11 @@
 import Phaser from 'phaser';
 import { play as playSfx } from '../helpers/audioManager.js';
 import { getMissionProgress } from '../helpers/playerProgress.js';
+import DomSceneBase from './ui/DomSceneBase.js';
+import { elementByKey, elementsNavHTML, energyParticlesHTML } from './ui/elementCatalog.js';
+import { MISSIONS } from '../game/missionsCatalog.js';
 
-const ELEMENTS = [
-    { key: 'agua',       name: 'Agua',       color: '#38bdf8', soft: 'rgba(56,189,248,0.14)',  glow: 'rgba(56,189,248,0.42)',  img: '/assets/images/iconos/agua.jpeg' },
-    { key: 'fuego',      name: 'Fuego',      color: '#fb5a2a', soft: 'rgba(251,90,42,0.14)',   glow: 'rgba(251,90,42,0.42)',   img: '/assets/images/iconos/fuego.jpeg' },
-    { key: 'aire',       name: 'Aire',       color: '#6fe3ff', soft: 'rgba(111,227,255,0.14)', glow: 'rgba(111,227,255,0.42)', img: '/assets/images/iconos/luz.jpeg' },
-    { key: 'tierra',     name: 'Tierra',     color: '#a78bfa', soft: 'rgba(167,139,250,0.14)', glow: 'rgba(167,139,250,0.42)', img: '/assets/images/iconos/espiritu.jpeg' },
-    { key: 'naturaleza', name: 'Naturaleza', color: '#34d97b', soft: 'rgba(52,217,123,0.14)',  glow: 'rgba(52,217,123,0.42)',  img: '/assets/images/iconos/planta.jpeg' },
-    { key: 'oscuridad',  name: 'Oscuridad',  color: '#c026d3', soft: 'rgba(192,38,211,0.16)',  glow: 'rgba(192,38,211,0.45)',  img: '/assets/images/iconos/sombra.jpeg' }
-];
-
-const MISSIONS = [
-    {
-        id: 'primera-victoria',
-        element: 'fuego',
-        title: 'Primera victoria',
-        desc: 'Enciende el fuego de tu reinado ganando tu primera batalla contra cualquier oponente.',
-        progress: 0,
-        target: 1,
-        reward: '50',
-        unit: 'gemas'
-    },
-    {
-        id: 'coleccionista',
-        element: 'agua',
-        title: 'Coleccionista',
-        desc: 'Coloca los 6 tipos elementales en tu campo en una misma partida.',
-        progress: 0,
-        target: 1,
-        reward: '100',
-        unit: 'gemas'
-    },
-    {
-        id: 'fusionador',
-        element: 'naturaleza',
-        title: 'Fusionador',
-        desc: 'Realiza 5 fusiones de cartas iguales.',
-        progress: 2,
-        target: 5,
-        reward: '150',
-        unit: 'gemas'
-    },
-    {
-        id: 'racha-victorias',
-        element: 'oscuridad',
-        title: 'Racha de victorias',
-        desc: 'Gana 3 partidas consecutivas contra la IA.',
-        progress: 1,
-        target: 3,
-        reward: '200',
-        unit: 'gemas'
-    },
-    {
-        id: 'aprendiz-elemental',
-        element: 'aire',
-        title: 'Aprendiz elemental',
-        desc: 'Ataca al menos una vez con cada uno de los 6 tipos elementales.',
-        progress: 4,
-        target: 6,
-        reward: '120',
-        unit: 'gemas'
-    },
-    {
-        id: 'estratega',
-        element: 'tierra',
-        title: 'Estratega',
-        desc: 'Gana una partida manteniendo una carta de nivel 3 en tu campo.',
-        progress: 0,
-        target: 1,
-        reward: '250',
-        unit: 'gemas'
-    }
-];
-
-const elementByKey = key => ELEMENTS.find(el => el.key === key);
-
-export default class MissionsScene extends Phaser.Scene {
+export default class MissionsScene extends DomSceneBase {
     constructor() {
         super('MissionsScene');
         this.playerData = null;
@@ -99,13 +28,7 @@ export default class MissionsScene extends Phaser.Scene {
         }));
 
         // Energía flotante del fondo: motas luminosas posicionadas en JS.
-        const particles = Array.from({ length: 10 }, (_, i) => {
-            const left = Math.round(4 + ((i * 37) % 92));
-            const top = Math.round(8 + ((i * 53) % 70));
-            const size = 3 + (i % 3) * 2;
-            const delay = (i % 6) * -1.4;
-            return `<span class="energy" style="left:${left}%; top:${top}%; width:${size}px; height:${size}px; animation-delay:${delay}s;"></span>`;
-        }).join('');
+        const particles = energyParticlesHTML();
 
         const missionsHtml = missions.map((mission, index) => {
             const el = elementByKey(mission.element);
@@ -138,11 +61,7 @@ export default class MissionsScene extends Phaser.Scene {
             `;
         }).join('');
 
-        const elementsNavHtml = ELEMENTS.map(el => `
-            <span class="nav-orb" style="--el:${el.color}; --el-soft:${el.soft};" title="${el.name}">
-                <img src="${el.img}" alt="${el.name}">
-            </span>
-        `).join('');
+        const elementsNavHtml = elementsNavHTML();
 
         const html = `
         <style>
@@ -654,32 +573,11 @@ export default class MissionsScene extends Phaser.Scene {
             </div>
         </div>`;
 
-        this.domUI = this.add.dom(0, 0).createFromHTML(html);
-        this.domUI.setOrigin(0);
-        this.domUI.setDepth(9999);
+        const node = this.mountDOM(html, { flex: true });
 
-        this.domUI.node.style.position = 'absolute';
-        this.domUI.node.style.left = '0';
-        this.domUI.node.style.top = '0';
-        this.domUI.node.style.display = 'flex';
-        this.domUI.node.style.flexDirection = 'column';
-        this.domUI.node.style.width = width + 'px';
-        this.domUI.node.style.height = height + 'px';
-
-        const node = this.domUI.node;
-
-        const bind = (selector, fn) => {
-            const els = node.querySelectorAll(selector);
-            els.forEach(el => {
-                const handler = ev => { ev.preventDefault(); playSfx('click', this); fn(ev, el); };
-                el.addEventListener('click', handler);
-                this.listeners.push({ el, handler });
-            });
-        };
-
-        bind('#btn-home', () => this.scene.start('HomeScenes', { playerData: this.playerData }));
-        bind('[data-nav="settings"]', () => this.scene.start('SettingsScene', { playerData: this.playerData }));
-        bind('[data-nav="profile"]', () => this.scene.start('ProfileScene', { playerData: this.playerData }));
+        this.bind('#btn-home', () => this.scene.start('HomeScenes', { playerData: this.playerData }));
+        this.bind('[data-nav="settings"]', () => this.scene.start('SettingsScene', { playerData: this.playerData }));
+        this.bind('[data-nav="profile"]', () => this.scene.start('ProfileScene', { playerData: this.playerData }));
 
         const modal = node.querySelector('#mission-modal');
         const modalCard = node.querySelector('#modal-card');
@@ -708,44 +606,12 @@ export default class MissionsScene extends Phaser.Scene {
         };
 
         detailButtons.forEach(btn => {
-            const handler = () => { playSfx('click', this); openModal(btn.getAttribute('data-id')); };
-            btn.addEventListener('click', handler);
-            this.listeners.push({ el: btn, handler });
+            this.track(btn, () => { playSfx('click', this); openModal(btn.getAttribute('data-id')); }, 'click');
         });
 
-        const bindClose = (el, fn) => {
-            if (!el) return;
-            const handler = ev => { ev.preventDefault(); playSfx('click', this); fn(ev); };
-            el.addEventListener('click', handler);
-            this.listeners.push({ el, handler });
-        };
-        bindClose(node.querySelector('#btn-close-modal'), closeModal);
-        bindClose(modal, (ev) => {
+        this.bindElement(node.querySelector('#btn-close-modal'), closeModal);
+        this.bindElement(modal, (ev) => {
             if (ev.target === modal) closeModal();
         });
-
-        this.scale.on('resize', this.onResize, this);
-        this.events.on('shutdown', this.onShutdown, this);
-    }
-
-    onResize(gameSize) {
-        if (!gameSize) return;
-        const { width, height } = gameSize;
-        if (this.domUI && this.domUI.node) {
-            this.domUI.node.style.width = width + 'px';
-            this.domUI.node.style.height = height + 'px';
-        }
-    }
-
-    onShutdown() {
-        this.listeners.forEach(({ el, handler }) => {
-            if (el && el.removeEventListener) el.removeEventListener('click', handler);
-        });
-        this.listeners = [];
-        this.scale.off('resize', this.onResize, this);
-        if (this.domUI) {
-            this.domUI.destroy();
-            this.domUI = null;
-        }
     }
 }

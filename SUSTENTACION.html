@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sustentación — Elemental Battlecards</title>
+<style>
+  :root{
+    --bg:#0d0b14;
+    --bg2:#141120;
+    --panel:#1b1630;
+    --panel2:#241d3d;
+    --ink:#ece7ff;
+    --ink-dim:#a99ecf;
+    --ink-faint:#7a709e;
+    --gold:#e8c36a;
+    --fire:#ff5f45;
+    --water:#4aa3ff;
+    --plant:#59d489;
+    --light:#ffe185;
+    --shadow:#b06bff;
+    --spirit:#45e0c8;
+    --line:rgba(232,195,106,.22);
+    --code-bg:#0a0812;
+    --mono:"Cascadia Code","Consolas","Courier New",monospace;
+    --serif:Georgia,"Palatino Linotype","Times New Roman",serif;
+    --sans:"Segoe UI",Verdana,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:
+      radial-gradient(1200px 600px at 85% -10%, rgba(122,78,194,.25), transparent 60%),
+      radial-gradient(1000px 500px at -10% 20%, rgba(255,95,69,.12), transparent 55%),
+      radial-gradient(800px 600px at 60% 110%, rgba(69,224,200,.10), transparent 60%),
+      var(--bg);
+    color:var(--ink);
+    font-family:var(--sans);
+    line-height:1.65;
+    font-size:16px;
+  }
+  ::selection{background:var(--gold);color:#1a0f00}
+
+  /* ---------- Layout ---------- */
+  .shell{display:flex;min-height:100vh}
+
+  /* ---------- Sidebar ---------- */
+  aside.nav{
+    width:288px;flex:0 0 288px;position:sticky;top:0;height:100vh;
+    border-right:1px solid var(--line);
+    background:linear-gradient(180deg,rgba(27,22,48,.98),rgba(13,11,20,.98));
+    padding:26px 20px;overflow-y:auto;
+  }
+  aside.nav .brand{
+    font-family:var(--serif);font-size:21px;color:var(--gold);
+    letter-spacing:.06em;line-height:1.2;margin-bottom:2px;
+  }
+  aside.nav .brand small{display:block;font-family:var(--sans);font-size:11px;color:var(--ink-faint);letter-spacing:.28em;text-transform:uppercase;margin-top:4px}
+  aside.nav hr{border:none;border-top:1px solid var(--line);margin:16px 0}
+  aside.nav ul{list-style:none;display:flex;flex-direction:column;gap:2px}
+  aside.nav a{
+    display:block;color:var(--ink-dim);text-decoration:none;
+    font-size:13px;padding:7px 10px;border-radius:8px;border-left:2px solid transparent;
+    transition:.18s;
+  }
+  aside.nav a:hover{color:var(--ink);background:rgba(255,255,255,.04);border-left-color:var(--gold)}
+  aside.nav a.active{color:var(--gold);border-left-color:var(--gold);background:rgba(232,195,106,.07)}
+  aside.nav .nav-small{font-family:var(--sans);font-size:10px;color:var(--ink-faint);letter-spacing:.2em;text-transform:uppercase;margin:14px 8px 4px}
+
+  /* ---------- Main ---------- */
+  main{flex:1;min-width:0;padding:0 clamp(20px,5vw,72px) 120px}
+
+  /* ---------- Cover ---------- */
+  .cover{
+    min-height:100vh;display:flex;flex-direction:column;justify-content:center;
+    position:relative;padding:60px 0;
+  }
+  .cover .kicker{
+    font-family:var(--sans);font-size:12px;letter-spacing:.34em;text-transform:uppercase;
+    color:var(--gold);display:flex;align-items:center;gap:14px;margin-bottom:22px;
+  }
+  .cover .kicker::before{content:"";width:52px;height:1px;background:var(--gold)}
+  .cover h1{
+    font-family:var(--serif);font-weight:normal;
+    font-size:clamp(44px,7vw,96px);line-height:1.02;letter-spacing:.01em;
+  }
+  .cover h1 .amp{color:var(--gold);font-style:italic}
+  .cover .sub{
+    font-size:clamp(17px,2vw,22px);color:var(--ink-dim);max-width:56ch;margin-top:22px;
+    font-family:var(--serif);font-style:italic;
+  }
+  .cover .orbs{display:flex;gap:12px;margin-top:38px;flex-wrap:wrap}
+  .orb{
+    width:46px;height:46px;border-radius:50%;display:grid;place-items:center;
+    font-family:var(--serif);font-size:17px;font-style:italic;color:#0d0b14;
+    box-shadow:0 0 0 1px rgba(255,255,255,.18),0 10px 26px rgba(0,0,0,.45);
+    transition:transform .25s;cursor:default;
+  }
+  .orb:hover{transform:translateY(-6px) scale(1.08)}
+  .orb.f{background:radial-gradient(circle at 32% 30%,#ffd9b0,var(--fire))}
+  .orb.a{background:radial-gradient(circle at 32% 30%,#cfe9ff,var(--water))}
+  .orb.p{background:radial-gradient(circle at 32% 30%,#d4ffe2,var(--plant))}
+  .orb.l{background:radial-gradient(circle at 32% 30%,#fff6cf,var(--light))}
+  .orb.s{background:radial-gradient(circle at 32% 30%,#ecd6ff,var(--shadow))}
+  .orb.e{background:radial-gradient(circle at 32% 30%,#ccfff6,var(--spirit))}
+  .cover .meta{margin-top:48px;border-top:1px solid var(--line);padding-top:18px;display:flex;flex-wrap:wrap;gap:8px 34px;color:var(--ink-faint);font-size:13px}
+  .cover .meta b{color:var(--ink-dim);font-weight:600}
+
+  /* ---------- Sections ---------- */
+  section{margin-top:96px;scroll-margin-top:30px}
+  .eyebrow{
+    font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:var(--gold);
+    margin-bottom:10px;display:flex;align-items:center;gap:12px;
+  }
+  .eyebrow::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--line),transparent)}
+  h2.sec{
+    font-family:var(--serif);font-weight:normal;font-size:clamp(28px,4vw,44px);
+    color:var(--ink);margin-bottom:18px;line-height:1.15;
+  }
+  h2.sec em{color:var(--gold);font-style:italic}
+  .lead{color:var(--ink-dim);font-size:17px;max-width:78ch;margin-bottom:30px}
+  p+p{margin-top:12px}
+
+  /* ---------- Grid / cards ---------- */
+  .grid{display:grid;gap:18px}
+  .grid.g2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+  .grid.g3{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+  .card{
+    background:linear-gradient(160deg,var(--panel),var(--panel2));
+    border:1px solid var(--line);border-radius:14px;padding:22px;
+    transition:transform .2s,border-color .2s;
+  }
+  .card:hover{transform:translateY(-3px);border-color:rgba(232,195,106,.5)}
+  .card h3{font-family:var(--serif);font-weight:normal;font-size:20px;color:var(--gold);margin-bottom:8px}
+  .card h3 .i{color:var(--ink-faint);font-size:14px}
+  .card p{color:var(--ink-dim);font-size:14.5px}
+  .card .tag{
+    display:inline-block;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
+    padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--ink-faint);margin-bottom:12px;
+  }
+
+  /* ---------- Element chips ---------- */
+  .chip{
+    display:inline-block;padding:4px 12px;border-radius:999px;font-size:12.5px;font-weight:600;
+    color:#0d0b14;margin:3px 4px 3px 0;
+  }
+  .e-fuego{background:var(--fire)}
+  .e-agua{background:var(--water)}
+  .e-planta{background:var(--plant)}
+  .e-luz{background:var(--light)}
+  .e-sombra{background:var(--shadow)}
+  .e-espiritu{background:var(--spirit)}
+  .cycle{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-family:var(--mono);font-size:14px;
+    background:var(--code-bg);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:10px 0;
+  }
+  .cycle .a{color:var(--gold)}
+  .cycle b.chip{margin:0}
+
+  /* ---------- Code ---------- */
+  pre.code,pre.sqlblock{
+    background:var(--code-bg);border:1px solid var(--line);border-radius:12px;
+    padding:18px 20px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.6;
+    color:#cfc6f2;margin:16px 0;
+  }
+  pre.code .c{color:#5d5586}          /* comment */
+  pre.code .k{color:var(--gold)}       /* keyword */
+  pre.code .s{color:var(--plant)}      /* string */
+  pre.code .n{color:var(--water)}      /* number/const */
+  pre.code-plain{color:var(--ink-dim)}
+  code.inline{
+    font-family:var(--mono);font-size:.88em;background:rgba(255,255,255,.06);
+    padding:2px 7px;border-radius:6px;color:var(--light);
+  }
+  .file{
+    font-family:var(--mono);font-size:12px;color:var(--ink-faint);
+    background:rgba(232,195,106,.08);border:1px dashed var(--line);
+    padding:2px 8px;border-radius:6px;white-space:nowrap;
+  }
+
+  /* ---------- Tables ---------- */
+  .table-wrap{overflow-x:auto;margin:20px 0;border:1px solid var(--line);border-radius:14px}
+  table{width:100%;border-collapse:collapse;font-size:14px;min-width:560px}
+  thead th{
+    text-align:left;font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--gold);background:rgba(232,195,106,.06);padding:12px 16px;border-bottom:1px solid var(--line);
+  }
+  tbody td{padding:12px 16px;border-bottom:1px solid rgba(232,195,106,.08);color:var(--ink-dim);vertical-align:top}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover td{background:rgba(255,255,255,.025)}
+  td b{color:var(--ink)}
+  td.mono{font-family:var(--mono);font-size:12.5px;color:var(--light)}
+
+  /* ---------- Notes / callouts ---------- */
+  .note{
+    border-left:3px solid var(--gold);background:rgba(232,195,106,.07);
+    border-radius:0 12px 12px 0;padding:16px 18px;margin:22px 0;color:var(--ink-dim);
+  }
+  .note b{color:var(--gold)}
+  .note.cp{border-left-color:var(--shadow);background:rgba(176,107,255,.07)}
+  .note.cp b{color:var(--shadow)}
+  .note.fire{border-left-color:var(--fire);background:rgba(255,95,69,.07)}
+  .note.fire b{color:var(--fire)}
+
+  /* ---------- Steps ---------- */
+  .steps{counter-reset:st;list-style:none;margin:18px 0 18px 4px}
+  .steps li{
+    counter-increment:st;position:relative;padding:0 0 22px 52px;color:var(--ink-dim);
+  }
+  .steps li::before{
+    content:counter(st);position:absolute;left:0;top:-2px;width:34px;height:34px;border-radius:50%;
+    display:grid;place-items:center;font-family:var(--serif);font-style:italic;font-size:17px;
+    background:linear-gradient(160deg,var(--panel2),var(--panel));border:1px solid var(--line);color:var(--gold);
+  }
+  .steps li::after{content:"";position:absolute;left:17px;top:36px;bottom:4px;width:1px;background:var(--line)}
+  .steps li:last-child::after{display:none}
+  .steps b{color:var(--ink)}
+
+  /* ---------- ER diagram ---------- */
+  .er{
+    background:var(--code-bg);border:1px solid var(--line);border-radius:14px;padding:22px;
+    font-family:var(--mono);font-size:12.5px;overflow-x:auto;color:#cfc6f2;line-height:2;
+  }
+  .er .t{color:var(--gold)}
+  .er .card{background:none;border:none;border-radius:0;padding:0}
+  .er .arrow{color:var(--fire)}
+
+  /* ---------- Tags list ---------- */
+  ul.plain{list-style:none;display:flex;flex-direction:column;gap:8px;margin-top:10px}
+  ul.plain li{padding-left:22px;position:relative;color:var(--ink-dim);font-size:14.5px}
+  ul.plain li::before{content:"◈";position:absolute;left:0;color:var(--gold);font-size:12px;top:2px}
+
+  /* ---------- Footer ---------- */
+  footer{
+    margin-top:120px;border-top:1px solid var(--line);padding:30px 0 10px;
+    color:var(--ink-faint);font-size:13px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;
+  }
+
+  /* ---------- Scrollbar ---------- */
+  ::-webkit-scrollbar{width:11px;height:11px}
+  ::-webkit-scrollbar-track{background:var(--bg)}
+  ::-webkit-scrollbar-thumb{background:#3a2f61;border-radius:8px;border:2px solid var(--bg)}
+  ::-webkit-scrollbar-thumb:hover{background:var(--gold)}
+
+  /* ---------- Responsive ---------- */
+  @media (max-width:940px){
+    .shell{flex-direction:column}
+    aside.nav{position:static;width:100%;height:auto;border-right:none;border-bottom:1px solid var(--line);max-height:none}
+  }
+
+  /* ---------- Print ---------- */
+  @media print{
+    aside.nav{display:none}
+    body{background:#fff;color:#111}
+    .card{background:#faf7ef;border-color:#d8c9a0}
+    pre.code,pre.sqlblock,.er{background:#f4f1e8;border-color:#d8c9a0;color:#222}
+    section{margin-top:40px}
+    main{padding-left:0;padding-right:0}
+    .cover{min-height:auto}
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="nav">
+    <div class="brand">Elemental<br>Battlecards<small>Sustentación del proyecto</small></div>
+    <hr>
+    <div class="nav-small">General</div>
+    <ul>
+      <li><a href="#portada">Portada</a></li>
+      <li><a href="#resumen">1 · Resumen del proyecto</a></li>
+      <li><a href="#mecanicas">2 · Mecánicas del juego</a></li>
+      <li><a href="#frontend">3 · Frontend · Phaser 3</a></li>
+      <li><a href="#backend">4 · Backend · Node.js</a></li>
+      <li><a href="#basedatos">5 · Base de datos</a></li>
+      <li><a href="#acid">6 · ACID y CAP</a></li>
+      <li><a href="#objetos-sql">7 · Vistas · Procedimientos · Trigger</a></li>
+      <li><a href="#lan">8 · Juego en red (LAN)</a></li>
+      <li><a href="#ejecutar">9 · Cómo ejecutar</a></li>
+      <li><a href="#conclusiones">10 · Conclusiones</a></li>
+      <li><a href="#respaldo">Respaldo documental</a></li>
+    </ul>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main>
+
+    <!-- ================= PORTADA ================= -->
+    <section class="cover" id="portada">
+      <div class="kicker">Proyecto de grado · Ingeniería de Software</div>
+      <h1>Elemental<br>Battle<em class="amp">cards</em></h1>
+      <p class="sub">Un juego de cartas coleccionable basado en teoría de conjuntos: seis elementos, ciclos de ventaja elemental, fusión de cartas y combate por turnos. Este documento sustenta la arquitectura, las mecánicas y la base de datos de todo el proyecto.</p>
+
+      <div class="orbs">
+        <div class="orb f">F</div>
+        <div class="orb a">A</div>
+        <div class="orb p">P</div>
+        <div class="orb l">L</div>
+        <div class="orb s">S</div>
+        <div class="orb e">E</div>
+      </div>
+
+      <div class="meta">
+        <span><b>Frontend:</b> Phaser 3 + Vite</span>
+        <span><b>Backend:</b> Node.js + Express + Socket.io</span>
+        <span><b>Base de datos:</b> PostgreSQL 18 + Sequelize</span>
+        <span><b>Arquitectura:</b> POO, SOLID, capas</span>
+      </div>
+    </section>
+
+    <!-- ================= 1. RESUMEN ================= -->
+    <section id="resumen">
+      <div class="eyebrow">Sección 01 — Visión general</div>
+      <h2 class="sec">Resumen <em>del</em> proyecto</h2>
+      <p class="lead">Elemental Battlecards es un videojuego de cartas por turnos que enfrenta a un jugador contra un bot con 10 niveles de dificultad o contra otro jugador en la misma red local (LAN). Se compone de dos aplicaciones que comparten repositorio.</p>
+
+      <div class="grid g3">
+        <div class="card">
+          <span class="tag">Cliente</span>
+          <h3>Frontend <span class="i">/ Frontend/</span></h3>
+          <p>Juego desarrollado con <b>Phaser 3.90</b> y empaquetado con <b>Vite</b>. Incluye 19 escenas: login, registro, menú principal, selección de dificultad, perfil, misiones, logros, colección de cartas y la escena de juego con la IA del bot.</p>
+        </div>
+        <div class="card">
+          <span class="tag">Servidor</span>
+          <h3>Backend <span class="i">/ Backend/</span></h3>
+          <p>API construida con <b>Node.js, Express y Socket.io</b> en el puerto <b>3001</b>. Gestiona autenticación con JWT, perfil de jugador, progreso persistente y las salas multijugador en tiempo real.</p>
+        </div>
+        <div class="card">
+          <span class="tag">Persistencia</span>
+          <h3>Base de datos <span class="i">PostgreSQL</span></h3>
+          <p><b>PostgreSQL 18</b> con base <code class="inline">elemental</code>: 10 tablas, 4 vistas, 2 procedimientos almacenados, 1 trigger y 77 restricciones que sostienen la integridad (ACID) del sistema.</p>
+        </div>
+      </div>
+
+      <div class="grid g3" style="margin-top:18px">
+        <div class="card">
+          <span class="tag">Orientación a objetos</span>
+          <h3>POO <span class="i">aplicada en ambos lados</span></h3>
+          <p>Clases como <code class="inline">Card</code>, <code class="inline">Deck</code>, <code class="inline">Player</code>, <code class="inline">TurnManager</code> (frontend) y <code class="inline">AuthService</code>, <code class="inline">RoomManager</code>, <code class="inline">SocketGateway</code> (backend) encapsulan estado y comportamiento.</p>
+        </div>
+        <div class="card">
+          <span class="tag">Principios de diseño</span>
+          <h3>SOLID <span class="i">como regla obligatoria</span></h3>
+          <p>Dependencias por interfaces inyectadas en el constructor, contratos verificados al arrancar, responsabilidad única por clase y sustitución de Liskov garantizada (ver sección 4).</p>
+        </div>
+        <div class="card">
+          <span class="tag">Separación de capas</span>
+          <h3>Dominio desacoplado</h3>
+          <p>Las entidades del dominio <b>no se conectan directamente a Phaser ni a Sequelize</b>: las escenas solo presentan, los servicios deciden y los repositorios son el único puente con el ORM.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 2. MECÁNICAS ================= -->
+    <section id="mecanicas">
+      <div class="eyebrow">Sección 02 — Reglas del juego</div>
+      <h2 class="sec">Mecánicas <em>del</em> juego</h2>
+      <p class="lead">El juego combina teoría de conjuntos (los 6 tipos elementales como universo), ventajas elementales, fusión de cartas idénticas y un flujo de turnos estricto con turnos obligatorios de ataque.</p>
+
+      <h3 style="font-family:var(--serif);font-weight:normal;color:var(--gold);margin:26px 0 10px;font-size:22px">Los 6 elementos y sus ciclos de ventaja</h3>
+      <div class="cycle"><b class="chip e-fuego">Fuego</b> <span class="a">→ vence a →</span> <b class="chip e-planta">Planta</b> <span class="a">→ vence a →</span> <b class="chip e-agua">Agua</b> <span class="a">→ vence a →</span> <b class="chip e-fuego">Fuego</b></div>
+      <div class="cycle"><b class="chip e-luz">Luz</b> <span class="a">→ vence a →</span> <b class="chip e-sombra">Sombra</b> <span class="a">→ vence a →</span> <b class="chip e-espiritu">Espíritu</b> <span class="a">→ vence a →</span> <b class="chip e-luz">Luz</b></div>
+      <p style="color:var(--ink-dim)">Definido en <span class="file">Frontend/src/helpers/constants.js</span> mediante el mapa <code class="inline">ADVANTAGES</code>.</p>
+
+      <h3 style="font-family:var(--serif);font-weight:normal;color:var(--gold);margin:30px 0 10px;font-size:22px">Reglas centrales de la partida</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Regla</th><th>Detalle</th><th>Configuración</th></tr></thead>
+          <tbody>
+            <tr><td><b>Mazo inicial</b></td><td>48 cartas: 8 copias de cada uno de los 6 tipos (solo nivel 1), barajadas con el algoritmo <b>Fisher-Yates</b>.</td><td class="mono">INITIAL_DECK_SIZE = 48</td></tr>
+            <tr><td><b>Mano</b></td><td>Se inicia con 4 cartas; máximo de 4 en mano.</td><td class="mono">MAX_HAND_SIZE = 4</td></tr>
+            <tr><td><b>Campo de batalla</b></td><td>6 espacios donde se juegan las cartas.</td><td class="mono">MAX_FIELD_SIZE = 6</td></tr>
+            <tr><td><b>Combate</b></td><td>Resuelto por <code class="inline">resolveCombat()</code>: diferencia de <b>2+ niveles = victoria automática</b>; 1 de diferencia anula (no) la ventaja de tipo; mismo nivel decide la ventaja elemental; si no hay ventaja → empate.</td><td class="mono">helpers/combat.js</td></tr>
+            <tr><td><b>Fusión</b></td><td>Dos cartas del <b>mismo tipo y nivel</b> se fusionan en la carta del nivel superior (I+II → III). La carta de nivel III no se puede fusionar.</td><td class="mono">player.fuseCards()</td></tr>
+            <tr><td><b>Cementerio</b></td><td>Al destruir una carta de nivel 2 o 3, se descompone en <code class="inline">2^(nivel-1)</code> cartas base del mismo tipo. Si el mazo se agota, se baraja el cementerio al mazo.</td><td class="mono">addCardDataToGraveyard()</td></tr>
+            <tr><td><b>Ataque obligatorio</b></td><td>Tras 3 turnos sin atacar, el jugador está <b>obligado</b> a atacar.</td><td class="mono">MANDATORY_ATTACK_TURN = 3</td></tr>
+            <tr><td><b>Inactividad</b></td><td>3 turnos sin hacer acción = derrota automática.</td><td class="mono">INACTIVE_TURNS_TO_LOSE = 3</td></tr>
+            <tr><td><b>Tiempo por turno</b></td><td>Cada turno tiene 12 segundos (también en LAN).</td><td class="mono">TURN_TIME_LIMIT_MS = 12000</td></tr>
+            <tr><td><b>Esencia</b></td><td>Rellenar las 6 esencias (una por elemento) activa los orbes elementales y es condición de victoria.</td><td class="mono">EssenceManager</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="grid g2">
+        <div class="card">
+          <h3>Condiciones de victoria</h3>
+          <p>Evalúa <code class="inline">VictoryEvaluator</code> (lógica pura, sin Phaser), en este orden:</p>
+          <ul class="plain">
+            <li>Victoria del oponente por <b>inactividad</b> del jugador (3 turnos).</li>
+            <li><b>Control de campo</b>: tener 6 tipos elementales distintos en el campo.</li>
+            <li><b>Llenar las 6 esencias</b> elementales.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Muy fácil … Mito (IA)</h3>
+          <p>El bot depende de la dificultad elegida: probabilidad de fusión, umbral de ataque, retraso entre acciones y bonificador de puntuación de ataque.</p>
+          <p style="margin-top:8px">Nivel 6-10: <b>Experto, Maestro, Gran Maestro, Leyenda y Mito</b> — con retrasos de hasta <b>0 ms</b> (decisiones instantáneas) y thresholds de ataque negativos que lo hacen agresivamente preciso.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 3. FRONTEND ================= -->
+    <section id="frontend">
+      <div class="eyebrow">Sección 03 — Cliente</div>
+      <h2 class="sec">Frontend · <em>Phaser</em> 3</h2>
+      <p class="lead">El cliente es un juego Phaser 3.90 de 1600×1000 en modo <code class="inline">Scale.FIT</code> con contenedor DOM para los formularios de login y menús. El orden de escenas se define en <span class="file">Frontend/src/main.js</span>.</p>
+
+      <div class="grid g3">
+        <div class="card"><span class="tag">Carga</span><h3>Boot &amp; Preloader</h3><p><code class="inline">bootScene</code> carga los assets mínimos de la pantalla de carga y <code class="inline">Preloader</code> carga el resto: imágenes de cartas, videos de fondo, íconos y audio.</p></div>
+        <div class="card"><span class="tag">Cuentas</span><h3>Login &amp; registro</h3><p>Pantallas de autenticación contra <code class="inline">/api/auth</code>. Si no hay token, el juego entra en <b>modo offline</b> sin romper la interfaz.</p></div>
+        <div class="card"><span class="tag">Menú</span><h3>Home &amp; navegación</h3><p>Menú principal, ajustes, estadísticas, niveles de dificultad, perfil, misiones, colección, mecánicas y pantalla</p></div>
+        <div class="card"><span class="tag">Acción</span><h3>GameScene</h3><p>La escena central (~2000 líneas) orquesta la partida contra el bot: robo de cartas, arrastre, fusión, combate animado, turnos y fin de partida.</p></div>
+        <div class="card"><span class="tag">UI paralela</span><h3>uiScene</h3><p>Se ejecuta en paralelo a la escena de juego: botón hamburguesa ☰, menú de pausa estilizado (continuar / reiniciar / configuración / salir), HUD de orbes.</p></div>
+        <div class="card"><span class="tag">Multijugador</span><h3>GameSceneLAN</h3><p>Variante sincronizada de la partida: el cliente LAN conecta por <code class="inline">socket.io-client</code> y replica las acciones de ambos jugadores en tiempo real.</p></div>
+      </div>
+
+      <h3 style="font-family:var(--serif);font-weight:normal;color:var(--gold);margin:34px 0 12px;font-size:22px">Objetos del dominio del juego</h3>
+      <div class="grid g3">
+        <div class="card"><h3>Card <span class="i">/ game_objects/card.js</span></h3><p>Representa una carta con tipo, nivel e identificador único de instancia (<code class="inline">instanceId</code>) que permite rastrearla a lo largo de todo su ciclo de vida.</p></div>
+        <div class="card"><h3>CardDefinitions <span class="i">/ card-definitions.js</span></h3><p>Catálogo generado programáticamente de las <b>18 cartas</b> (6 tipos × 3 niveles) con IDs <code class="inline">tipo-nivel</code>. Generado a partir de la plantilla <i>tipo × nivel</i> para evitar errores.</p></div>
+        <div class="card"><h3>Deck <span class="i">/ deck.js</span></h3><p>Gestiona el mazo y cementerio: crea las 48 cartas (Regla #7: 8 copias por tipo), baraja con <b>Fisher-Yates</b> y permite robar.</p></div>
+        <div class="card"><h3>Player <span class="i">/ player.js</span></h3><p>Estado completo del jugador: mazo, mano, campo (6 slots), cementerio y esencias. Implementa jugar carta, fusionar campo+campo y mano+campo.</p></div>
+        <div class="card"><h3>TurnManager <span class="i">/ game/TurnManager.js</span></h3><p>Lógica pura del flujo de turnos: estado, contadores de inactividad, ataques obligatorios y bloqueos por animación. <b>No depende de Phaser</b>.</p></div>
+        <div class="card"><h3>BotAI <span class="i">/ game/BotAI.js</span></h3><p>IA del oponente con parámetros por dificultad: fusión, thresholds de ataque, retardos y bonus estratégico.</p></div>
+      </div>
+
+      <div class="note"><b>Decisión de diseño.</b> Los objetos del dominio (Player, TurnManager, VictoryEvaluator) son <b>lógica pura</b>: no conocen Phaser ni Sequelize. La escena consulta sus estados y se encarga solo de dibujar y coordinar (principio de responsabilidad única y capas).</div>
+
+      <h3 style="font-family:var(--serif);font-weight:normal;color:var(--gold);margin:34px 0 12px;font-size:22px">Resolver el combate — <span class="file">helpers/combat.js</span></h3>
+<pre class="code"><span class="k">export function</span> <span class="n">resolveCombat</span>(attacker, defender) {
+    <span class="k">const</span> levelDiff = attacker.level - defender.level;
+
+    <span class="c">// Regla: diferencia de 2 niveles o más es victoria automática.</span>
+    <span class="k">if</span> (levelDiff >= 2) <span class="k">return</span> { winner: <span class="s">'attacker'</span>, loser: <span class="s">'defender'</span> };
+    <span class="k">if</span> (levelDiff <= -2) <span class="k">return</span> { winner: <span class="s">'defender'</span>, loser: <span class="s">'attacker'</span> };
+
+    <span class="k">if</span> (levelDiff === 1) {
+        <span class="c">// 1 de nivel: si el defensor tenía ventaja de tipo, se vuelve neutral.</span>
+        <span class="k">if</span> (defenderAdvantage === attacker.type) <span class="k">return</span> { winner: <span class="s">'none'</span>, loser: <span class="s">'none'</span> };
+        <span class="k">return</span> { winner: <span class="s">'attacker'</span>, loser: <span class="s">'defender'</span> };
+    }
+    <span class="c">// Mismo nivel → decide la ventaja de tipo (ADVANTAGES en constants.js).</span>
+    <span class="k">if</span> (attackerAdvantage === defender.type) <span class="k">return</span> { winner: <span class="s">'attacker'</span>, loser: <span class="s">'defender'</span> };
+    ...
+}</pre>
+    </section>
+
+    <!-- ================= 4. BACKEND ================= -->
+    <section id="backend">
+      <div class="eyebrow">Sección 04 — Servidor</div>
+      <h2 class="sec">Backend · <em>Node.js</em></h2>
+      <p class="lead">API REST + tiempo real en el puerto 3001, construida por capas con inyección de dependencias estricta. El arranque es un <b>composition root</b>: <code class="inline">server.js</code> es un wrapper fino de <span class="file">Backend/src/bootstrap.js</span>.</p>
+
+      <div class="grid g3">
+        <div class="card"><span class="tag">Proceso</span><h3>Orden de arranque</h3><p>dotenv → <code class="inline">AppConfig</code>/<code class="inline">Logger</code> → <code class="inline">DatabaseFactory</code> crea Sequelize → <code class="inline">DatabaseInitializer</code> conecta y sincroniza → routers de auth → <code class="inline">AppFactory</code> crea Express → socket.io → <code class="inline">SocketGateway</code> registra eventos → <b>listen</b>.</p></div>
+        <div class="card"><span class="tag">Fallos degranada</span><h3>Tolerancia a fallos</h3><p>Si la BD no conecta, el servidor <b>no se cae</b>: marca <code class="inline">databaseAvailable=false</code> y desmonta las rutas de login/perfil (modo LAN). El juego y las salas socket siguen funcionando.</p></div>
+        <div class="card"><span class="tag">Contratos</span><h3>DI estricta</h3><p>Las clases dependen de interfaces (<code class="inline">IUserRepository</code>, <code class="inline">IPasswordHasher</code>, <code class="inline">ITokenService</code>, <code class="inline">IRoomStore</code>) validadas con <code class="inline">assertContract</code> al arrancar (fail-fast).</p></div>
+      </div>
+
+      <h3 style="font-family:var(--serif);font-weight:normal;color:var(--gold);margin:34px 0 12px;font-size:22px">Arquitectura por capas</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Capa</th><th>Archivos</th><th>Responsabilidad</th></tr></thead>
+          <tbody>
+            <tr><td><b>core</b></td><td class="mono">config, logger, errors, assertContract</td><td>Configuración centralizada, log, errores <code class="inline">AppError</code> y verificación de contratos.</td></tr>
+            <tr><td><b>database</b></td><td class="mono">DatabaseFactory, DatabaseInitializer, models/*</td><td>Crea la conexión Sequelize según el dialecto (.env) y sincroniza modelos (no crea datos).</td></tr>
+            <tr><td><b>repositories</b></td><td class="mono">SequelizeUserRepository, SequelizeProfileRepository</td><td><b>Único punto que habla con Sequelize.</b> Implementan las interfaces <code class="inline">IUserRepository</code> / <code class="inline">IProfileRepository</code>.</td></tr>
+            <tr><td><b>services</b></td><td class="mono">AuthService, ProfileService, BcryptPasswordHasher, JwtTokenService</td><td>Reglas de negocio: registrar/iniciar sesión, validar resultados, calcular XP/niveles, decidir misiones y logros.</td></tr>
+            <tr><td><b>http</b></td><td class="mono">controllers, routes, middleware, AppFactory</td><td>Traducción HTTP ↔ servicio; rutas <code class="inline">/api/auth</code> y <code class="inline">/api/profile</code>; middleware de JWT y de errores.</td></tr>
+            <tr><td><b>socketio</b></td><td class="mono">RoomStore, RoomManager, RoomCodeGenerator, SocketGateway</td><td>Salas de 2 jugadores con código de 6 dígitos y relay de eventos <code class="inline">game_event</code> (sin lógica de juego en el servidor).</td></tr>
+            <tr><td><b>utils</b></td><td class="mono">NetworkInfo</td><td>Muestra las direcciones IP locales al arrancar.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="grid g2">
+        <div class="card">
+          <h3>Conocimiento real, no solo el esquema</h3>
+          <ul class="plain">
+            <li><b>Login con <code class="inline">username</code></b> (no email); registro usa <code class="inline">email</code> + hash <b>bcrypt</b>.</li>
+            <li><b>JWT</b> firmado con secreto configurable; expiración vía variable de entorno.</li>
+            <li><b>CORS abierto</b> (<code class="inline">*</code>) por configuración, necesario para las partidas LAN.</li>
+            <li>Los error de la BD suben hasta <b>errorHandler</b> → HTTP 500 con <code class="inline">{ message }</code>, jamás una respuesta inventada.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Cómo se ve el boot (bootstrap.js)</h3>
+<pre class="code" style="margin:6px 0 0"><span class="c">// Si la BD falla, no tumbamos el servidor:</span>
+} <span class="k">catch</span> (error) {
+  <span class="n">logger</span>.<span class="n">error</span>(<span class="s">'No se pudo conectar a la BD:'</span>, error.<span class="n">message</span>);
+  <span class="n">databaseAvailable</span> = <span class="k">false</span>;
+}
+<span class="c">// Sincroniza modelos ↔ tablas en cada arranque:</span>
+<span class="k">await</span> <span class="n">databaseInitializer</span>.<span class="n">sync</span>();  <span class="c">// sequelize.sync({ alter: true })</span></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 5. BASE DE DATOS ================= -->
+    <section id="basedatos">
+      <div class="eyebrow">Sección 05 — Persistencia</div>
+      <h2 class="sec">Base de datos <em>PostgreSQL</em></h2>
+      <p class="lead">El motor es <b>PostgreSQL 18</b> en <code class="inline">127.0.0.1:5432</code>, base <code class="inline">elemental</code> (activado con <code class="inline">DB_USE_SQLITE=false</code> en <span class="file">Backend/.env</span>). Se compone de <b>10 tablas, 4 vistas, 2 procedimientos almacenados y 1 trigger</b>, sostenidos por 77 restricciones. Todos los scripts residen en <span class="file">Backend/sql/</span> y son re-ejecutables (idempotentes).</p>
+
+      <div class="er">
+<div class="t">USERS</div> 1 ──── 1 <div class="t">PLAYER_STATS</div>      <span class="c">(según el trigger: battles → stats)</span>
+<div class="t">USERS</div> 1 ──── N <div class="t">BATTLES</div>
+<div class="t">USERS</div> 1 ──── N <div class="t">PLAYER_CARDS</div> ──── 1 <div class="t">CARDS</div>
+<div class="t">USERS</div> 1 ──── N <div class="t">PLAYER_MISSIONS</div> ─ 1 <div class="t">MISSIONS</div>
+<div class="t">USERS</div> 1 ──── N <div class="t">PLAYER_ACHIEVEMENTS</div> 1 <div class="t">ACHIEVEMENTS</div>
+<div class="t">USERS</div> 1 ──── N <div class="t">PLAYER_ATTACK_TYPES</div>
+<span class="c">↑ Todas las FK usan ON DELETE CASCADE: borrar un usuario limpia todo su progreso.</span></div>
+
+      <div class="grid g3">
+        <div class="card"><span class="tag">Identidad</span><h3>users</h3><p>Cuentas de jugador: <code class="inline">username</code> único (login), email único, contraseña con hash bcrypt. Home de todas las relaciones 1:N.</p></div>
+        <div class="card"><span class="tag">Catálogos</span><h3>cards · missions · achievements</h3><p>18 cartas (6 tipos × 3 niveles, UNIQUE tipo+nivel), 6 misiones con recompensa en gemas y 6 logros. Sembrados con <b>ON CONFLICT DO NOTHING</b>.</p></div>
+        <div class="card"><span class="tag">Estado 1:1</span><h3>player_stats</h3><p>Partidas, victorias, derrotas, racha actual, mejor racha y gemas. <b>La crea y mantiene el trigger</b>, nunca un INSERT manual de la app.</p></div>
+        <div class="card"><span class="tag">Historial</span><h3>battles</h3><p>Resultado (victoria/derrota), oponente (bot/lan), dificultad y nivel 3 en campo. Cada INSERT dispara el trigger de stats.</p></div>
+        <div class="card"><span class="tag">Progreso N:1</span><h3>player_cards / player_missions / player_achievements</h3><p>Colección, progreso de misiones y logros desbloqueados. Claves compuestas: un jugador no repite carta/misión/logro.</p></div>
+        <div class="card"><span class="tag">Historial</span><h3>player_attack_types</h3><p>Tipos elementales con los que cada jugador ha atacado (dominio validado por CHECK del motor).</p></div>
+      </div>
+
+      <div class="note"><b>Gestión del esquema.</b> Dos mecanismos complementarios: <code class="inline">sequelize.sync({ alter: true })</code> alinea modelos↔tablas en cada arranque, y los scripts SQL (<span class="file">schema.sql → vistas.sql → triggers.sql → procedimientos.sql → datos_demo.sql</span>) definen el esquema completo + objetos programados + datos demo. <b>Advertencia documentada:</b> <code class="inline">sync({alter:true})</code> puede eliminar los <code class="inline">DEFAULT now()</code>; por eso <code class="inline">schema.sql</code> los restaura con <code class="inline">ALTER TABLE ... SET DEFAULT</code> (reparación idempotente).</div>
+
+      <p style="color:var(--ink-dim);margin-top:18px"><b>Datos demo:</b> 4 usuarios <code class="inline">demo_kai</code>, <code class="inline">demo_luna</code>, <code class="inline">demo_ryo</code>, <code class="inline">demo_zara</code> (contraseña <code class="inline">demo1234</code>), 18 batallas insertadas en orden cronológico para que el trigger derive rachas correctamente, colección y progreso de misiones.</p>
+    </section>
+
+    <!-- ================= 6. ACID Y CAP ================= -->
+    <section id="acid">
+      <div class="eyebrow">Sección 06 — Teoría aplicada</div>
+      <h2 class="sec">ACID <em>y</em> CAP</h2>
+      <p class="lead">ACID gobierna lo que pasa <b>dentro</b> de una transacción; CAP decide qué se sacrifica <b>entre nodos</b> cuando la infraestructura falla. El proyecto demuestra ambos con objetos reales y demos reproducibles en psql.</p>
+
+      <div class="grid g2">
+        <div class="card">
+          <h3>A · Atomicidad — "todo o nada"</h3>
+          <ul class="plain">
+            <li>El DDL + seeds de <span class="file">schema.sql</span> van dentro de <code class="inline">BEGIN; ... COMMIT;</code>.</li>
+            <li>Cada <code class="inline">CALL</code> a un procedimiento corre en <b>una transacción implícita</b>: <code class="inline">sp_registrar_batalla</code> escribe <code class="inline">battles</code> y <code class="inline">player_attack_types</code>.</li>
+            <li>El INSERT de batalla + la actualización del trigger son inseparables.</li>
+            <li><b>Demo:</b> un <code class="inline">CALL ... 'tierra'</code> (elemento inválido) inserta la batalla y luego falla el CHECK → la batalla ya insertada se revierte (contador de <code class="inline">battles</code> no cambia).</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>C · Consistencia — "invariantes válidos"</h3>
+          <ul class="plain">
+            <li><b>77 restricciones</b>: PK, FK con CASCADE, CHECK de dominio (<code class="inline">result</code>, <code class="inline">element</code>, <code class="inline">level</code>, <code class="inline">opponent</code>), UNIQUE y NOT NULL.</li>
+            <li>El trigger mantiene <code class="inline">battles_played = battles_won + battles_lost</code>.</li>
+            <li>El servicio valida el mismo dominio como primera barrera.</li>
+            <li><b>Demo:</b> <code class="inline">INSERT ... user_id 99999</code> → falla la FK; <code class="inline">result 'empate'</code> → falla el CHECK; todo <code class="inline">ROLLBACK</code> sin dejar rastro.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>I · Aislamiento — "no se pisan"</h3>
+          <ul class="plain">
+            <li>Nivel del servidor: <b>READ COMMITTED</b> (default de PostgreSQL).</li>
+            <li>Dos jugadores terminan partidas a la vez: cada POST es una transacción y cada uno escribe su propia fila de <code class="inline">player_stats</code> (PK user_id) → sin carrera.</li>
+            <li><b>Demo:</b> <code class="inline">SHOW transaction_isolation;</code> → <code class="inline">read committed</code>.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>D · Durabilidad — "sobrevive a caídas"</h3>
+          <ul class="plain">
+            <li>PostgreSQL escribe en el <b>WAL</b> y confirma con <code class="inline">fsync</code> antes de responder.</li>
+            <li><code class="inline">synchronous_commit = on</code>: consistente en disco al confirmar.</li>
+            <li><b>Demo:</b> <code class="inline">SHOW synchronous_commit;</code> → <code class="inline">on</code> y <code class="inline">SELECT pg_current_wal_lsn();</code>.</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3 style="font-family:var(--serif);font-weight:normal;color:var(--gold);margin:34px 0 12px;font-size:22px">CAP — nuestra postura: <b style="color:var(--shadow)">CP</b></h3>
+      <p style="color:var(--ink-dim)">El sistema <b>sí es distribuido</b> (clientes en red + servidor + BD), aunque el despliegue sea de un nodo por capa. Como la red es falible, P es obligatoria; la decisión real es C o A ante una partición. Este proyecto elige <b>Consistencia > Disponibilidad</b>:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Situación</th><th>Qué hace el sistema</th><th>Propiedad cedida</th></tr></thead>
+          <tbody>
+            <tr><td><b>La BD no responde al arrancar</b></td><td class="mono">bootstrap.js → databaseAvailable=false; no se montan rutas de datos (modo LAN)</td><td>A</td></tr>
+            <tr><td><b>Error de BD en una petición</b></td><td class="mono">errorHandler → HTTP 500; jamás una respuesta inventada o cacheada</td><td>A</td></tr>
+            <tr><td><b>Escrituras en Postgres</b></td><td class="mono">siempre contra el primario (single-writer); sin primario, no hay escritura</td><td>A en partición</td></tr>
+            <tr><td><b>Login / registros / rankings</b></td><td class="mono">necesitan SIEMPRE el dato más reciente (credenciales, únicos)</td><td>eligen C</td></tr>
+            <tr><td><b>Escrituras en Postgres</b></td><td class="mono">→ síncronas, nunca se acepta escritura divergente (evita split-brain)</td><td>—</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="grid g2">
+        <div class="card">
+          <h3>La evidencia en el código</h3>
+<pre class="code" style="margin:6px 0 0"><span class="c">// Backend/src/bootstrap.js</span>
+} <span class="k">catch</span> (error) {
+  logger.error(<span class="s">'No se pudo conectar a la BD:'</span>, error.message);
+  databaseAvailable = <span class="k">false</span>;  <span class="c">// la BD manda</span>
+}
+<span class="k">if</span> (!(config.dbEnabled && databaseAvailable)) {
+  <span class="c">// rutas de autenticación y perfil deshabilitadas (modo LAN) → no se sirve stale</span>
+  <span class="k">return</span> disabled;
+}</pre>
+        </div>
+        <div class="card">
+          <h3>¿Y la disponibilidad (A)?</h3>
+          <ul class="plain">
+            <li>El <b>juego LAN / salas</b> (RoomManager en memoria) <b>no depende de la BD</b>: las partidas siguen aunque la BD esté caída.</li>
+            <li>El frontend sin sesión entra en <b>modo offline</b> en vez de romper la UI.</li>
+            <li>Es una partición deliberada: <b>cuentas y progreso = CP</b>; relato de juego = disponible.</li>
+            <li><b>PACELC:</b> incluso sin partición se elige C sobre latencia (<code class="inline">synchronous_commit=on</code>).</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="note cp"><b>Frase de cierre.</b> "ACID gobierna lo que pasa dentro de la base; CAP gobierna qué pasa cuando la infraestructura falla. Nuestro sistema aplica ACID completo en el nodo de PostgreSQL y adopta la postura CP de Brewer ante caídas: nunca servir datos viejos o incompletos."</div>
+    </section>
+
+    <!-- ================= 7. VISTAS · PROCEDIMIENTOS · TRIGGER ================= -->
+    <section id="objetos-sql">
+      <div class="eyebrow">Sección 07 — Objetos programados</div>
+      <h2 class="sec">Vistas · Procedimientos · <em>Trigger</em></h2>
+      <p class="lead">Tres tipos de objetos SQL encapsulan consultas y reglas en el propio motor. Las vistas <b>no duplican datos</b> (se calculan al consultar, siempre frescas); los procedimientos escriben <b>varias tablas en una transacción</b>; el trigger mantiene <b>derivados automáticos</b>.</p>
+
+      <h3 style="font-family:var(--serif);font-weight:normal;color:var(--gold);margin:28px 0 12px;font-size:22px">Las 4 vistas <span class="file">Backend/sql/vistas.sql</span></h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Vista</th><th>Resuelve</th><th>Técnicas SQL</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">v_ranking_jugadores</td><td>Ranking: partidas, victorias, % de victoria, rachas y gemas. Incluye jugadores sin stats (demuestra el LEFT JOIN).</td><td class="mono">LEFT JOIN + CASE + COALESCE</td></tr>
+            <tr><td class="mono">v_coleccion_cartas</td><td>Cuántos jugadores poseen cada carta y su porcentaje.</td><td class="mono">LEFT JOIN + COUNT + NULLIF (÷0)</td></tr>
+            <tr><td class="mono">v_progreso_misiones</td><td>Misiones iniciadas/completadas y progreso promedio.</td><td class="mono">COUNT(...) FILTER (WHERE ...) + AVG</td></tr>
+            <tr><td class="mono">v_historial_batallas</td><td>Historial legible con <code class="inline">username</code> en vez de user_id, cronológico.</td><td class="mono">JOIN + ORDER BY</td></tr>
+          </tbody>
+        </table>
+      </div>
+<pre class="sqlblock"><span class="k">SELECT</span> <span class="n">*</span> <span class="k">FROM</span> v_ranking_jugadores;      <span class="c">-- se alimenta SOLO si el trigger mantiene player_stats</span>
+<span class="k">SELECT</span> <span class="n">*</span> <span class="k">FROM</span> v_coleccion_cartas <span class="k">WHERE</span> poseedores <span class="n">&gt;</span> <span class="n">0</span>;
+<span class="k">SELECT</span> <span class="n">*</span> <span class="k">FROM</span> v_progreso_misiones;
+<span class="k">SELECT</span> <span class="n">*</span> <span class="k">FROM</span> v_historial_batallas <span class="k">LIMIT</span> <span class="n">10</span>;</pre>
+
+      <h3 style="font-family:var(--serif);font-weight:normal;color:var(--gold);margin:30px 0 12px;font-size:22px">Los 2 procedimientos almacenados <span class="file">Backend/sql/procedimientos.sql</span></h3>
+      <div class="grid g2">
+        <div class="card">
+          <h3>sp_registrar_batalla <span class="i">(user, resultado, oponente, dificultad, nivel3, elemento)</span></h3>
+          <ul class="plain">
+            <li>Valida dominio (resultado, oponente, existencia del usuario) → RAISE EXCEPTION si falla.</li>
+            <li>INSERT en <code class="inline">battles</code> (RETURNING id).</li>
+            <li>INSERT en <code class="inline">player_attack_types</code> si se informa el elemento (CHECK valida).</li>
+            <li>RAISE NOTICE con las stats que el trigger ya actualizó.</li>
+          </ul>
+          <p style="margin-top:10px">La validación del elemento se deja a propósito en el CHECK: si es inválido, la transacción se revierte tras insertar la batalla → demo viva de atomicidad.</p>
+        </div>
+        <div class="card">
+          <h3>sp_completar_mision <span class="i">(user, misión)</span></h3>
+          <ul class="plain">
+            <li>Valida que existan misión y usuario.</li>
+            <li>UPSERT en <code class="inline">player_missions</code>: progress = target, completed = true.</li>
+            <li>UPSERT en <code class="inline">player_stats</code>: <code class="inline">gems += reward_gems</code> (misma transacción).</li>
+            <li>RAISE NOTICE con el total de gemas.</li>
+          </ul>
+          <p style="margin-top:10px">Si la 2ª escritura fallara, la 1ª se revierte: no existe misión completada sin pago.</p>
+        </div>
+      </div>
+<pre class="sqlblock"><span class="c">-- OJO: CALL no acepta subconsultas (limitación de PostgreSQL) → variables psql con \gset</span>
+<span class="k">SELECT</span> id <span class="k">AS</span> kai <span class="k">FROM</span> users <span class="k">WHERE</span> username = <span class="s">'demo_kai'</span> \gset
+<span class="n">CALL</span> sp_registrar_batalla(<span class="n">:kai</span>, <span class="s">'victoria'</span>, <span class="s">'bot'</span>, <span class="s">'5'</span>, <span class="k">false</span>, <span class="s">'agua'</span>);
+<span class="c">-- NOTICE: Batalla #25 registrada ... partidas=7 (V:6 D:1) | racha=3 | gemas=350</span>
+<span class="c">-- Caso de error (atomicidad):</span>
+<span class="n">CALL</span> sp_registrar_batalla(<span class="n">:kai</span>, <span class="s">'victoria'</span>, <span class="s">'bot'</span>, <span class="s">'5'</span>, <span class="k">false</span>, <span class="s">'tierra'</span>);  <span class="c">-- se revierte todo</span></pre>
+
+      <h3 style="font-family:var(--serif);font-weight:normal;color:var(--gold);margin:30px 0 12px;font-size:22px">El trigger <span class="file">Backend/sql/triggers.sql</span></h3>
+      <p style="color:var(--ink-dim)"><code class="inline">trg_stats_batalla</code> — <code class="inline">AFTER INSERT ON battles FOR EACH ROW</code> → función <code class="inline">fn_actualizar_stats_batalla()</code>:</p>
+      <div class="er" style="text-align:center">
+INSERT <span class="k">en</span> battles ──▶ <b class="t">trigger</b> ──▶ UPSERT <span class="k">en</span> player_stats
+<span class="c">• battles_played +1 · battles_won/lost +1 según result · racha +1/0 · mejor racha con GREATEST · updated_at = now() · crea la fila si no existe</span></div>
+      <div class="grid g2">
+        <div class="card">
+          <h3>Por qué existe</h3>
+          <p>Las stats son un <b>dato derivado</b> del historial de <code class="inline">battles</code>. El trigger las mantiene de forma <b>automática, atómica y sin posibilidad de desincronización</b>: no hay código de aplicación que pueda olvidarse de actualizarlas.</p>
+        </div>
+        <div class="card">
+          <h3>Por qué las gemas NO están en el trigger</h3>
+          <p>Pagar recompensas es <b>regla de negocio</b> con validación y dos escrituras → pertenece a <code class="inline">sp_completar_mision</code> (fallas controladas), no a un reflejo automático oculto. <code class="inline">ProfileService.recordBattle()</code> <b>no escribe stats</b>: única fuente de verdad = el trigger.</p>
+        </div>
+      </div>
+      <div class="note fire"><b>Demo de trigger.</b> Dentro de transacción para no ensuciar la base:<br><code class="inline">BEGIN; INSERT INTO battles (user_id, result, opponent, difficulty) VALUES (:kai,'victoria','bot','5'); SELECT battles_played, current_streak FROM player_stats WHERE user_id = :kai; ROLLBACK;</code></div>
+    </section>
+
+    <!-- ================= 8. LAN ================= -->
+    <section id="lan">
+      <div class="eyebrow">Sección 08 — Multijugador</div>
+      <h2 class="sec">Juego en red <em>(LAN)</em></h2>
+      <p class="lead">Dos jugadores en la misma red local se enfrentan en tiempo real. El backend solo hace de <b>relay</b> (sin lógica de juego): las salas viven en memoria y cada acción se sincroniza entre clientes.</p>
+
+      <div class="grid g3">
+        <div class="card"><span class="tag">Salas</span><h3>Código de 6 dígitos</h3><p><code class="inline">RoomCodeGenerator</code> genera códigos numéricos; <code class="inline">RoomManager</code> crea/unirse salas de <b>2 jugadores</b> e inicia la partida. Estado en memoria: se reinicia con el servidor.</p></div>
+        <div class="card"><span class="tag">Evento</span><h3>game_event</h3><p>El <code class="inline">SocketGateway</code> reenvía los eventos de juego entre los dos clientes de la sala. El host siempre juega primero.</p></div>
+        <div class="card"><span class="tag">Sincronización</span><h3>12 s por turno</h3><p>El turno se limita a 12 segundos y las acciones (jugar, atacar, fusionar) se replican casi en tiempo real en ambos clientes.</p></div>
+      </div>
+
+      <div class="card" style="margin-top:18px">
+        <h3>Flujo típico</h3>
+        <ol class="steps">
+          <li><b>Anfitrión:</b> en el menú principal elige "Juego en red (LAN)" → <b>Crear sala</b> → el servidor responde el código.</li>
+          <li><b>Invitado:</b> abre <code class="inline">http://[IP_DEL_ANFITRION]:5173</code> → "Unirse a sala" → ingresa el código de 6 dígitos.</li>
+          <li>Al completarse la sala, ambos clientes reciben la señal y se abre <code class="inline">GameSceneLAN</code>.</li>
+          <li>El host juega el primer turno; las acciones se envían como <code class="inline">game_event</code> y se replican al oponente.</li>
+        </ol>
+      </div>
+
+      <p style="color:var(--ink-dim);margin-top:16px"><b>Conexión:</b> el cliente usa <code class="inline">socket.io-client</code> y se conecta al backend en el puerto 3001. La autenticación JWT y el juego están <b>desconectados a propósito</b>: se puede jugar en LAN incluso sin cuenta (modo offline de <code class="inline">profileApi.js</code>).</p>
+    </section>
+
+    <!-- ================= 9. EJECUTAR ================= -->
+    <section id="ejecutar">
+      <div class="eyebrow">Sección 09 — Puesta en marcha</div>
+      <h2 class="sec">Cómo <em>ejecutar</em> el proyecto</h2>
+      <p class="lead">El arranque requiere dos procesos: el backend primero (expone la API y socket.io) y el frontend después (sirve el juego con Vite).</p>
+
+      <div class="grid g2">
+        <div class="card">
+          <h3>1 · Backend (puerto 3001)</h3>
+<pre class="code" style="margin:6px 0 0">cd Backend
+npm install
+npm run dev        <span class="c"># nodemon server.js</span>
+<span class="c"># escucha en 0.0.0.0:3001</span></pre>
+        </div>
+        <div class="card">
+          <h3>2 · Frontend (Vite)</h3>
+<pre class="code" style="margin:6px 0 0">cd Frontend
+npm install
+npm run dev        <span class="c"># vite --host</span>
+<span class="c"># abre la URL local/network que imprime</span></pre>
+        </div>
+      </div>
+
+      <div class="grid g3" style="margin-top:18px">
+        <div class="card"><h3>Base de datos</h3><p>PostgreSQL 18 con la base <code class="inline">elemental</code>, datos demo y objetos programados cargados con:<br><code class="inline">schema.sql → vistas → triggers → procedimientos → datos_demo.sql</code> (idempotentes).</p></div>
+        <div class="card"><h3>Variables de entorno</h3><p><span class="file">Backend/.env</span> define puerto, dialecto (<code class="inline">DB_USE_SQLITE=false</code> para Postgres), secreto JWT y CORS. La conexión psql:<br><code class="inline">PGPASSWORD=123456 psql -U postgres -h 127.0.0.1 -d elemental</code></p></div>
+        <div class="card"><h3>Modo SQLite alternativo</h3><p>Con <code class="inline">DB_USE_SQLITE=true</code> el backend usa un archivo <code class="inline">database.sqlite</code> (CAP trivial); el esquema y script funcionan igual, aunque SQLite no soporta procedimientos almacenados.</p></div>
+      </div>
+
+      <div class="note"><b>Problemas conocidos documentados.</b> <code class="inline">column ... has no default value</code> → re-ejecutar <code class="inline">schema.sql</code>; <code class="inline">CALL no acepta subconsultas</code> → variables <code class="inline">\gset</code>; <code class="inline">EADDRINUSE :3001</code> → ya hay un backend activo; doble conteo de stats → resuelto: la única fuente es el trigger.</div>
+    </section>
+
+    <!-- ================= 10. CONCLUSIONES ================= -->
+    <section id="conclusiones">
+      <div class="eyebrow">Sección 10 — Cierre</div>
+      <h2 class="sec">Conclusiones <em>y</em> respaldo</h2>
+      <p class="lead">El proyecto integra un juego funcional (POO + Phaser), un servidor por capas con SOLID e inyección de dependencias, y una base de datos relacional con objetos programados que demuestran teoría real: ACID completo y postura CP ante caídas.</p>
+
+      <div class="grid g3">
+        <div class="card"><h3>Disciplina técnica</h3><p>POO y SOLID aplicados en ambas aplicaciones; contratos verificados al arrancar (<code class="inline">assertContract</code>); dominio desacoplado de Phaser y de Sequelize; composición sobre herencia.</p></div>
+        <div class="card"><h3>Integridad de datos</h3><p>77 restricciones, trigger que mantiene derivados, procedimientos transaccionales y vistas siempre frescas: el motor rechaza datos ilegales aunque el código de aplicación tenga un bug.</p></div>
+        <div class="card"><h3>Funcionalidad real</h3><p>Multijugador LAN con socket.io, IA con 10 dificultades, misiones, logros, colección de cartas, ranking y progreso persistente por jugador.</p></div>
+      </div>
+
+      <h3 style="font-family:var(--serif);font-weight:normal;color:var(--gold);margin:36px 0 12px;font-size:22px">Cifras del sistema</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Plano</th><th>Cantidad</th></tr></thead>
+          <tbody>
+            <tr><td><b>Escenas de juego (Frontend)</b></td><td>19 escenas registradas en <span class="file">src/main.js</span></td></tr>
+            <tr><td><b>Cartas / tipos / niveles</b></td><td>18 cartas = 6 tipos × 3 niveles</td></tr>
+            <tr><td><b>Niveles de dificultad (IA)</b></td><td>10 (Muy fácil → Mito)</td></tr>
+            <tr><td><b>Tablas / vistas / procedimientos / triggers</b></td><td>10 / 4 / 2 / 1</td></tr>
+            <tr><td><b>Restricciones de integridad</b></td><td>77 (PK, FK, CHECK, UNIQUE, NOT NULL)</td></tr>
+            <tr><td><b>Datos demo</b></td><td>4 usuarios <code class="inline">demo_*</code>, 18 batallas, colección y misiones</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note"><b>Frase final.</b> "Elemental Battlecards no solo funciona: está construido para sostenerse por sí mismo — cada capa responde por una sola responsabilidad, cada dato responde por una restricción y cada caída responde por una decisión de diseño."</div>
+    </section>
+
+    <!-- ================= RESPALDO ================= -->
+    <section id="respaldo">
+      <div class="eyebrow">Anexo — Documentación del repositorio</div>
+      <h2 class="sec">Respaldo <em>documental</em></h2>
+      <p class="lead">Documentos que sustentan cada afirmación de esta página, listos para la defensa en vivo.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Documento</th><th>Contenido</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">SUSTENTACION_BD.md</td><td>Guion de 5 minutos para la demo en vivo: ACID, CAP y los objetos programados con comandos psql exactos.</td></tr>
+            <tr><td class="mono">BASE_DE_DATOS.md</td><td>Explicación técnica completa de la base: capas, tablas, ACID, CAP, operación y problemas conocidos.</td></tr>
+            <tr><td class="mono">Backend/sql/TABLAS.md</td><td>Detalle columna a columna de las 10 tablas.</td></tr>
+            <tr><td class="mono">Backend/sql/schema.sql · vistas.sql · triggers.sql · procedimientos.sql · datos_demo.sql</td><td>Los 5 scripts idempotentes (y <code class="inline">datos_demo_eliminar.sql</code>) que materializan el esquema.</td></tr>
+            <tr><td class="mono">JUGAR_EN_LAN.md</td><td>Guía para configurar y jugar en red local de punta a punta.</td></tr>
+            <tr><td class="mono">NUEVOS_NIVELES_DIFICULTAD.md</td><td>Detalle de los niveles 6-10 de la IA (parámetros y diseño visual).</td></tr>
+            <tr><td class="mono">SOLUCION_LOGIN.md · GUIA_MENU_PAUSADO.md</td><td>Cambios aplicados a login/registro y al menú de pausa estilizado.</td></tr>
+            <tr><td class="mono">AGENTS.md</td><td>Reglas de desarrollo, arquitectura y hechos clave de ambos proyectos.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer>
+      <span>Elemental Battlecards — Documento de sustentación · Generado para la defensa del proyecto</span>
+      <span>POO · SOLID · ACID · CAP · Phaser 3 · Node.js · PostgreSQL</span>
+    </footer>
+  </main>
+</div>
+
+<script>
+  // Scrollspy: marca la sección activa en la barra lateral.
+  const links = [...document.querySelectorAll('aside.nav a')];
+  const sections = links.map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean);
+  const onScroll = () => {
+    const pos = window.scrollY + 120;
+    let current = sections[0];
+    for (const s of sections) if (s.offsetTop <= pos) current = s;
+    links.forEach(a => {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + (current && current.id));
+    });
+  };
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+</script>
+</body>
+</html>

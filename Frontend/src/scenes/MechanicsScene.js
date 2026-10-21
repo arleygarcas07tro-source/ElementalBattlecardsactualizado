@@ -1,154 +1,10 @@
 import Phaser from 'phaser';
 import { play as playSfx } from '../helpers/audioManager.js';
+import DomSceneBase from './ui/DomSceneBase.js';
+import { elementsNavHTML, energyParticlesHTML } from './ui/elementCatalog.js';
+import { GAME_RULES_HTML as RULES_HTML } from '../content/mechanicsContent.js';
 
-const ELEMENTS = [
-    { key: 'agua',       name: 'Agua',       color: '#38bdf8', soft: 'rgba(56,189,248,0.14)',  glow: 'rgba(56,189,248,0.42)',  img: '/assets/images/iconos/agua.jpeg' },
-    { key: 'fuego',      name: 'Fuego',      color: '#fb5a2a', soft: 'rgba(251,90,42,0.14)',   glow: 'rgba(251,90,42,0.42)',   img: '/assets/images/iconos/fuego.jpeg' },
-    { key: 'aire',       name: 'Aire',       color: '#6fe3ff', soft: 'rgba(111,227,255,0.14)', glow: 'rgba(111,227,255,0.42)', img: '/assets/images/iconos/luz.jpeg' },
-    { key: 'tierra',     name: 'Tierra',     color: '#a78bfa', soft: 'rgba(167,139,250,0.14)', glow: 'rgba(167,139,250,0.42)', img: '/assets/images/iconos/espiritu.jpeg' },
-    { key: 'naturaleza', name: 'Naturaleza', color: '#34d97b', soft: 'rgba(52,217,123,0.14)',  glow: 'rgba(52,217,123,0.42)',  img: '/assets/images/iconos/planta.jpeg' },
-    { key: 'oscuridad',  name: 'Oscuridad',  color: '#c026d3', soft: 'rgba(192,38,211,0.16)',  glow: 'rgba(192,38,211,0.45)',  img: '/assets/images/iconos/sombra.jpeg' }
-];
-
-// Contenido ORIGINAL de las mecánicas (idéntico al del antiguo modal). Solo estilo visual.
-const RULES_HTML = `
-    <ol class="rules">
-        <li><strong>Objetivo del Juego:</strong>
-            <ul>
-                <li><strong>Principal:</strong> El primer jugador que logre tener los 6 tipos de cartas distintos en su campo gana la partida.</li>
-                <li><strong>Secundario:</strong> El jugador que logre llenar las esencias elementales, gana.</li>
-            </ul>
-        </li>
-
-        <li><strong>Tipos y Ventajas:</strong>
-            <p>El sistema está dividido en dos triángulos independientes:</p>
-            <h3>Triángulo 1:</h3>
-            <ul>
-                <li>Fuego vence a Planta</li>
-                <li>Planta vence a Agua</li>
-                <li>Agua vence a Fuego</li>
-            </ul>
-            <h3>Triángulo 2:</h3>
-            <ul>
-                <li>Luz vence a Sombra</li>
-                <li>Sombra vence a Espíritu</li>
-                <li>Espíritu vence a Luz</li>
-            </ul>
-            <p><strong>Relación entre triángulos:</strong> Todos los tipos de un triángulo son neutrales contra los del otro triángulo.</p>
-        </li>
-
-        <li><strong>Niveles de Carta:</strong>
-            <p>Las cartas pueden tener 3 niveles:</p>
-            <ul>
-                <li><strong>⭐ Nivel 1 (base)</strong></li>
-                <li><strong>⭐⭐ Nivel 2 (fusión de dos cartas nivel 1 iguales)</strong></li>
-                <li><strong>⭐⭐⭐ Nivel 3 (fusión de dos cartas nivel 2 iguales)</strong></li>
-            </ul>
-            <p><strong>Efecto de los niveles en el combate:</strong></p>
-            <ul>
-                <li>Mismo nivel: se aplica ventaja de tipo normal.</li>
-                <li>1 nivel arriba: se vuelve neutral al tipo que tiene desventaja, le gana al tipo que es neutral.</li>
-                <li>2 niveles arriba: ganará siempre.</li>
-            </ul>
-        </li>
-
-        <li><strong>Turnos:</strong>
-            <p>El juego es por turnos, 1v1. En cada turno el jugador puede realizar 1 sola acción:</p>
-            <ul>
-                <li>Poner una carta en el campo.</li>
-                <li>Atacar con una carta.</li>
-                <li>Fusionar (si cumple requisitos).</li>
-            </ul>
-            <p>Después de realizar la acción, el turno termina.</p>
-        </li>
-
-        <li><strong>Regla de Ataque Obligatorio:</strong>
-            <p>Cada jugador debe atacar al menos una vez cada 3 turnos propios. Puedes atacar antes si quieres. Si atacas antes (por ejemplo, en tu turno 2), el contador se reinicia. Si llegas al turno 3 sin atacar, ese turno obligatoriamente debes atacar.</p>
-            <p><strong>Otros casos:</strong></p>
-            <ul>
-                <li>Si tienes que atacar obligatoriamente y tu oponente no tiene cartas en el campo, podrás llenar una Esencia elemental (atacando).</li>
-                <li>Si tienes que atacar obligatoriamente y no tienes cartas, saltará el turno y el contador se reiniciará.</li>
-            </ul>
-        </li>
-
-        <li><strong>Campo y Mano:</strong>
-            <p>Cada jugador tiene 6 espacios en el campo. Se puede tener máximo 1 carta por espacio. Se inicia con 4 cartas en la mano. Cuando colocas una carta en el campo, robas una nueva del mazo.</p>
-        </li>
-
-        <li><strong>Robos y Mazo:</strong>
-            <p>Cada jugador inicia con 48 cartas (8 copias de cada tipo). Cuando pones una carta, robas una del mazo (para mantener 4 en la mano). Si el mazo se queda sin cartas, se baraja automáticamente el cementerio (ver Regla 10).</p>
-        </li>
-
-        <li><strong>Colocar Cartas:</strong>
-            <p>Las cartas siempre se colocan boca abajo (ocultas para el rival). Se revelan en tres casos:</p>
-            <ul>
-                <li>Cuando atacan.</li>
-                <li>Cuando son atacadas.</li>
-                <li>Cuando se fusionan.</li>
-            </ul>
-            <p>Una vez reveladas, permanecen boca arriba para el resto de la partida.</p>
-        </li>
-
-        <li><strong>Combate:</strong>
-            <p><strong>Cómo se realiza:</strong></p>
-            <ul>
-                <li>El jugador atacante elige una de sus cartas.</li>
-                <li>Elige una carta del oponente.</li>
-            </ul>
-            <p><strong>Resultados:</strong></p>
-            <ul>
-                <li>Si tu carta gana → la carta enemiga muere.</li>
-                <li>Si tu carta pierde → tu carta muere.</li>
-                <li>Si son neutrales → ninguna muere.</li>
-            </ul>
-        </li>
-
-        <li><strong>Muertes y Cementerio:</strong>
-            <p>Cuando una carta muere, va al cementerio. Cuando las 48 cartas del mazo se acaban, las del cementerio se revuelven y se crea un nuevo mazo.</p>
-        </li>
-
-        <li><strong>Fusiones:</strong>
-            <p><strong>Requisitos:</strong> Tener 2 cartas iguales (tipo y nivel) en el campo. Fusionar consume tu acción del turno.</p>
-            <p><strong>Efecto:</strong> Se forma una sola carta del mismo tipo y sube un nivel. La carta fusionada se revela.</p>
-        </li>
-
-        <li><strong>Restricciones de Ataques según Nivel:</strong>
-            <ul>
-                <li>⭐ Nivel 1 → puede atacar cada turno (sin límites).</li>
-                <li>⭐⭐ Nivel 2 → puede atacar 2 turnos seguidos luego debe descansar 1 turno.</li>
-                <li>⭐⭐⭐ Nivel 3 → puede atacar 1 turno, luego debe descansar 1 turno.</li>
-            </ul>
-        </li>
-
-        <li><strong>Esencias Elementales:</strong>
-            <p>Cada jugador tiene 6 esencias, una por cada tipo elemental. Todas las esencias comienzan vacías. Se llenan cuando se cumplen las condiciones de atacar y no haber cartas del oponente para defender.</p>
-        </li>
-
-        <li><strong>Revelación:</strong>
-            <p>Las cartas boca abajo se revelan solo cuando:</p>
-            <ul>
-                <li>Atacan.</li>
-                <li>Son atacadas.</li>
-                <li>Se fusionan (la resultante entra boca arriba).</li>
-            </ul>
-        </li>
-
-        <li><strong>Límites de Tiempo:</strong>
-            <p>Cada turno tiene un máximo de 12 segundos. Si el jugador no realiza acción → pierde el turno.</p>
-        </li>
-
-        <li><strong>Fin del Juego:</strong>
-            <p>Un jugador gana si:</p>
-            <ul>
-                <li>Logra colocar los 6 tipos distintos en su campo (no importa el orden ni si están ocultas).</li>
-                <li>Logra llenar las esencias elementales (no importa el orden).</li>
-                <li>Por abandono: Si un jugador no actúa durante 3 turnos seguidos → se considera rendido. A los 3 turnos sin acción, derrota automática.</li>
-            </ul>
-        </li>
-    </ol>
-`;
-
-export default class MechanicsScene extends Phaser.Scene {
+export default class MechanicsScene extends DomSceneBase {
     constructor() {
         super('MechanicsScene');
         this.playerData = {};
@@ -162,19 +18,9 @@ export default class MechanicsScene extends Phaser.Scene {
     create() {
         const { width, height } = this.scale;
 
-        const particles = Array.from({ length: 10 }, (_, i) => {
-            const left = Math.round(4 + ((i * 37) % 92));
-            const top = Math.round(8 + ((i * 53) % 70));
-            const size = 3 + (i % 3) * 2;
-            const delay = (i % 6) * -1.4;
-            return `<span class="energy" style="left:${left}%; top:${top}%; width:${size}px; height:${size}px; animation-delay:${delay}s;"></span>`;
-        }).join('');
+        const particles = energyParticlesHTML();
 
-        const elementsNavHtml = ELEMENTS.map(el => `
-            <span class="nav-orb" style="--el:${el.color}; --el-soft:${el.soft};" title="${el.name}">
-                <img src="${el.img}" alt="${el.name}">
-            </span>
-        `).join('');
+        const elementsNavHtml = elementsNavHTML();
 
         const html = `
         <style>
@@ -633,55 +479,10 @@ export default class MechanicsScene extends Phaser.Scene {
             </nav>
         </div>`;
 
-        this.domUI = this.add.dom(0, 0).createFromHTML(html);
-        this.domUI.setOrigin(0);
-        this.domUI.setDepth(9999);
+        const node = this.mountDOM(html, { flex: true });
 
-        this.domUI.node.style.position = 'absolute';
-        this.domUI.node.style.left = '0';
-        this.domUI.node.style.top = '0';
-        this.domUI.node.style.display = 'flex';
-        this.domUI.node.style.flexDirection = 'column';
-        this.domUI.node.style.width = width + 'px';
-        this.domUI.node.style.height = height + 'px';
-
-        const node = this.domUI.node;
-
-        const bind = (selector, fn) => {
-            const els = node.querySelectorAll(selector);
-            els.forEach(el => {
-                const handler = ev => { ev.preventDefault(); playSfx('click', this); fn(ev, el); };
-                el.addEventListener('click', handler);
-                this.listeners.push({ el, handler, type: 'click' });
-            });
-        };
-
-        bind('[data-nav="home"]', () => this.scene.start('HomeScenes', { playerData: this.playerData }));
-        bind('[data-nav="settings"]', () => this.scene.start('SettingsScene', { playerData: this.playerData }));
-        bind('[data-nav="cards"]', () => this.scene.start('CardsScene', { playerData: this.playerData }));
-
-        this.scale.on('resize', this.onResize, this);
-        this.events.on('shutdown', this.onShutdown, this);
-    }
-
-    onResize(gameSize) {
-        if (!gameSize) return;
-        const { width, height } = gameSize;
-        if (this.domUI && this.domUI.node) {
-            this.domUI.node.style.width = width + 'px';
-            this.domUI.node.style.height = height + 'px';
-        }
-    }
-
-    onShutdown() {
-        this.listeners.forEach(({ el, handler, type }) => {
-            if (el && el.removeEventListener) el.removeEventListener(type, handler);
-        });
-        this.listeners = [];
-        this.scale.off('resize', this.onResize, this);
-        if (this.domUI) {
-            this.domUI.destroy();
-            this.domUI = null;
-        }
+        this.bind('[data-nav="home"]', () => this.scene.start('HomeScenes', { playerData: this.playerData }));
+        this.bind('[data-nav="settings"]', () => this.scene.start('SettingsScene', { playerData: this.playerData }));
+        this.bind('[data-nav="cards"]', () => this.scene.start('CardsScene', { playerData: this.playerData }));
     }
 }

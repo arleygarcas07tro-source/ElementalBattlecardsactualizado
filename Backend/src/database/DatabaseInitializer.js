@@ -1,6 +1,7 @@
 'use strict';
 
 const assertContract = require('../core/assertContract');
+const ViewPreserver = require('./ViewPreserver');
 
 class DatabaseInitializer {
   constructor({ sequelize, logger, dbRequireSSL = false }) {
@@ -21,7 +22,14 @@ class DatabaseInitializer {
   }
 
   async sync() {
-    await this.sequelize.sync({ alter: true });
+    const viewPreserver = new ViewPreserver(this.sequelize);
+    const views = await viewPreserver.capture();
+    await viewPreserver.drop(views);
+    try {
+      await this.sequelize.sync({ alter: true });
+    } finally {
+      await viewPreserver.restore(views);
+    }
     return this.sequelize;
   }
 }

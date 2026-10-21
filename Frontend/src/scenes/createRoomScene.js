@@ -1,11 +1,15 @@
 // createRoomScene.js
 import Phaser from "phaser";
 import { io } from 'socket.io-client';
+import DomSceneBase from './ui/DomSceneBase.js';
+import { loadVideoIfNeeded, createVideoBackground } from './ui/videoBackground.js';
+import { listGameModes } from '../game/gameModes.js';
 
-export default class CreateRoomScene extends Phaser.Scene {
+export default class CreateRoomScene extends DomSceneBase {
     constructor() {
         super("CreateRoomScene");
         this.playerData = null;
+        this.selectedMode = 'clasico';
     }
 
     init(data) {
@@ -13,50 +17,23 @@ export default class CreateRoomScene extends Phaser.Scene {
     }
 
     preload() {
-        if (!this.cache.video.exists('lan-bg-video')) {
-            this.load.video('lan-bg-video', '/assets/images/LAN/fondoLAN.mp4', { muted: true, noAudio: true });
-        }
+        loadVideoIfNeeded(this, 'lan-bg-video', '/assets/images/LAN/fondoLAN.mp4');
     }
 
     create() {
         const { width, height } = this.scale;
 
         // BACKGROUND
-        // Fondo inmediato para que nunca se vea un hueco negro mientras el video
-        // termina de preparar su primer frame.
-        this.add.rectangle(width / 2, height / 2, width, height, 0x0a0e22).setDepth(-2);
-
-        this.bg = this.add.video(width / 2, height / 2, 'lan-bg-video').setOrigin(0.5);
-        this.bg.setDepth(-1); // Poner el video al fondo
-
-        // Esperar a que el video esté listo para escalar correctamente
-        this.bg.on('play', () => {
-            const scaleX = width / this.bg.width;
-            const scaleY = height / this.bg.height;
-            const scale = Math.max(scaleX, scaleY);
-            this.bg.setScale(scale);
-        });
-
-        this.bg.once('ready', () => {
-            const videoEl = this.bg.video;
-
-            if (!videoEl) {
-                return;
-            }
-
-            videoEl.muted = true;
-            videoEl.defaultMuted = true;
-            videoEl.loop = true; // Bucle continuo: al terminar, se reinicia desde el inicio.
-            videoEl.playbackRate = 1;
-            videoEl.playsInline = true;
-            videoEl.preload = 'auto';
-            videoEl.currentTime = 0;
-            videoEl.play().catch(() => {});
-        });
-
-        this.bg.play(true); // Reproducir en bucle
+        // Fondo de video inmediato con rectángulo de respaldo para que nunca se vea
+        // un hueco negro mientras el video termina de preparar su primer frame.
+        this.bg = createVideoBackground(this, 'lan-bg-video', 0x0a0e22);
 
         const username = (this.playerData && this.playerData.username) || "Jugador";
+
+        const modesHtml = listGameModes().map(m => `
+            <button type="button" class="mode-btn${m.id === this.selectedMode ? ' active' : ''}" data-mode="${m.id}" title="${m.desc}">
+                ${m.name}
+            </button>`).join('');
 
         // HTML UI TEMPLATE
         const html = `
@@ -427,6 +404,34 @@ export default class CreateRoomScene extends Phaser.Scene {
             }
             .hint { font-size: 11.5px; color: rgba(255, 255, 255, 0.5); text-align: center; margin-bottom: 18px; }
 
+            /* SELECTOR DE MODO */
+            .mode-block { margin-bottom: 18px; }
+            .mode-block .squad-head { margin-bottom: 8px; }
+            .mode-select { display: flex; gap: 8px; flex-wrap: wrap; }
+            .mode-btn {
+                flex: 1 1 auto;
+                appearance: none;
+                cursor: pointer;
+                padding: 8px 12px;
+                border-radius: 10px;
+                border: 1px solid rgba(214, 180, 110, 0.42);
+                background: linear-gradient(160deg, rgba(10, 18, 48, 0.72), rgba(6, 10, 30, 0.72));
+                color: #f1e7bc;
+                font-family: Poppins, Arial, sans-serif;
+                font-size: 12px;
+                font-weight: 600;
+                letter-spacing: 0.03em;
+                transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease, border-color 160ms ease;
+            }
+            .mode-btn:hover { transform: translateY(-2px); }
+            .mode-btn:active { transform: translateY(0) scale(0.98); }
+            .mode-btn.active {
+                border-color: #5bc0ff;
+                color: #ffffff;
+                background: linear-gradient(160deg, rgba(20, 40, 90, 0.92), rgba(10, 20, 50, 0.86));
+                box-shadow: 0 0 18px rgba(91, 192, 255, 0.4), inset 0 0 14px rgba(91, 192, 255, 0.14);
+            }
+
             /* EMBLEMA INFERIOR */
             .emblem {
                 position: relative;
@@ -518,6 +523,15 @@ export default class CreateRoomScene extends Phaser.Scene {
                         </div>
                     </div>
 
+                    <div class="mode-block">
+                        <div class="squad-head">
+                            <span>Modo de juego (anfitrión)</span>
+                        </div>
+                        <div class="mode-select" id="mode-select">
+                            ${modesHtml}
+                        </div>
+                    </div>
+
                     <button class="btn-primary solid" id="btn-start">Iniciar partida</button>
                 </section>
 
@@ -550,37 +564,38 @@ export default class CreateRoomScene extends Phaser.Scene {
         </div>`;
 
         // DOM UI
-        this.domUI = this.add.dom(0, 0).createFromHTML(html);
-        this.domUI.setOrigin(0);
-        this.domUI.setDepth(9999);
-
-        const node = this.domUI.node;
-        node.style.position = "absolute";
-        node.style.left = 0;
-        node.style.top = 0;
-        node.style.width = width + "px";
-        node.style.height = height + "px";
+        const node = this.mountDOM(html);
 
         // Añadir clases de animación y manejadores de interacción a los botones
         try {
             const animatedBtns = node.querySelectorAll('.btn-primary, .btn-exit, .btn-ghost');
             animatedBtns.forEach((b, i) => {
                 if (b.id === 'btn-start') b.classList.add('pulse');
-                b.addEventListener('pointerdown', () => { b.style.transform = 'translateY(0) scale(0.98)'; });
-                b.addEventListener('pointerup', () => { b.style.transform = ''; });
-                b.addEventListener('pointerleave', () => { b.style.transform = ''; });
+                this.track(b, () => { b.style.transform = 'translateY(0) scale(0.98)'; }, 'pointerdown');
+                this.track(b, () => { b.style.transform = ''; }, 'pointerup');
+                this.track(b, () => { b.style.transform = ''; }, 'pointerleave');
             });
         } catch (e) {
             console.warn('No se pudieron inicializar animaciones de botones', e);
         }
 
+        // Mode selection (host)
+        const modeButtons = node.querySelectorAll('.mode-btn');
+        modeButtons.forEach(btn => {
+            this.track(btn, () => {
+                this.selectedMode = btn.getAttribute('data-mode');
+                modeButtons.forEach(b => b.classList.toggle('active', b === btn));
+                console.log(`Modo LAN seleccionado: ${this.selectedMode}`);
+            }, 'click');
+        });
+
         // BUTTONS
         const exitBtn = node.querySelector(".btn-exit");
         const startBtn = node.querySelector("#btn-start");
-        if (exitBtn) exitBtn.addEventListener('click', () => {
+        if (exitBtn) this.track(exitBtn, () => {
             // Use start to ensure the scene is launched/returned to reliably
             this.scene.start("HomeScenes");
-        });
+        }, 'click');
 
         // Inicializar socket después de que el DOM exista
         // Determinar URL del backend (prioridad):
@@ -654,6 +669,7 @@ export default class CreateRoomScene extends Phaser.Scene {
                 socket: this.socket, 
                 playerData: this.playerData,
                 playerRole: this.playerRole,
+                gameMode: (data && data.gameMode) || this.selectedMode,
                 gameStartData: data
             });
         });
@@ -673,10 +689,10 @@ export default class CreateRoomScene extends Phaser.Scene {
         // flag para decidir si mantener socket al cambiar de escena
         this.keepSocket = false;
 
-        if (startBtn) startBtn.addEventListener('click', () => {
+        if (startBtn) this.track(startBtn, () => {
             // Si no hay sala, crearla; si ya existe y hay 2 jugadores, iniciar escena de juego
             if (!this.currentRoom) {
-                this.socket.emit('create_room', (res) => {
+                this.socket.emit('create_room', { gameMode: this.selectedMode }, (res) => {
                     if (res && res.success && res.code) {
                         console.log('Sala creada con código', res.code, 'rol:', res.role);
                         this.playerRole = res.role; // Guardar rol (host)
@@ -697,17 +713,18 @@ export default class CreateRoomScene extends Phaser.Scene {
                         roomCode: this.currentRoom, 
                         socket: this.socket, 
                         playerData: this.playerData,
-                        playerRole: this.playerRole
+                        playerRole: this.playerRole,
+                        gameMode: this.selectedMode
                     });
                 } else {
                     console.log('Esperando al segundo jugador antes de iniciar.');
                 }
             }
-        });
+        }, 'click');
 
         const joinBtn = node.querySelector('#btn-join');
         if (joinBtn) {
-            joinBtn.onclick = () => {
+            this.track(joinBtn, () => {
                 const rawCode = node.querySelector('#input-room-code').value;
                 const code = rawCode.replace(/\s+/g, '');
                 console.log('Intentando unirse a sala');
@@ -742,14 +759,14 @@ export default class CreateRoomScene extends Phaser.Scene {
                         alert(res && res.message ? res.message : 'No se pudo unir a la sala');
                     }
                 });
-            };
+            }, 'click');
         }
 
         // Copy button handler
         const copyBtn = node.querySelector('#btn-copy');
         if (copyBtn) {
             copyBtn.disabled = true;
-            copyBtn.addEventListener('click', async () => {
+            this.track(copyBtn, async () => {
                 if (!this.currentRoom) return;
                 const text = this.currentRoom;
                 try {
@@ -767,36 +784,20 @@ export default class CreateRoomScene extends Phaser.Scene {
                     copyBtn.textContent = 'Copiado';
                     setTimeout(() => { copyBtn.textContent = 'Copiar código'; }, 1500);
                 }
-            });
+            }, 'click');
         }
+    }
 
-        // Responsive
-        this.scale.on("resize", this.onResize, this);
-
-        // Cleanup on scene shutdown to avoid resize events after DOM removal
-        this.events.on('shutdown', () => {
-            this.scale.off("resize", this.onResize, this);
-            if (this.domUI && this.domUI.node) {
-                // remove any attached DOM listeners if necessary
-                const node = this.domUI.node;
-                const exitBtn = node.querySelector(".btn-exit");
-                const startBtn = node.querySelector("#btn-start");
-                const joinBtn = node.querySelector("#btn-join");
-                if (exitBtn) exitBtn.removeEventListener('click', () => {});
-                if (startBtn) startBtn.removeEventListener('click', () => {});
-                if (joinBtn) joinBtn.onclick = null;
-                    // Desconectar socket si existe y no queremos mantenerlo (por ejemplo al cerrar la UI)
-                    if (this.socket && !this.keepSocket) {
-                        try {
-                            this.socket.disconnect();
-                        } catch (e) {
-                            // ignore
-                        }
-                    }
-                this.domUI.destroy();
-                this.domUI = null;
+    onShutdown() {
+        // Desconectar socket si existe y no queremos mantenerlo (por ejemplo al cerrar la UI).
+        if (this.socket && !this.keepSocket) {
+            try {
+                this.socket.disconnect();
+            } catch (e) {
+                // ignore
             }
-        }, this);
+        }
+        super.onShutdown();
     }
 
     onResize(gameSize) {
@@ -806,13 +807,6 @@ export default class CreateRoomScene extends Phaser.Scene {
 
         if (this.bg) this.bg.setDisplaySize(width, height);
 
-        // Defensive: ensure domUI and its node are present before touching DOM
-        if (this.domUI && this.domUI.node) {
-            const node = this.domUI.node;
-            if (node.style) {
-                node.style.width = width + "px";
-                node.style.height = height + "px";
-            }
-        }
+        super.onResize(gameSize);
     }
 }

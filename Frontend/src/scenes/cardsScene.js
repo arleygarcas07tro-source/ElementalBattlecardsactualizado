@@ -1,13 +1,6 @@
 import { play as playSfx } from '../helpers/audioManager.js';
-
-const ELEMENTS = [
-    { key: 'agua',       name: 'Agua',       color: '#38bdf8', soft: 'rgba(56,189,248,0.14)',  glow: 'rgba(56,189,248,0.42)',  img: '/assets/images/iconos/agua.jpeg' },
-    { key: 'fuego',      name: 'Fuego',      color: '#fb5a2a', soft: 'rgba(251,90,42,0.14)',   glow: 'rgba(251,90,42,0.42)',   img: '/assets/images/iconos/fuego.jpeg' },
-    { key: 'luz',        name: 'Aire',       color: '#6fe3ff', soft: 'rgba(111,227,255,0.14)', glow: 'rgba(111,227,255,0.42)', img: '/assets/images/iconos/luz.jpeg' },
-    { key: 'espiritu',   name: 'Tierra',     color: '#a78bfa', soft: 'rgba(167,139,250,0.14)', glow: 'rgba(167,139,250,0.42)', img: '/assets/images/iconos/espiritu.jpeg' },
-    { key: 'planta',     name: 'Naturaleza', color: '#34d97b', soft: 'rgba(52,217,123,0.14)',  glow: 'rgba(52,217,123,0.42)',  img: '/assets/images/iconos/planta.jpeg' },
-    { key: 'sombra',     name: 'Oscuridad',  color: '#c026d3', soft: 'rgba(192,38,211,0.16)',  glow: 'rgba(192,38,211,0.45)',  img: '/assets/images/iconos/sombra.jpeg' }
-];
+import DomSceneBase from './ui/DomSceneBase.js';
+import { ELEMENTS, elementByKey, elementsNavHTML, energyParticlesHTML } from './ui/elementCatalog.js';
 
 const CARD_NAMES = {
     agua:     ['Espíritu Marino', 'Tifón Abisal', 'Leviatán de Hielo'],
@@ -18,9 +11,7 @@ const CARD_NAMES = {
     sombra:   ['Velo Sombrío', 'Eclipse Abisal', 'Señor de las Sombras']
 };
 
-const elementByKey = element => ELEMENTS.find(el => el.key === element);
-
-export default class CardsScene extends Phaser.Scene {
+export default class CardsScene extends DomSceneBase {
     constructor() {
         super({ key: 'CardsScene' });
         this.playerData = {};
@@ -42,13 +33,7 @@ export default class CardsScene extends Phaser.Scene {
     create() {
         const { width, height } = this.scale;
 
-        const particles = Array.from({ length: 10 }, (_, i) => {
-            const left = Math.round(4 + ((i * 37) % 92));
-            const top = Math.round(8 + ((i * 53) % 70));
-            const size = 3 + (i % 3) * 2;
-            const delay = (i % 6) * -1.4;
-            return `<span class="energy" style="left:${left}%; top:${top}%; width:${size}px; height:${size}px; animation-delay:${delay}s;"></span>`;
-        }).join('');
+        const particles = energyParticlesHTML();
 
         const sideOrbs = ELEMENTS.map(el => `
             <span class="side-orb" style="--el:${el.color}; --el-glow:${el.glow};" title="${el.name}">
@@ -56,11 +41,7 @@ export default class CardsScene extends Phaser.Scene {
             </span>
         `).join('');
 
-        const elementsNavHtml = ELEMENTS.map(el => `
-            <span class="nav-orb" style="--el:${el.color}; --el-soft:${el.soft};" title="${el.name}">
-                <img src="${el.img}" alt="${el.name}">
-            </span>
-        `).join('');
+        const elementsNavHtml = elementsNavHTML();
 
         const cardsHtml = this.cards.map((card, index) => {
             const el = elementByKey(card.element);
@@ -482,39 +463,16 @@ export default class CardsScene extends Phaser.Scene {
             </nav>
         </div>`;
 
-        this.domUI = this.add.dom(0, 0).createFromHTML(html);
-        this.domUI.setOrigin(0);
-        this.domUI.setDepth(9999);
+        const node = this.mountDOM(html, { flex: true });
 
-        this.domUI.node.style.position = 'absolute';
-        this.domUI.node.style.left = '0';
-        this.domUI.node.style.top = '0';
-        this.domUI.node.style.display = 'flex';
-        this.domUI.node.style.flexDirection = 'column';
-        this.domUI.node.style.width = width + 'px';
-        this.domUI.node.style.height = height + 'px';
-
-        const node = this.domUI.node;
-
-        const bind = (selector, fn) => {
-            const els = node.querySelectorAll(selector);
-            els.forEach(el => {
-                const handler = ev => { ev.preventDefault(); playSfx('click', this); fn(ev, el); };
-                el.addEventListener('click', handler);
-                this.listeners.push({ el, handler });
-            });
-        };
-
-        bind('[data-nav="home"]', () => this.scene.start('HomeScenes', { playerData: this.playerData }));
-        bind('[data-nav="settings"]', () => this.scene.start('SettingsScene', { playerData: this.playerData }));
-        bind('[data-nav="profile"]', () => this.scene.start('ProfileScene', { playerData: this.playerData }));
+        this.bind('[data-nav="home"]', () => this.scene.start('HomeScenes', { playerData: this.playerData }));
+        this.bind('[data-nav="settings"]', () => this.scene.start('SettingsScene', { playerData: this.playerData }));
+        this.bind('[data-nav="profile"]', () => this.scene.start('ProfileScene', { playerData: this.playerData }));
 
         // Click en una carta: feedback sonoro (sin lógica de negocio aquí).
         const cardEls = node.querySelectorAll('.gal-card');
         cardEls.forEach(card => {
-            const handler = () => playSfx('click', this);
-            card.addEventListener('click', handler);
-            this.listeners.push({ el: card, handler });
+            this.track(card, () => playSfx('click', this), 'click');
         });
 
         // Buscador y filtros
@@ -535,43 +493,15 @@ export default class CardsScene extends Phaser.Scene {
             this.state.query = searchInput.value.trim().toLowerCase();
             applyFilters();
         };
-        searchInput.addEventListener('input', onSearch);
-        this.listeners.push({ el: searchInput, handler: onSearch });
+        if (searchInput) this.track(searchInput, onSearch, 'input');
 
         filterChips.forEach(chip => {
-            const handler = () => {
+            this.track(chip, () => {
                 filterChips.forEach(c => c.classList.remove('active'));
                 chip.classList.add('active');
                 this.state.filter = chip.dataset.filter;
                 applyFilters();
-            };
-            chip.addEventListener('click', handler);
-            this.listeners.push({ el: chip, handler });
+            }, 'click');
         });
-
-        this.scale.on('resize', this.onResize, this);
-        this.events.on('shutdown', this.onShutdown, this);
-    }
-
-    onResize(gameSize) {
-        if (!gameSize) return;
-        const { width, height } = gameSize;
-        if (this.domUI && this.domUI.node) {
-            this.domUI.node.style.width = width + 'px';
-            this.domUI.node.style.height = height + 'px';
-        }
-    }
-
-    onShutdown() {
-        this.listeners.forEach(({ el, handler }) => {
-            if (el && el.removeEventListener) el.removeEventListener('click', handler);
-            if (el && el.removeEventListener) el.removeEventListener('input', handler);
-        });
-        this.listeners = [];
-        this.scale.off('resize', this.onResize, this);
-        if (this.domUI) {
-            this.domUI.destroy();
-            this.domUI = null;
-        }
     }
 }

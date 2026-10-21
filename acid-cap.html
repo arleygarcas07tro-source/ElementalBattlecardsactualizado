@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ACID &amp; CAP — Verificación sobre código real · Elemental Universe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0a0b0d;
+    --ink-2:#0f1115;
+    --panel:#12151c;
+    --panel-2:#161a22;
+    --line:rgba(255,255,255,.09);
+    --line-strong:rgba(255,255,255,.16);
+    --text:#e9ebee;
+    --muted:#8d939e;
+    --faint:#5b616c;
+    --lime:#c8ff3d;
+    --amber:#ffa02e;
+    --cyan:#54d8ff;
+    --rose:#ff5d73;
+    --violet:#b48cff;
+    --mono:"JetBrains Mono",ui-monospace,monospace;
+    --display:"Bricolage Grotesque",sans-serif;
+    --body:"Archivo",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;
+    background:var(--ink);
+    color:var(--text);
+    font-family:var(--body);
+    font-size:16px;
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  body::before{
+    content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+    background-image:
+      linear-gradient(rgba(255,255,255,.028) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(255,255,255,.028) 1px,transparent 1px);
+    background-size:64px 64px;
+    mask-image:radial-gradient(ellipse 90% 70% at 50% 0%,#000 20%,transparent 78%);
+  }
+  body::after{
+    content:"";position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.5;
+    background:
+      radial-gradient(700px 480px at 12% -8%,rgba(200,255,61,.10),transparent 70%),
+      radial-gradient(760px 520px at 92% 6%,rgba(84,216,255,.10),transparent 72%),
+      radial-gradient(700px 700px at 50% 120%,rgba(180,140,255,.08),transparent 70%);
+  }
+  .wrap{position:relative;z-index:2;max-width:1180px;margin:0 auto;padding:0 28px}
+
+  /* ---------- NAV ---------- */
+  nav{
+    position:sticky;top:0;z-index:40;
+    backdrop-filter:blur(14px);
+    background:rgba(10,11,13,.72);
+    border-bottom:1px solid var(--line);
+  }
+  .nav-in{max-width:1180px;margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+  .brand{font-family:var(--mono);font-weight:700;font-size:13px;letter-spacing:.04em;color:var(--lime)}
+  .brand span{color:var(--faint)}
+  .nav-links{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+  .nav-links a{
+    font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--muted);text-decoration:none;padding:7px 11px;border-radius:6px;transition:.2s;
+  }
+  .nav-links a:hover{color:var(--ink);background:var(--lime)}
+
+  /* ---------- HERO ---------- */
+  header.hero{padding:88px 0 54px}
+  .kicker{
+    font-family:var(--mono);font-size:12px;letter-spacing:.22em;text-transform:uppercase;
+    color:var(--lime);display:inline-flex;align-items:center;gap:10px;margin-bottom:26px;
+  }
+  .kicker::before{content:"";width:30px;height:1px;background:var(--lime)}
+  h1{
+    font-family:var(--display);font-weight:800;line-height:.92;margin:0 0 22px;
+    font-size:clamp(3.2rem,9vw,7.2rem);letter-spacing:-.03em;
+  }
+  h1 .amp{color:var(--lime);font-style:italic}
+  h1 .sub{display:block;font-size:.34em;font-weight:600;letter-spacing:.02em;color:var(--muted);margin-top:.5em;line-height:1.35;max-width:20ch}
+  .lede{max-width:62ch;font-size:1.12rem;color:#c3c8d0}
+  .lede b{color:var(--text);font-weight:600}
+  .meta-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:34px}
+  .chip{
+    font-family:var(--mono);font-size:11.5px;letter-spacing:.05em;
+    border:1px solid var(--line-strong);border-radius:999px;padding:6px 13px;color:var(--muted);
+  }
+  .chip b{color:var(--lime);font-weight:500}
+
+  /* ---------- SECTION ---------- */
+  section{padding:46px 0;scroll-margin-top:74px}
+  .sec-head{display:flex;align-items:baseline;gap:18px;border-bottom:1px solid var(--line-strong);padding-bottom:16px;margin-bottom:36px}
+  .sec-tag{font-family:var(--mono);font-size:12px;color:var(--lime);letter-spacing:.14em;white-space:nowrap}
+  .sec-head h2{font-family:var(--display);font-weight:800;font-size:clamp(1.7rem,4vw,2.6rem);margin:0;letter-spacing:-.02em}
+  .sec-head p{margin:0;margin-left:auto;max-width:38ch;color:var(--muted);font-size:.9rem;text-align:right}
+
+  /* ---------- ACID CARDS ---------- */
+  .acid-card{
+    border:1px solid var(--line);border-radius:16px;background:linear-gradient(180deg,var(--panel),var(--ink-2));
+    padding:30px;margin-bottom:22px;position:relative;overflow:hidden;
+    transition:border-color .3s,transform .3s;
+  }
+  .acid-card::before{
+    content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent,var(--lime));
+  }
+  .acid-card:hover{border-color:var(--line-strong)}
+  .acid-top{display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap}
+  .acid-letter{
+    font-family:var(--display);font-weight:800;font-size:3.4rem;line-height:.8;
+    color:var(--accent,var(--lime));min-width:60px;
+  }
+  .acid-info{flex:1;min-width:220px}
+  .acid-info h3{font-family:var(--display);font-weight:700;margin:0;font-size:1.55rem;letter-spacing:-.01em}
+  .acid-info .role{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent,var(--lime))}
+  .acid-info p{margin:12px 0 0;color:#c3c8d0}
+  .acid-body{margin-top:26px;display:grid;grid-template-columns:1.35fr 1fr;gap:26px;align-items:start}
+  @media(max-width:860px){.acid-body{grid-template-columns:1fr}}
+
+  /* ---------- CODE ---------- */
+  .code{
+    margin:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;
+    background:#0c0e13;
+  }
+  .code figcaption{
+    display:flex;align-items:center;gap:9px;padding:10px 14px;
+    border-bottom:1px solid var(--line);background:rgba(255,255,255,.02);
+    font-family:var(--mono);font-size:11.5px;color:var(--muted);letter-spacing:.02em;
+  }
+  .code .dot{width:8px;height:8px;border-radius:50%;background:var(--lime);flex:none}
+  .code figcaption .lines{margin-left:auto;color:var(--faint)}
+  .code pre{margin:0;padding:16px 18px;overflow-x:auto;font-family:var(--mono);font-size:12.7px;line-height:1.72;tab-size:2}
+  .code code{font-family:inherit;white-space:pre}
+  .k{color:#ff7ea8}      /* keyword */
+  .s{color:#c8ff3d}      /* string  */
+  .c{color:#5b6472;font-style:italic} /* comment */
+  .f{color:#54d8ff}      /* function*/
+  .n{color:#ffa02e}      /* number  */
+  .p{color:#b48cff}      /* prop    */
+  .t{color:#ffd166}      /* type    */
+  .v{color:#e9ebee}      /* plain   */
+  .o{color:#8d939e}      /* operator*/
+
+  .explain{margin:0}
+  .explain h4{
+    font-family:var(--mono);font-size:11px;letter-spacing:.13em;text-transform:uppercase;
+    color:var(--faint);margin:0 0 8px;padding-bottom:6px;border-bottom:1px dashed var(--line);
+  }
+  .explain p{margin:0 0 16px;font-size:.93rem;color:#b8bdc6}
+  .explain p:last-child{margin-bottom:0}
+  .explain strong{color:var(--accent,var(--lime));font-weight:600}
+  .explain .where{
+    display:inline-block;font-family:var(--mono);font-size:11px;color:var(--cyan);
+    background:rgba(84,216,255,.08);border:1px solid rgba(84,216,255,.2);
+    padding:2px 7px;border-radius:5px;margin:0 0 12px;
+  }
+
+  /* ---------- CAP ---------- */
+  .cap-intro{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-bottom:40px;align-items:start}
+  @media(max-width:860px){.cap-intro{grid-template-columns:1fr}}
+  .cap-text p{color:#c3c8d0}
+  .cap-text .theorem{
+    border-left:2px solid var(--lime);padding:2px 0 2px 16px;margin:20px 0 0;
+    font-family:var(--display);font-size:1.15rem;font-weight:600;color:var(--text);line-height:1.4;
+  }
+  .tri-wrap{display:flex;flex-direction:column;align-items:center;gap:20px}
+  .tri{
+    position:relative;width:min(340px,80vw);aspect-ratio:1/.9;margin:14px auto 0;
+  }
+  .tri .tri-shape{
+    position:absolute;inset:14% 6% 6% 6%;
+    background:conic-gradient(from 210deg,var(--lime),var(--cyan),var(--violet),var(--lime));
+    clip-path:polygon(50% 0,100% 100%,0 100%);
+    opacity:.14;
+  }
+  .tri .tri-line{position:absolute;inset:14% 6% 6% 6%;clip-path:polygon(50% 0,100% 100%,0 100%);border:1px solid transparent}
+  .tri .node{
+    position:absolute;text-align:center;font-family:var(--mono);font-size:11px;letter-spacing:.06em;
+  }
+  .tri .node b{display:block;font-family:var(--display);font-size:1.5rem;font-weight:800;line-height:1}
+  .tri .c{top:-6px;left:50%;transform:translateX(-50%);color:var(--lime)}
+  .tri .a{bottom:0;left:2%;color:var(--cyan);text-align:left}
+  .tri .pp{bottom:0;right:2%;color:var(--violet);text-align:right}
+  .tri .center{
+    position:absolute;top:46%;left:50%;transform:translate(-50%,-50%);
+    font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.1em;text-align:center;line-height:1.5;
+  }
+  .tri .center em{color:var(--text);font-style:normal;display:block;font-size:12px}
+
+  .cap-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:40px}
+  @media(max-width:800px){.cap-cards{grid-template-columns:1fr}}
+  .cap-card{border:1px solid var(--line);border-radius:14px;padding:22px;background:var(--panel)}
+  .cap-card h4{font-family:var(--display);margin:0 0 4px;font-size:1.2rem;font-weight:700}
+  .cap-card .letter{font-family:var(--mono);font-size:11px;letter-spacing:.1em}
+  .cap-card p{margin:12px 0 0;font-size:.9rem;color:#b8bdc6}
+
+  .placement{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:8px}
+  @media(max-width:800px){.placement{grid-template-columns:1fr}}
+  .sys{
+    border:1px solid var(--line);border-radius:16px;padding:26px;background:linear-gradient(180deg,var(--panel),var(--ink-2));
+    position:relative;overflow:hidden;
+  }
+  .sys .verdict{
+    font-family:var(--display);font-weight:800;font-size:2.1rem;letter-spacing:-.02em;margin:0 0 4px;
+  }
+  .sys .verdict small{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--muted);display:block;font-weight:400}
+  .sys h3{font-family:var(--display);margin:0 0 2px;font-size:1.25rem;font-weight:700}
+  .sys .path{font-family:var(--mono);font-size:11px;color:var(--faint);display:block;margin-bottom:14px}
+  .sys ul{margin:14px 0 0;padding:0;list-style:none}
+  .sys li{font-size:.88rem;color:#b8bdc6;padding:9px 0;border-top:1px dashed var(--line);display:flex;gap:9px}
+  .sys li .tick{font-family:var(--mono);flex:none}
+  .sys li .no{color:var(--rose)}
+  .sys li .yes{color:var(--lime)}
+  .sys.cp{--acc:var(--cyan)}
+  .sys.ap{--acc:var(--violet)}
+  .sys.cp .verdict,.sys.ap .verdict{color:var(--acc)}
+
+  footer{border-top:1px solid var(--line);margin-top:40px;padding:34px 0 60px}
+  footer .in{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;font-family:var(--mono);font-size:11.5px;color:var(--faint)}
+  footer code{color:var(--muted)}
+
+  .reveal{opacity:0;transform:translateY(26px);transition:opacity .7s cubic-bezier(.2,.7,.2,1),transform .7s cubic-bezier(.2,.7,.2,1)}
+  .reveal.in{opacity:1;transform:none}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-in">
+    <div class="brand">ELEMENTAL<b>·</b>UNIVERSE <span>// data-layer-audit</span></div>
+    <div class="nav-links">
+      <a href="#intro">Intro</a>
+      <a href="#acid">ACID</a>
+      <a href="#cap">CAP</a>
+      <a href="#verdict">Veredicto</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero wrap">
+  <span class="kicker">Auditoría de transacciones &amp; sistemas distribuidos</span>
+  <h1>ACID<span class="amp"> &amp; </span>CAP
+    <span class="sub">Cada garantía demostrada con el código real del backend.</span>
+  </h1>
+  <p class="lede">Esta página no explica la teoría en el aire: toma el código que corre hoy en <b>Elemental Universe</b> y muestra <b>dónde</b> vive cada propiedad de transacción (ACID) y cómo el backend elige su camino dentro del teorema <b>CAP</b>. Cada bloque incluye el fragmento exacto, qué hace y por qué satisface la garantía.</p>
+  <div class="meta-row">
+    <span class="chip">stack <b>Node · Express · Sequelize · Socket.io</b></span>
+    <span class="chip">db <b>SQLite / PostgreSQL</b></span>
+    <span class="chip">modelo <b>monolito único (single-node)</b></span>
+  </div>
+</header>
+
+<!-- ============ INTRO ============ -->
+<section id="intro" class="wrap">
+  <div class="sec-head reveal">
+    <span class="sec-tag">00 / CONTEXTO</span>
+    <h2>Dos preguntas distintas</h2>
+    <p>ACID protege <em>una</em> transacción. CAP describe qué cedes cuando la red se parte.</p>
+  </div>
+  <div class="cap-text reveal" style="max-width:78ch">
+    <p style="margin-top:0"><b style="color:var(--lime)">ACID</b> es un conjunto de propiedades que garantizan que una operación sobre la base de datos se ejecute como una unidad confiable: o pasa completa y correcta, o no pasa. Aplica <em>dentro de un solo nodo</em> y lo imponen el motor (SQLite/PostgreSQL) más las decisiones del código.</p>
+    <p><b style="color:var(--cyan)">CAP</b> es un teorema para sistemas <em>distribuidos</em>: ante una partición de red no puedes tener a la vez consistencia fuerte y disponibilidad. Solo importa cuando hay <b>varios nodos</b> comunicándose. Este backend elige ese reparto de forma explícita según el subsistema.</p>
+  </div>
+</section>
+
+<!-- ============ ACID ============ -->
+<section id="acid" class="wrap">
+  <div class="sec-head reveal">
+    <span class="sec-tag">01–04 / ACID</span>
+    <h2>Atomicidad · Consistencia · Aislamiento · Durabilidad</h2>
+    <p>Cada letra, el archivo exacto, y por qué el código la cumple.</p>
+  </div>
+
+  <!-- A -->
+  <article class="acid-card reveal" style="--accent:var(--lime)">
+    <div class="acid-top">
+      <div class="acid-letter">A</div>
+      <div class="acid-info">
+        <span class="role">Atomicidad · todo o nada</span>
+        <h3>La operación no deja estados a medias</h3>
+        <p>Una transacción se ejecuta completa o se revierte; nunca queda un resultado parcial en la base de datos.</p>
+      </div>
+    </div>
+    <div class="acid-body">
+      <figure class="code">
+        <figcaption><span class="dot"></span>Backend/src/database/DatabaseInitializer.js <span class="lines">L24–L34</span></figcaption>
+        <pre><code><span class="k">async</span> <span class="f">sync</span>() {
+  <span class="k">const</span> <span class="v">viewPreserver</span> = <span class="k">new</span> <span class="t">ViewPreserver</span>(<span class="k">this</span>.<span class="p">sequelize</span>);
+  <span class="k">const</span> <span class="v">views</span> = <span class="k">await</span> <span class="v">viewPreserver</span>.<span class="f">capture</span>();
+  <span class="k">await</span> <span class="v">viewPreserver</span>.<span class="f">drop</span>(<span class="v">views</span>);
+  <span class="k">try</span> {
+    <span class="k">await</span> <span class="k">this</span>.<span class="p">sequelize</span>.<span class="f">sync</span>({ <span class="p">alter</span>: <span class="n">true</span> });
+  } <span class="k">finally</span> {
+    <span class="k">await</span> <span class="v">viewPreserver</span>.<span class="f">restore</span>(<span class="v">views</span>);
+  }
+  <span class="k">return</span> <span class="k">this</span>.<span class="p">sequelize</span>;
+}</code></pre>
+      </figure>
+      <div class="explain">
+        <span class="where">DatabaseInitializer.sync()</span>
+        <h4>Qué hace</h4>
+        <p>Antes de sincronizar el esquema captura y elimina las vistas, ejecuta el <code>sync</code> y las vuelve a crear.</p>
+        <h4>Por qué cumple Atomicidad</h4>
+        <p>El bloque <strong>try / finally</strong> garantiza que <code>restore()</code> se ejecute <em>incluso si <code>sync()</code> lanza un error</em>. El par capturar→restaurar funciona como una unidad indivisible: el sistema nunca se queda con las vistas caídas y el esquema a medio actualizar.</p>
+        <h4>Segundo respaldo</h4>
+        <p><code>findOrCreate()</code> de Sequelize (usado en logros y cartas) es una única sentencia atómica: inserta o devuelve el existente, sin ventana para duplicados.</p>
+      </div>
+    </div>
+  </article>
+
+  <!-- C -->
+  <article class="acid-card reveal" style="--accent:var(--amber)">
+    <div class="acid-top">
+      <div class="acid-letter">C</div>
+      <div class="acid-info">
+        <span class="role">Consistencia · reglas nunca violadas</span>
+        <h3>Los invariantes siempre se respetan</h3>
+        <p>Toda transacción lleva la base de un estado válido a otro estado válido: no se permite un <code>username</code> o <code>email</code> repetido.</p>
+      </div>
+    </div>
+    <div class="acid-body">
+      <figure class="code">
+        <figcaption><span class="dot"></span>Backend/src/database/models/UserModel.js <span class="lines">L6–L15</span></figcaption>
+        <pre><code><span class="p">username</span>: {
+  <span class="p">type</span>: <span class="t">DataTypes</span>.<span class="p">STRING</span>,
+  <span class="p">allowNull</span>: <span class="n">false</span>,
+  <span class="p">unique</span>: <span class="n">true</span>,
+},
+<span class="p">email</span>: {
+  <span class="p">type</span>: <span class="t">DataTypes</span>.<span class="p">STRING</span>,
+  <span class="p">allowNull</span>: <span class="n">false</span>,
+  <span class="p">unique</span>: <span class="n">true</span>,
+},</code></pre>
+      </figure>
+      <div class="explain">
+        <span class="where">AuthService.register() · L27–L33</span>
+        <h4>Qué hace</h4>
+        <p>Antes de crear el usuario el servicio consulta si el correo ya existe y lanza un <code>ConflictError</code>; además el modelo declara <code>unique</code> sobre <code>username</code> y <code>email</code>.</p>
+        <h4>Por qué cumple Consistencia</h4>
+        <p>Hay <strong>doble barrera</strong>: la lógica de aplicación evita el caso común, y el <code>UNIQUE</code> del motor es la garantía dura — aunque dos registros simultáneos pasaran la primera validación, la base rechaza el segundo. El invariante "email único" nunca se rompe.</p>
+        <h4>Refuerzo del dominio</h4>
+        <p>Los comentarios del proyecto confirman que las estadísticas se derivan de un <strong>trigger de PostgreSQL</strong> al insertar la batalla, evitando que dos escritores dejen contadores contradictorios.</p>
+      </div>
+    </div>
+  </article>
+
+  <!-- I -->
+  <article class="acid-card reveal" style="--accent:var(--cyan)">
+    <div class="acid-top">
+      <div class="acid-letter">I</div>
+      <div class="acid-info">
+        <span class="role">Aislamiento · sin interferencias</span>
+        <h3>Las operaciones concurrentes no se pisan</h3>
+        <p>Dos operaciones simultáneas no ven estados intermedios de la otra ni corrompen el mismo registro.</p>
+      </div>
+    </div>
+    <div class="acid-body">
+      <figure class="code">
+        <figcaption><span class="dot"></span>SequelizeProfileRepository.saveStats() <span class="lines">L28–L31</span></figcaption>
+        <pre><code><span class="k">async</span> <span class="f">saveStats</span>(<span class="v">userId</span>, <span class="v">values</span>) {
+  <span class="k">const</span> [<span class="v">row</span>] = <span class="k">await</span> <span class="k">this</span>.<span class="p">models</span>.<span class="t">PlayerStats</span>
+    .<span class="f">upsert</span>({ <span class="p">userId</span>, ...<span class="v">values</span>, <span class="p">updatedAt</span>: <span class="k">new</span> <span class="t">Date</span>() });
+  <span class="k">return</span> <span class="v">row</span>;
+}</code></pre>
+      </figure>
+      <div class="explain">
+        <span class="where">RoomManager.createRoom() · L17–L22</span>
+        <h4>Qué hace</h4>
+        <p>Se escribe con <code>upsert</code> (una sola sentencia atómica) y el generador de códigos repite hasta encontrar uno libre.</p>
+        <h4>Por qué cumple Aislamiento</h4>
+        <p><code>upsert</code> reemplaza el patrón leer-modificar-escribir, eliminando la <strong>race condition</strong>: no hay instante entre la lectura y la escritura donde otra operación pueda colarse. El motor serializa la escritura (SQLite bloquea escritores; PostgreSQL usa MVCC).</p>
+        <h4>Mismo patrón en salas</h4>
+        <p>El <code>do/while</code> que prueba códigos solo acepta uno que no exista todavía, de modo que dos hosts no pueden recibir el mismo código de sala.</p>
+      </div>
+    </div>
+  </article>
+
+  <!-- D -->
+  <article class="acid-card reveal" style="--accent:var(--violet)">
+    <div class="acid-top">
+      <div class="acid-letter">D</div>
+      <div class="acid-info">
+        <span class="role">Durabilidad · sobrevive al reinicio</span>
+        <h3>Lo confirmado no se pierde</h3>
+        <p>Una vez que la transacción hace commit, el dato permanece aunque el proceso caiga o el servidor se reinicie.</p>
+      </div>
+    </div>
+    <div class="acid-body">
+      <figure class="code">
+        <figcaption><span class="dot"></span>Backend/src/database/DatabaseFactory.js <span class="lines">L11–L18</span></figcaption>
+        <pre><code><span class="k">if</span> (<span class="k">this</span>.<span class="p">config</span>.<span class="p">useSqlite</span>) {
+  <span class="k">return</span> <span class="k">new</span> <span class="t">Sequelize</span>({
+    <span class="p">dialect</span>: <span class="s">'sqlite'</span>,
+    <span class="p">storage</span>: <span class="f">path</span>.<span class="f">resolve</span>(
+      <span class="v">__dirname</span>, <span class="s">'../../database.sqlite'</span>),
+    <span class="p">logging</span>: <span class="n">false</span>,
+  });
+}</code></pre>
+      </figure>
+      <div class="explain">
+        <span class="where">DatabaseFactory.build() + models</span>
+        <h4>Qué hace</h4>
+        <p>El dialecto SQLite apunta a un <strong>archivo en disco</strong>; en producción el mismo factory crea un Sequelize <code>postgres</code> con SSL opcional.</p>
+        <h4>Por qué cumple Durabilidad</h4>
+        <p>Los commits se escriben en <code>database.sqlite</code> (o en el volumen de PostgreSQL), no en memoria: sobreviven al <code>ctrl+C</code> o a un crash. Los modelos usan <code>timestamps: true</code>, que además deja rastro auditable de <code>createdAt</code>/<code>updatedAt</code>.</p>
+      </div>
+    </div>
+  </article>
+</section>
+
+<!-- ============ CAP ============ -->
+<section id="cap" class="wrap">
+  <div class="sec-head reveal">
+    <span class="sec-tag">05 / CAP</span>
+    <h2>El reparto bajo partición</h2>
+    <p>Este backend no es un clúster: elige según el subsistema.</p>
+  </div>
+
+  <div class="cap-intro">
+    <div class="cap-text reveal">
+      <p style="margin-top:0">El teorema CAP dice que un sistema distribuido solo puede garantizar <b>dos</b> de estas tres propiedades a la vez cuando la red se divide (<em>partition</em>). No se elige libremente: cuando hay partición, estás obligado a elegir entre seguir respondiendo (A) o devolver siempre el dato correcto (C).</p>
+      <p class="theorem">Aquí el diseño separa los datos de cuenta (consistentes y durables) del estado de las partidas (disponible, efímero).</p>
+    </div>
+    <div class="tri-wrap reveal">
+      <div class="tri">
+        <div class="tri-shape"></div>
+        <div class="node c"><b>C</b>Consistencia</div>
+        <div class="node a"><b>A</b>Disponibilidad</div>
+        <div class="node pp"><b>P</b>Tolerancia a partición</div>
+        <div class="center"><em>Solo 2</em>cuando P ocurre</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cap-cards">
+    <div class="cap-card reveal" style="border-top:2px solid var(--lime)">
+      <span class="letter" style="color:var(--lime)">C / CONSISTENCY</span>
+      <h4>Consistencia</h4>
+      <p>Toda lectura ve la última escritura confirmada. En este backend lo aportan las restricciones únicas y los triggers de la base de datos.</p>
+    </div>
+    <div class="cap-card reveal" style="border-top:2px solid var(--cyan)">
+      <span class="letter" style="color:var(--cyan)">A / AVAILABILITY</span>
+      <h4>Disponibilidad</h4>
+      <p>Toda petición recibe respuesta (sin error), aunque la red falle. Lo aportan los sockets en memoria que nunca dejan de atender eventos.</p>
+    </div>
+    <div class="cap-card reveal" style="border-top:2px solid var(--violet)">
+      <span class="letter" style="color:var(--violet)">P / PARTITION</span>
+      <h4>Tolerancia a partición</h4>
+      <p>El sistema sigue operando aunque se pierdan mensajes entre nodos. La elección real depende del despliegue (¿un solo nodo o varios con réplicas?).</p>
+    </div>
+  </div>
+
+  <div class="placement">
+    <div class="sys cp reveal">
+      <span class="path">auth · profile · Backend/src/database · Backend/src/repositories</span>
+      <div class="verdict">CP<small>consistencia + tolerancia a partición</small></div>
+      <h3>Datos de cuenta</h3>
+      <p style="color:#b8bdc6;font-size:.92rem;margin:10px 0 0">Persistidos con Sequelize (SQLite/PostgreSQL) con <code>UNIQUE</code> y triggers. Prioriza la corrección del dato.</p>
+      <ul>
+        <li><span class="tick yes">✔</span> Acepta rechazar/mandar error antes que devolver una cuenta inconsistente.</li>
+        <li><span class="tick yes">✔</span> Escribe en disco → garantías ACID completas.</li>
+        <li><span class="tick no">✘</span> En SQLite es un único nodo: no hay partición de red real → es <b>CA</b>. Con PostgreSQL replicado pasa a <b>CP</b>.</li>
+      </ul>
+    </div>
+    <div class="sys ap reveal">
+      <span class="path">salas de juego · Backend/src/socketio/InMemoryRoomStore.js</span>
+      <div class="verdict">AP<small>disponibilidad + tolerancia a partición</small></div>
+      <h3>Estado de las partidas</h3>
+      <figure class="code" style="margin:14px 0 0">
+        <figcaption><span class="dot" style="background:var(--violet)"></span>InMemoryRoomStore.js <span class="lines">L3–L7</span></figcaption>
+        <pre><code><span class="k">constructor</span>() {
+  <span class="k">this</span>.<span class="p">rooms</span> = {};
+}</code></pre>
+      </figure>
+      <ul>
+        <li><span class="tick yes">✔</span> Las salas viven en un objeto en memoria: responden siempre y rápido.</li>
+        <li><span class="tick no">✘</span> Se pierden al reiniciar el servidor (estado efímero, sin DUrabilidad).</li>
+        <li><span class="tick no">✘</span> Sin replicación: cada nodo tendría su propia verdad → sin consistencia global.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ VERDICT ============ -->
+<section id="verdict" class="wrap">
+  <div class="sec-head reveal">
+    <span class="sec-tag">06 / CONCLUSIÓN</span>
+    <h2>Veredicto</h2>
+    <p>ACID vive en la base de datos; CAP se decide por subsistema.</p>
+  </div>
+  <div class="cap-text reveal" style="max-width:82ch">
+    <p style="margin-top:0"><b style="color:var(--lime)">ACID</b> se cumple íntegramente en la capa de persistencia: <b>atomicidad</b> con <code>try/finally</code> y operaciones atómicas, <b>consistencia</b> con <code>UNIQUE</code> + validación + triggers, <b>aislamiento</b> con <code>upsert</code>/<code>findOrCreate</code> y el motor, y <b>durabilidad</b> por el archivo en disco o PostgreSQL.</p>
+    <p><b style="color:var(--cyan)">CAP</b> no es una sola decisión: el backend elige <b>CP/CA</b> para las cuentas (correcto antes que disponible) y <b>AP</b> para las salas de juego (disponible antes que consistente o durable). Esa división es intencional y coherente: perder una sala efímera es aceptable; corromper una cuenta, no.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap in">
+    <span>ACID &amp; CAP · verificado contra <code>Backend/src</code></span>
+    <span>Elemental Universe · auditoría de la capa de datos</span>
+  </div>
+</footer>
+
+<script>
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+    });
+  }, { threshold: 0.12 });
+  document.querySelectorAll('.reveal').forEach((el, i) => {
+    el.style.transitionDelay = (i % 3) * 70 + 'ms';
+    io.observe(el);
+  });
+</script>
+</body>
+</html>

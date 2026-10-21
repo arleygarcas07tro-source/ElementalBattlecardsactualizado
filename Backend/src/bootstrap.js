@@ -11,11 +11,16 @@ const DatabaseFactory = require('./database/DatabaseFactory');
 const DatabaseInitializer = require('./database/DatabaseInitializer');
 const buildModels = require('./database/models');
 const SequelizeUserRepository = require('./repositories/SequelizeUserRepository');
+const SequelizeProfileRepository = require('./repositories/SequelizeProfileRepository');
 const BcryptPasswordHasher = require('./services/BcryptPasswordHasher');
 const JwtTokenService = require('./services/JwtTokenService');
 const AuthService = require('./services/AuthService');
+const ProfileService = require('./services/ProfileService');
 const AuthController = require('./http/controllers/AuthController');
+const ProfileController = require('./http/controllers/ProfileController');
 const buildAuthRouter = require('./http/routes/authRoutes');
+const buildProfileRouter = require('./http/routes/profileRoutes');
+const createAuthMiddleware = require('./http/middleware/authMiddleware');
 const AppFactory = require('./http/AppFactory');
 const InMemoryRoomStore = require('./socketio/InMemoryRoomStore');
 const RoomCodeGenerator = require('./socketio/RoomCodeGenerator');
@@ -45,9 +50,9 @@ async function bootstrap() {
     databaseAvailable = false;
   }
 
-  const authRouter = buildAuthRouterIfEnabled({ config, logger, sequelize, databaseAvailable });
+  const { authRouter, profileRouter } = buildApiRouters({ config, logger, sequelize, databaseAvailable });
 
-  const app = new AppFactory({ config, logger }).build({ authRouter });
+  const app = new AppFactory({ config, logger }).build({ authRouter, profileRouter });
 
   const server = http.createServer(app);
   const io = new Server(server, { cors: { origin: config.corsOrigin } });
@@ -71,30 +76,40 @@ async function bootstrap() {
   });
 }
 
-function buildAuthRouterIfEnabled({ config, logger, sequelize, databaseAvailable }) {
-  const authEnabled = config.dbEnabled && databaseAvailable;
-  if (!authEnabled) {
-    logger.info('Rutas de autenticación deshabilitadas (modo LAN)');
-    return null;
+function buildApiRouters({ config, logger, sequelize, databaseAvailable }) {
+  const disabled = { authRouter: null, profileRouter: null };
+
+  if (!(config.dbEnabled && databaseAvailable)) {
+    logger.info('Rutas de autenticación y perfil deshabilitadas (modo LAN)');
+    return disabled;
   }
 
   try {
     const models = buildModels(sequelize);
-    const userRepository = new SequelizeUserRepository(models.User);
+    const tokenService = new JwtTokenService(config.jwtSecret, { expiresIn: config.jwtExpiresIn });
+
     const authService = new AuthService({
-      userRepository,
+      userRepository: new SequelizeUserRepository(models.User),
       passwordHasher: new BcryptPasswordHasher(10),
-      tokenService: new JwtTokenService(config.jwtSecret, { expiresIn: config.jwtExpiresIn }),
+      tokenService,
       logger,
     });
-    const authController = new AuthController(authService);
-    const router = buildAuthRouter(authController);
+    const authRouter = buildAuthRouter(new AuthController(authService));
 
-    logger.info('Rutas de autenticación habilitadas');
-    return router;
+    const profileService = new ProfileService({
+      profileRepository: new SequelizeProfileRepository(models),
+      logger,
+    });
+    const profileRouter = buildProfileRouter(
+      new ProfileController(profileService),
+      createAuthMiddleware(tokenService)
+    );
+
+    logger.info('Rutas de autenticación y perfil habilitadas');
+    return { authRouter, profileRouter };
   } catch (error) {
-    logger.warn('No se pudieron cargar las rutas de autenticación:', error.message);
-    return null;
+    logger.warn('No se pudieron cargar las rutas de API:', error.message);
+    return disabled;
   }
 }
 

@@ -1,75 +1,10 @@
 import Phaser from 'phaser';
 import { play as playSfx } from '../helpers/audioManager.js';
+import DomSceneBase from './ui/DomSceneBase.js';
+import { ELEMENTS, elementsNavHTML, energyParticlesHTML } from './ui/elementCatalog.js';
+import { ABOUT_SECTIONS as SECTIONS } from '../content/aboutContent.js';
 
-const ELEMENTS = [
-    { key: 'agua',       name: 'Agua',       color: '#38bdf8', soft: 'rgba(56,189,248,0.14)',  glow: 'rgba(56,189,248,0.42)',  img: '/assets/images/iconos/agua.jpeg' },
-    { key: 'fuego',      name: 'Fuego',      color: '#fb5a2a', soft: 'rgba(251,90,42,0.14)',   glow: 'rgba(251,90,42,0.42)',   img: '/assets/images/iconos/fuego.jpeg' },
-    { key: 'aire',       name: 'Aire',       color: '#6fe3ff', soft: 'rgba(111,227,255,0.14)', glow: 'rgba(111,227,255,0.42)', img: '/assets/images/iconos/luz.jpeg' },
-    { key: 'tierra',     name: 'Tierra',     color: '#a78bfa', soft: 'rgba(167,139,250,0.14)', glow: 'rgba(167,139,250,0.42)', img: '/assets/images/iconos/espiritu.jpeg' },
-    { key: 'naturaleza', name: 'Naturaleza', color: '#34d97b', soft: 'rgba(52,217,123,0.14)',  glow: 'rgba(52,217,123,0.42)',  img: '/assets/images/iconos/planta.jpeg' },
-    { key: 'oscuridad',  name: 'Oscuridad',  color: '#c026d3', soft: 'rgba(192,38,211,0.16)',  glow: 'rgba(192,38,211,0.45)',  img: '/assets/images/iconos/sombra.jpeg' }
-];
-
-const SECTIONS = [
-    {
-        id: 'juego',
-        icon: '🎮',
-        title: 'El juego',
-        body: `
-            <p>Elemental Battlecards es un juego de cartas estratégico digital inspirado en la
-            <strong>Teoría de Conjuntos</strong>, donde cada mecánica del sistema corresponde a una operación
-            matemática formal.</p>
-            <p>El objetivo del jugador es vencer al oponente mediante combate, o completar el conjunto total
-            de <strong>esencias</strong> y <strong>elementos activos</strong> en el campo de batalla.</p>
-        `
-    },
-    {
-        id: 'principios',
-        icon: '🔢',
-        title: 'Principios matemáticos',
-        body: `
-            <ul class="formulas">
-                <li>
-                    <span class="formula">A ∪ B ∪ C</span>
-                    <span class="formula-desc"><strong>Unión:</strong> obtener los 6 tipos elementales en tu campo o la colección completa de las 6 esencias.</span>
-                </li>
-                <li>
-                    <span class="formula">A ∩ A</span>
-                    <span class="formula-desc"><strong>Intersección:</strong> la fusión de dos cartas idénticas para crear cartas de nivel superior.</span>
-                </li>
-                <li>
-                    <span class="formula">A − B</span>
-                    <span class="formula-desc"><strong>Diferencia:</strong> el sistema de ventajas elementales, donde un elemento supera al que "resta".</span>
-                </li>
-                <li>
-                    <span class="formula">A<sup>c</sup></span>
-                    <span class="formula-desc"><strong>Complemento:</strong> cartas de nivel 3 que quedan fuera de la relación elemental y anulan ventajas y desventajas.</span>
-                </li>
-            </ul>
-        `
-    },
-    {
-        id: 'vision',
-        icon: '👁️',
-        title: 'Visión del juego',
-        body: `
-            <p>Durante la partida, el jugador administra recursos (<strong>esencias</strong>), controla un campo de
-            <strong>seis espacios</strong>, invoca cartas, realiza fusiones, interactúa con el rival mediante
-            ataques y construye estrategias basadas en combinaciones elementales y operaciones matemáticas.</p>
-        `
-    },
-    {
-        id: 'resultado',
-        icon: '🏆',
-        title: 'Resultado',
-        body: `
-            <p>El resultado es un <strong>TCG elegante, educativo y competitivo</strong>, con una identidad visual
-            basada en iconografía elemental, colores definidos y un layout claro optimizado para pantallas modernas.</p>
-        `
-    }
-];
-
-export default class AboutScene extends Phaser.Scene {
+export default class AboutScene extends DomSceneBase {
     constructor() {
         super('AboutScene');
         this.playerData = {};
@@ -83,13 +18,7 @@ export default class AboutScene extends Phaser.Scene {
     create() {
         const { width, height } = this.scale;
 
-        const particles = Array.from({ length: 10 }, (_, i) => {
-            const left = Math.round(4 + ((i * 37) % 92));
-            const top = Math.round(8 + ((i * 53) % 70));
-            const size = 3 + (i % 3) * 2;
-            const delay = (i % 6) * -1.4;
-            return `<span class="energy" style="left:${left}%; top:${top}%; width:${size}px; height:${size}px; animation-delay:${delay}s;"></span>`;
-        }).join('');
+        const particles = energyParticlesHTML();
 
         const emblemOrbs = ELEMENTS.map((el, i) => {
             const angle = i * 60 - 90;
@@ -100,11 +29,7 @@ export default class AboutScene extends Phaser.Scene {
             `;
         }).join('');
 
-        const elementsNavHtml = ELEMENTS.map(el => `
-            <span class="nav-orb" style="--el:${el.color}; --el-soft:${el.soft};" title="${el.name}">
-                <img src="${el.img}" alt="${el.name}">
-            </span>
-        `).join('');
+        const elementsNavHtml = elementsNavHTML();
 
         const sectionsHtml = SECTIONS.map((sec, i) => `
             <article class="sec ${i === 0 ? 'open' : ''}" data-sec="${sec.id}">
@@ -662,66 +587,19 @@ export default class AboutScene extends Phaser.Scene {
             </nav>
         </div>`;
 
-        this.domUI = this.add.dom(0, 0).createFromHTML(html);
-        this.domUI.setOrigin(0);
-        this.domUI.setDepth(9999);
+        const node = this.mountDOM(html, { flex: true });
 
-        this.domUI.node.style.position = 'absolute';
-        this.domUI.node.style.left = '0';
-        this.domUI.node.style.top = '0';
-        this.domUI.node.style.display = 'flex';
-        this.domUI.node.style.flexDirection = 'column';
-        this.domUI.node.style.width = width + 'px';
-        this.domUI.node.style.height = height + 'px';
-
-        const node = this.domUI.node;
-
-        const bind = (selector, fn) => {
-            const els = node.querySelectorAll(selector);
-            els.forEach(el => {
-                const handler = ev => { ev.preventDefault(); playSfx('click', this); fn(ev, el); };
-                el.addEventListener('click', handler);
-                this.listeners.push({ el, handler, type: 'click' });
-            });
-        };
-
-        bind('[data-nav="home"]', () => this.scene.start('HomeScenes', { playerData: this.playerData }));
-        bind('[data-nav="settings"]', () => this.scene.start('SettingsScene', { playerData: this.playerData }));
-        bind('[data-nav="cards"]', () => this.scene.start('CardsScene', { playerData: this.playerData }));
+        this.bind('[data-nav="home"]', () => this.scene.start('HomeScenes', { playerData: this.playerData }));
+        this.bind('[data-nav="settings"]', () => this.scene.start('SettingsScene', { playerData: this.playerData }));
+        this.bind('[data-nav="cards"]', () => this.scene.start('CardsScene', { playerData: this.playerData }));
 
         // Secciones plegables.
         const heads = node.querySelectorAll('.sec-head');
         heads.forEach(head => {
-            const handler = () => {
+            this.track(head, () => {
                 const sec = head.closest('.sec');
                 if (sec) sec.classList.toggle('open');
-            };
-            head.addEventListener('click', handler);
-            this.listeners.push({ el: head, handler, type: 'click' });
+            }, 'click');
         });
-
-        this.scale.on('resize', this.onResize, this);
-        this.events.on('shutdown', this.onShutdown, this);
-    }
-
-    onResize(gameSize) {
-        if (!gameSize) return;
-        const { width, height } = gameSize;
-        if (this.domUI && this.domUI.node) {
-            this.domUI.node.style.width = width + 'px';
-            this.domUI.node.style.height = height + 'px';
-        }
-    }
-
-    onShutdown() {
-        this.listeners.forEach(({ el, handler, type }) => {
-            if (el && el.removeEventListener) el.removeEventListener(type, handler);
-        });
-        this.listeners = [];
-        this.scale.off('resize', this.onResize, this);
-        if (this.domUI) {
-            this.domUI.destroy();
-            this.domUI = null;
-        }
     }
 }

@@ -1,6 +1,17 @@
 // Progreso del jugador persistido en localStorage.
 // Responsabilidad: llevar el conteo real de victorias, cartas coleccionadas,
 // misiones y logros de cara al perfil. No conecta con Phaser ni con el DOM.
+// Cuando hay sesión iniciada, sincroniza en segundo plano con /api/profile.
+
+import {
+    isAuthenticated,
+    fetchProfile,
+    pushBattle,
+    pushFusion,
+    pushAttack,
+    pushFieldComplete,
+    pushCollectedCard
+} from './profileApi.js';
 
 const STORAGE_PREFIX = 'ebc_progress_';
 
@@ -57,6 +68,40 @@ function save(username, progress) {
     }
 }
 
+// Envía una mutación al servidor sin bloquear el juego (offline-first).
+function syncToServer(promise) {
+    if (!promise || typeof promise.catch !== 'function') return;
+    promise.catch((e) => console.warn('[playerProgress] No se pudo sincronizar con el servidor:', e.message || e));
+}
+
+// Descarga el progreso real desde el servidor y lo vuelca en localStorage.
+// Se usa tras el login para que el perfil refleje lo guardado en la base de datos.
+export async function hydrateProgressFromServer(username) {
+    if (!isAuthenticated()) return load(username);
+    try {
+        const profile = await fetchProfile();
+        if (!profile) return load(username);
+
+        const progress = {
+            battlesPlayed: profile.battlesPlayed || 0,
+            battlesWon: profile.battlesWon || 0,
+            currentStreak: profile.currentStreak || 0,
+            longestStreak: profile.longestStreak || 0,
+            collected: Array.isArray(profile.collected) ? profile.collected.slice() : [],
+            missions: { ...MISSION_DEFAULTS }
+        };
+        (profile.missions || []).forEach((mission) => {
+            progress.missions[mission.id] = mission.progress;
+        });
+
+        save(username, progress);
+        return progress;
+    } catch (e) {
+        console.warn('[playerProgress] No se pudo hidratar desde el servidor:', e.message || e);
+        return load(username);
+    }
+}
+
 function mergeValue(list, value) {
     if (!list.includes(value)) list.push(value);
 }
@@ -72,6 +117,7 @@ export function recordVictory(username) {
     progress.longestStreak = Math.max(progress.longestStreak, progress.currentStreak);
     progress.missions['primera-victoria'] = Math.min(progress.missions['primera-victoria'] + 1, MISSION_TARGETS['primera-victoria']);
     save(username, progress);
+    syncToServer(pushBattle('victoria'));
     return progress;
 }
 
@@ -83,6 +129,7 @@ export function recordDefeat(username) {
     progress.battlesPlayed += 1;
     progress.currentStreak = 0;
     save(username, progress);
+    syncToServer(pushBattle('derrota'));
     return progress;
 }
 
@@ -93,6 +140,7 @@ export function recordFusion(username) {
     const progress = load(username);
     progress.missions['fusionador'] += 1;
     save(username, progress);
+    syncToServer(pushFusion());
     return progress;
 }
 
@@ -103,6 +151,7 @@ export function recordFieldComplete(username) {
     const progress = load(username);
     progress.missions['coleccionista'] = Math.max(progress.missions['coleccionista'], 1);
     save(username, progress);
+    syncToServer(pushFieldComplete());
     return progress;
 }
 
@@ -132,6 +181,7 @@ export function recordAttackWithType(username, type) {
         }
     }
     save(username, progress);
+    syncToServer(pushAttack(type));
     return progress;
 }
 
@@ -143,6 +193,7 @@ export function recordCollectedCard(username, type, level) {
     const progress = load(username);
     mergeValue(progress.collected, `${type}-${level}`);
     save(username, progress);
+    syncToServer(pushCollectedCard(type, level));
     return progress;
 }
 

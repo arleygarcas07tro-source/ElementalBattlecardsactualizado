@@ -20,6 +20,20 @@ import BotAI from '../game/BotAI.js';
 import VictoryEvaluator from '../game/VictoryEvaluator.js';
 import CardDestructionService from '../game/CardDestructionService.js';
 import LANClient from '../game/LANClient.js';
+import { getGameMode } from '../game/gameModes.js';
+import { getGemRequirements } from '../game/objectivesCatalog.js';
+import { playGemCollectFx } from '../helpers/gemVisual.js';
+import { createArena, ensureBoardTextures, slotTextureKey, BOARD_TEXTURES, OWNER_THEME, drawHandTray, ornateLabel, SLOT_W, SLOT_GAP } from '../helpers/battlefieldArt.js';
+import {
+    createSlotHighlight,
+    createTargetMarker,
+    destroyFeedbackList,
+    playEvolutionBanner,
+    showBattleToast,
+    createTurnGlow,
+    setTurnGlowActive,
+    FEEDBACK_COLORS
+} from '../helpers/battlePresentation.js';
 
 /**
  * La escena principal donde se desarrolla el juego de cartas.
@@ -41,8 +55,12 @@ export default class GameScene extends Phaser.Scene {
         // Eliminamos las escalas antiguas. Ahora usaremos un tamaño fijo.
         // El tamaño de las cartas será igual al de los slots.
         // Tamaños visuales fijos para normalizar tamaño real de todas las texturas
-        this.cardHandSize = { width: 110, height: 158 }; // tamaño visual en mano
-        this.cardFieldSize = { width: 110, height: 158 }; // tamaño visual en campo / fusiones
+        this.cardHandSize = { width: 148, height: 198 }; // tamaño visual en mano propia
+        this.cardOpponentHandSize = { width: 132, height: 176 }; // mano rival (no tapa el perfil)
+        this.cardFieldSize = { width: 128, height: 172 }; // tamaño visual en campo / fusiones
+        this.selectionFeedback = []; // Highlights/marcadores temporales de la selección
+        this.playerTurnGlow = null;
+        this.opponentTurnGlow = null;
 
         // Flujo de turnos (estado, contadores y reglas) delegado a TurnManager.
         this.turn = new TurnManager(GAME_CONFIG);
@@ -63,6 +81,14 @@ export default class GameScene extends Phaser.Scene {
         this.gameStartData = data.gameStartData || null;
         this.vsBot = !!data.vsBot;
         this.bot = new BotAI(data.botDifficulty || 3); // 1-10, default: Normal (3)
+        // Modo de juego y dificultad de objetivos (gemas). El modo define las
+        // condiciones de victoria/derrota; la dificultad, cuántas gemas se piden.
+        this.mode = getGameMode(data.gameMode);
+        this.objectiveDifficulty = data.botDifficulty || data.objectiveDifficulty || 3;
+        if (this.bot && typeof this.bot.setGemFocus === 'function') {
+            this.bot.setGemFocus(!!(this.mode && this.mode.usesGems));
+        }
+        console.log('Modo de juego:', this.mode.id, '| Dificultad de objetivos:', this.objectiveDifficulty);
         console.log('GameScene iniciada con los datos del jugador:', this.playerData);
         console.log('Modo LAN:', this.isLAN, 'Rol:', this.playerRole);
         console.log('Dificultad del bot:', this.bot.difficulty, '(1=Muy Fácil, 10=Mito)');
@@ -131,10 +157,21 @@ export default class GameScene extends Phaser.Scene {
                 let isBoardOrDeck = false;
                 try {
                     const tex = child.texture && child.texture.key;
-                    if (tex === 'board-bg' || tex === 'slot' || tex === 'card-back-player' || tex === 'card-back-opponent') isBoardOrDeck = true;
+                    const boardKeys = ['board-bg', 'slot', 'card-back-player', 'card-back-opponent',
+                        'art-slot-player', 'art-slot-opponent', 'art-slot-neutral',
+                        'art-slot-hand-player', 'art-slot-hand-opponent',
+                        'art-vignette'];
+                    const isElementFrame = typeof tex === 'string' && tex.startsWith('art-card-');
+                    const isFeedbackDecor = typeof tex === 'string' && tex === 'art-slot-highlight';
+                    if (boardKeys.includes(tex) || isElementFrame || isFeedbackDecor) isBoardOrDeck = true;
                 } catch(e) { isBoardOrDeck = false; }
 
-                if (hasCardData || isSlot || isBoardOrDeck) {
+                // Feedback efímero de la selección / brillo de turno.
+                const isFeedbackObj = typeof name === 'string' && (
+                    name.startsWith('selection-feedback') || name === 'turn-glow'
+                );
+
+                if (hasCardData || isSlot || isBoardOrDeck || isFeedbackObj) {
                     try { if (child.destroy) child.destroy(); } catch (e) { /* ignore */ }
                 }
             });
@@ -146,6 +183,10 @@ export default class GameScene extends Phaser.Scene {
         this.turn.reset();
         // Set para marcar destrucciones en curso y evitar doble procesamiento
         this._pendingDestroys = new Set();
+        this.selectionFeedback = [];
+        this.playerTurnGlow = null;
+        this.opponentTurnGlow = null;
+        if (this.turnTimer) { this.turnTimer.destroy(); this.turnTimer = null; }
 
         // Mostramos un mensaje de bienvenida con el nombre del usuario temporal.
         console.log(`¡Bienvenido a GameScene, ${this.playerData?.username || 'Jugador'}!`);
@@ -184,6 +225,16 @@ export default class GameScene extends Phaser.Scene {
         // Creamos las instancias de los jugadores. La clase Player se encargará de su propio mazo y mano.
         this.player = new Player('player', this);
         this.opponent = new Player('opponent', this);
+
+        // Objetivos de gemas según dificultad (mismos para ambos jugadores).
+        this.gemRequirements = getGemRequirements(this.objectiveDifficulty);
+        this.player.gems.setRequirements(this.gemRequirements);
+        this.opponent.gems.setRequirements(this.gemRequirements);
+
+        // Estado del temporizador global (modo contrarreloj).
+        this.timeExpired = false;
+        this.matchTimerActive = false;
+        this.matchTimerEndAt = 0;
 
         this.player.drawInitialHand();
         this.opponent.drawInitialHand();
@@ -237,6 +288,16 @@ export default class GameScene extends Phaser.Scene {
         // ---------- MAZOS ----------
         this.createDecks();
 
+        // ---------- BANDEJAS DE MANO (integración con la arena) ----------
+        this.createHandTrays();
+
+        // ---------- BRILLO DE TURNO ----------
+        // Franja luminosa sobre la fila del bando activo (solo presentación).
+        this.opponentTurnGlow = createTurnGlow(this, height * 0.45 - battleRowYOffset, OWNER_THEME.opponent.glow, width * 0.88)
+            .setName('turn-glow');
+        this.playerTurnGlow = createTurnGlow(this, height * 0.55 + battleRowYOffset, OWNER_THEME.player.glow, width * 0.88)
+            .setName('turn-glow');
+
         // Avisar a la UI que la escena se creó exitosamente
         this.events.emit('board-ready');
 
@@ -268,6 +329,10 @@ export default class GameScene extends Phaser.Scene {
                     // Modo local o vs bot: el jugador siempre empieza
                     this.startPlayerTurn();
                 }
+
+                // Arranca el reloj de partida (contrarreloj) y publica los objetivos.
+                this.startMatchTimer();
+                this.events.emit('objectives-ready', this.getObjectivesPayload());
             } else {
                 console.log('[GameScene] start-game ignorado', { estadoActual: this.turn.state });
             }
@@ -282,6 +347,8 @@ export default class GameScene extends Phaser.Scene {
             if (this.scene.isActive('UIScene')) this.scene.stop('UIScene');
             // destruir temporizador si sigue activo
             if (this.turnTimer) { this.turnTimer.destroy(); this.turnTimer = null; }
+            // limpiar feedback de selección y brillos de turno
+            this.clearSelectionFeedback();
         });
 
         // Ya no hay botón "Terminar turno": el turno termina automáticamente
@@ -299,10 +366,12 @@ export default class GameScene extends Phaser.Scene {
         if (this.turn.state !== 'player-turn') return;
         if (this.turn.playerHasActed) {
             console.log('[GameScene] Ya realizaste tu acción este turno.');
+            showBattleToast(this, 'Ya realizaste tu acción este turno.', 0x9fb0c8);
             return;
         }
         if (this.turn.playerMustAttackThisTurn) {
             console.log('[GameScene] Estás obligado a atacar este turno. No puedes colocar cartas.');
+            showBattleToast(this, '¡Estás obligado a atacar este turno!', FEEDBACK_COLORS.attack);
             return;
         }
 
@@ -369,6 +438,11 @@ export default class GameScene extends Phaser.Scene {
                     this.selectedCard.setData('fieldIndex', fieldIndex);
                     this.selectedCard.setData('isRevealed', false);
                     this.selectedCard.setData('startPosition', { x: dropZone.x, y: dropZone.y });
+                    this.selectedCard.setDepth(1);
+                    // Aura elemental del elemento de la carta al entrar en el campo.
+                    if (cardPlayed && cardPlayed.type && typeof this.selectedCard.attachAura === 'function') {
+                        this.selectedCard.attachAura(TYPE_COLORS[cardPlayed.type] || 0xffffff);
+                    }
 
                     // 2. La carta jugada ya no es parte de la mano visual.
                     this['player-cards'] = this['player-cards'].filter(card => card !== this.selectedCard);
@@ -399,6 +473,7 @@ export default class GameScene extends Phaser.Scene {
         // Escenario 2: El slot está OCUPADO.
         } else {
             console.log(`Slot ${fieldIndex} ocupado. No se puede jugar la carta aquí. La carta volverá a la mano.`);
+            showBattleToast(this, 'Ese slot está ocupado.', 0x9fb0c8);
             // No hacemos nada. La bandera 'dropped' sigue en false y el evento 'dragend' la devolverá.
         }
     }
@@ -413,10 +488,12 @@ export default class GameScene extends Phaser.Scene {
         if (this.turn.state !== 'player-turn') return;
         if (this.turn.playerHasActed) {
             console.log('[GameScene] Ya realizaste tu acción este turno.');
+            showBattleToast(this, 'Ya realizaste tu acción este turno.', 0x9fb0c8);
             return;
         }
         if (this.turn.playerMustAttackThisTurn) {
             console.log('[GameScene] Estás obligado a atacar este turno. No puedes fusionar.');
+            showBattleToast(this, '¡Estás obligado a atacar este turno!', FEEDBACK_COLORS.attack);
             return;
         }
 
@@ -429,6 +506,7 @@ export default class GameScene extends Phaser.Scene {
         // 2. Validación: AMBAS cartas deben estar en el campo (solo campo⇄campo).
         if (!selectedCardObject.getData('isCardOnField') || !targetCardObject.getData('isCardOnField')) {
             console.log('%cFusión inválida: ambas cartas deben estar en el campo.', 'color: #ff4444');
+            showBattleToast(this, 'Ambas cartas deben estar en el campo.', 0x9fb0c8);
             this.deselectCard(false);
             return;
         }
@@ -442,6 +520,7 @@ export default class GameScene extends Phaser.Scene {
 
         if (!areSameType || !areSameLevel) {
             console.log('Fallo de fusión: Las cartas no son compatibles.');
+            showBattleToast(this, 'Solo fusionan cartas del mismo elemento y nivel.', FEEDBACK_COLORS.fusion);
             this.deselectCard(); // Deseleccionamos la carta activa
             return;
         }
@@ -528,9 +607,13 @@ export default class GameScene extends Phaser.Scene {
                 if (fusionDone) return;
                 fusionDone = true;
                 console.log('[GameScene] Carta fusionada creada en campo', { fieldIndex: targetIndex, fusedCard: fusedCardData });
-                // Progreso: la fusión cuenta y la carta resultante entra en la colección.
+                // Banner de evolución (presentación): celebra el nuevo nivel.
+                playEvolutionBanner(this, fusionPosition.x, fusionPosition.y - 18, TYPE_COLORS[fusedCardData.type] || 0xffffff, fusedCardData.level);                // Progreso: la fusión cuenta y la carta resultante entra en la colección.
                 recordFusion((this.playerData && this.playerData.username) || 'Jugador');
                 recordCollectedCard((this.playerData && this.playerData.username) || 'Jugador', fusedCardData.type, fusedCardData.level);
+                // Gema elemental: una por carta de nivel 3.
+                const gemType = this.player.registerGem(fusedCardData);
+                if (gemType) this.showGemPopup(fusionPosition.x, fusionPosition.y - 30, gemType);
                 this._animationComplete();
                 this.endPlayerTurn();
             };
@@ -558,10 +641,12 @@ export default class GameScene extends Phaser.Scene {
         if (this.turn.state !== 'player-turn') return;
         if (this.turn.playerHasActed) {
             console.log('[GameScene] Ya realizaste tu acción este turno.');
+            showBattleToast(this, 'Ya realizaste tu acción este turno.', 0x9fb0c8);
             return;
         }
         if (this.turn.playerMustAttackThisTurn) {
             console.log('[GameScene] Estás obligado a atacar este turno. No puedes fusionar.');
+            showBattleToast(this, '¡Estás obligado a atacar este turno!', FEEDBACK_COLORS.attack);
             return;
         }
 
@@ -577,6 +662,7 @@ export default class GameScene extends Phaser.Scene {
         // 2. Si el modelo devuelve null, la fusión no era válida (tipos/niveles no coinciden).
         if (!fusionResult) {
             console.log('[GameScene] Fallo de fusión desde la mano: cartas no compatibles', { handCardId: handCardData.id, targetIndex });
+            showBattleToast(this, 'Solo fusionan cartas del mismo elemento y nivel.', FEEDBACK_COLORS.fusion);
             this.deselectCard(); // Deseleccionamos la carta de la mano.
             return;
         }
@@ -622,9 +708,14 @@ export default class GameScene extends Phaser.Scene {
             const finishFusion = () => {
                 if (fusionDone) return;
                 fusionDone = true;
+                // Banner de evolución (presentación): celebra el nuevo nivel.
+                playEvolutionBanner(this, fusionPosition.x, fusionPosition.y - 18, TYPE_COLORS[fusionResult.type] || 0xffffff, fusionResult.level);
                 // Progreso: la fusión cuenta y la carta resultante entra en la colección.
                 recordFusion((this.playerData && this.playerData.username) || 'Jugador');
                 recordCollectedCard((this.playerData && this.playerData.username) || 'Jugador', fusionResult.type, fusionResult.level);
+                // Gema elemental: una por carta de nivel 3.
+                const gemType = this.player.registerGem(fusionResult);
+                if (gemType) this.showGemPopup(fusionPosition.x, fusionPosition.y - 30, gemType);
                 this._animationComplete();
                 this.endPlayerTurn();
             };
@@ -648,6 +739,9 @@ export default class GameScene extends Phaser.Scene {
      */
     startOpponentTurn() {
         this.turn.beginOpponentTurn();
+        setTurnGlowActive(this, this.opponentTurnGlow, true);
+        setTurnGlowActive(this, this.playerTurnGlow, false);
+        this.events.emit('update-turn-counter', this.turn.playerTurnNumber, this.mode ? this.mode.maxTurns : null);
         let opponentHasActed = false;
 
         // Limpieza bloqueos vencidos y reset consecutiveAttacks si no atacó el turno anterior
@@ -790,6 +884,9 @@ export default class GameScene extends Phaser.Scene {
         const slotObj = this['opponent_battle_slots'][targetIndex];
         const fusedObj = this.createFieldCard(slotObj, res.newCard, { isOpponent: true, revealed: true, fieldIndex: targetIndex });
         try { fusedObj.setTexture(`card-${res.newCard.type}-${res.newCard.level}`); } catch (e) {}
+        // Gema elemental del oponente (una por carta de nivel 3).
+        const gemType = this.opponent.registerGem(res.newCard);
+        if (gemType && fusedObj) this.showGemPopup(fusedObj.x, fusedObj.y - 30, gemType);
         this.refreshOpponentHand();
         this.updateDeckCounts();
         this.endOpponentTurn(true);
@@ -878,6 +975,12 @@ export default class GameScene extends Phaser.Scene {
             // Asegurar que la textura frontal pinta exactamente al tamaño del slot
             cardObject.setDisplaySize(this.cardFieldSize.width, this.cardFieldSize.height);
         }
+        if (cardData && cardData.level === 3 && typeof cardObject.addGemBadge === 'function') {
+            cardObject.addGemBadge();
+        }
+        if (cardData && cardData.type && typeof cardObject.attachAura === 'function') {
+            cardObject.attachAura(TYPE_COLORS[cardData.type] || 0xffffff);
+        }
     }
 
 
@@ -886,9 +989,12 @@ export default class GameScene extends Phaser.Scene {
      */
     startPlayerTurn() {
         this.turn.beginPlayerTurn();
+        setTurnGlowActive(this, this.playerTurnGlow, true);
+        setTurnGlowActive(this, this.opponentTurnGlow, false);
 
         console.log('[GameScene] Inicio del turno del JUGADOR', { turnNumber: this.turn.playerTurnNumber, mustAttack: this.turn.playerMustAttackThisTurn });
         this.events.emit('update-turn-indicator', 'player');
+        this.events.emit('update-turn-counter', this.turn.playerTurnNumber, this.mode ? this.mode.maxTurns : null);
         // Emitimos el estado del contador obligatorio para que la UI lo muestre
         this.events.emit('update-attack-counter', 'player', this.turn.playerTurnsSinceLastAttack + 1, this.turn.playerMustAttackThisTurn);
 
@@ -955,9 +1061,9 @@ export default class GameScene extends Phaser.Scene {
         this.deselectCard(false);
 
         // Comprobamos condiciones de victoria antes de pasar el turno
-        const winner = this.checkVictoryConditions();
-        if (winner) {
-            this.endGame(winner);
+        const outcome = this.checkVictoryConditions();
+        if (outcome.winner || outcome.reason === 'timeExpired') {
+            this.endGame(outcome.winner, outcome.reason);
             return;
         }
 
@@ -988,9 +1094,9 @@ export default class GameScene extends Phaser.Scene {
         this.events.emit('update-attack-counter', 'opponent', this.turn.opponentTurnsSinceLastAttack + 1, this.turn.opponentMustAttackThisTurn);
 
         // Comprobamos condiciones de victoria
-        const winner = this.checkVictoryConditions();
-        if (winner) {
-            this.endGame(winner);
+        const outcome = this.checkVictoryConditions();
+        if (outcome.winner || outcome.reason === 'timeExpired') {
+            this.endGame(outcome.winner, outcome.reason);
             return;
         }
 
@@ -1017,6 +1123,57 @@ export default class GameScene extends Phaser.Scene {
             // Si no es el turno del jugador, nos aseguramos que el timer esté en 0
             this.events.emit('update-timer', 0);
         }
+
+        // Reloj global de partida (modo contrarreloj).
+        if (this.matchTimerActive && !this.timeExpired) {
+            const remaining = Math.max(0, this.matchTimerEndAt - this.time.now);
+            this.events.emit('update-match-timer', Math.ceil(remaining / 1000));
+            if (remaining <= 0) {
+                this.timeExpired = true;
+                this.matchTimerActive = false;
+                console.log('[GameScene] Tiempo de partida agotado -> ambos pierden');
+                this.endGame(null, 'timeExpired');
+            }
+        }
+    }
+
+    /**
+     * Arranca el reloj global de la partida si el modo lo define (contrarreloj).
+     */
+    startMatchTimer() {
+        if (!this.mode || !this.mode.matchTimeMs) {
+            this.matchTimerActive = false;
+            this.events.emit('update-match-timer', -1);
+            return;
+        }
+        this.timeExpired = false;
+        this.matchTimerActive = true;
+        this.matchTimerEndAt = this.time.now + this.mode.matchTimeMs;
+        this.events.emit('update-match-timer', Math.ceil(this.mode.matchTimeMs / 1000));
+    }
+
+    /**
+     * Empaqueta el estado de objetivos y gemas para la UI.
+     * @returns {object}
+     */
+    getObjectivesPayload() {
+        return {
+            mode: this.mode,
+            requirements: this.gemRequirements,
+            maxTurns: this.mode ? this.mode.maxTurns : null,
+            player: this.player.gems.progress(),
+            opponent: this.opponent.gems.progress()
+        };
+    }
+
+    /**
+     * Muestra la animación de recogida de una gema en el punto de la fusión.
+     * @param {number} x
+     * @param {number} y
+     * @param {string} gemType Elemento de la gema ('fuego', 'agua', ...).
+     */
+    showGemPopup(x, y, gemType) {
+        playGemCollectFx(this, x, y, gemType, { label: '+1 GEMA' });
     }
 
     /**
@@ -1028,6 +1185,7 @@ export default class GameScene extends Phaser.Scene {
         if (this.turn.state !== 'player-turn') return;
         if (this.turn.playerHasActed) {
             console.log('[GameScene] Ya realizaste tu acción este turno.');
+            showBattleToast(this, 'Ya realizaste tu acción este turno.', 0x9fb0c8);
             return;
         }
 
@@ -1035,6 +1193,7 @@ export default class GameScene extends Phaser.Scene {
         const blocked = attackingCardObject.getData('blockedTurn');
         if (blocked === this.turn.playerTurnNumber) {
             console.log('[GameScene] Esta carta está descansando este turno (restricción por nivel).');
+            showBattleToast(this, 'Esta carta debe descansar este turno.', 0x9fb0c8);
             return;
         }
 
@@ -1216,25 +1375,35 @@ export default class GameScene extends Phaser.Scene {
 
     /**
      * Comprueba todas las condiciones de victoria al final de un turno.
-     * @returns {string|null} 'player', 'opponent' o null.
+     * @returns {{winner: string|null, reason: string|null, log: string|null}}
      */
     checkVictoryConditions() {
-        const result = VictoryEvaluator.evaluate({ player: this.player, opponent: this.opponent, turn: this.turn, config: GAME_CONFIG });
+        const result = VictoryEvaluator.evaluate({
+            player: this.player,
+            opponent: this.opponent,
+            turn: this.turn,
+            config: GAME_CONFIG,
+            gems: { player: this.player.gems, opponent: this.opponent.gems },
+            mode: this.mode,
+            timeExpired: this.timeExpired
+        });
         if (result.log) console.log(result.log);
-        return result.winner;
+        return result;
     }
 
     /**
      * Finaliza la partida y muestra un mensaje de victoria/derrota.
      * @param {string} winner El ganador de la partida ('player' u 'opponent').
      */
-    endGame(winner) {
+    endGame(winner, reason = null) {
         this.turn.state = 'game-over';
         if (this.turnTimer) this.turnTimer.destroy();
+        this.matchTimerActive = false;
         this.events.emit('update-timer', 0); // Limpia el contador en la UI
+        this.events.emit('update-match-timer', 0); // Limpia el reloj de partida
         // No hay botón de terminar turno ahora.
 
-        console.log('[GameScene] Fin de la partida. Ganador:', winner);
+        console.log('[GameScene] Fin de la partida. Ganador:', winner, '| Motivo:', reason);
 
         // Progreso real: cada victoria/derrota se cuenta y alimenta misiones y logros.
         const username = (this.playerData && this.playerData.username) || 'Jugador';
@@ -1260,7 +1429,7 @@ export default class GameScene extends Phaser.Scene {
         this.input.enabled = false;
 
         // Emitimos un evento para que la UIScene muestre la pantalla de fin de juego.
-        this.events.emit('game-over', winner);
+        this.events.emit('game-over', winner, reason);
     }
 
     /**
@@ -1459,125 +1628,27 @@ export default class GameScene extends Phaser.Scene {
     }
 
     // Decoración visual del campo de batalla (solo presentación, sin lógica).
-    // Capa futbolística: tablero de piedra oscura con viñeta, energía naranja
-    // (oponente) / azul (jugador), emblema central dorado, marcos ornamentales
-    // y runas de cristal. Todo se agrupa en this.fieldDecor (rendered bajo las cartas).
+    // Arena cinematográfica: losa de piedra con perspectiva, emblema central con
+    // anillo giratorio, franjas de energía (roja oponente / azul jugador), marcos
+    // ornamentales sobre las filas reales, seis cristales elementales, ruinas y
+    // motas ambientales. Todo se agrupa en this.fieldDecor (bajo las cartas).
     createFieldDecor() {
-        const W = this.scale.width;
-        const H = this.scale.height;
-        const CX = W / 2;
-        const CY = H / 2;
-        const GOLD = 0xcfaf6d;
-        const GOLD_BRIGHT = 0xe8cf8f;
-        const ORANGE = 0xff9a5c;
-        const BLUE = 0x5bc0ff;
-
-        const container = this.add.container(0, 0).setDepth(-0.4);
-        this.fieldDecor = container;
-
-        const diamondPts = (x, y, r) => [
-            new Phaser.Geom.Point(x, y - r),
-            new Phaser.Geom.Point(x + r, y),
-            new Phaser.Geom.Point(x, y + r),
-            new Phaser.Geom.Point(x - r, y)
-        ];
-
-        // Viñeta oscura suave para mejorar la legibilidad sobre el video.
-        container.add(this.add.rectangle(CX, CY, W, H, 0x04060f, 0.14));
-
-        // ---- Franjas de energía ----
-        const beam = (y, color) => {
-            const g = this.add.graphics();
-            g.fillStyle(color, 0.04).fillRect(0, y - 62, W, 124);
-            g.fillStyle(color, 0.07).fillRect(0, y - 30, W, 60);
-            g.lineStyle(2, color, 0.30).lineBetween(0, y, W, y);
-            g.lineStyle(2, color, 0.14).lineBetween(0, y - 24, W, y - 24);
-            g.lineStyle(2, color, 0.14).lineBetween(0, y + 24, W, y + 24);
-            return g;
-        };
-        const opponentFieldY = H * 0.45 - 70;
-        const playerFieldY = H * 0.55 + 70;
-        container.add(beam(opponentFieldY, ORANGE));
-        container.add(beam(playerFieldY, BLUE));
-
-        // ---- Emblema central dorado ----
-        const emblem = this.add.graphics();
-        emblem.lineStyle(2, GOLD, 0.26).strokeCircle(CX, CY, 118);
-        emblem.lineStyle(2, GOLD, 0.38).strokeCircle(CX, CY, 86);
-        emblem.save().translateCanvas(CX, CY).rotateCanvas(Math.PI / 4);
-        emblem.lineStyle(2, GOLD, 0.40).strokeRect(-70, -70, 140, 140);
-        emblem.lineStyle(3, GOLD_BRIGHT, 0.60).strokeRect(-44, -44, 88, 88);
-        emblem.fillStyle(GOLD, 0.10).fillRect(-44, -44, 88, 88);
-        emblem.restore();
-        for (let a = 0; a < 8; a++) {
-            const ang = a * Math.PI / 4;
-            emblem.lineStyle(2, GOLD, 0.24)
-                .lineBetween(CX + Math.cos(ang) * 88, CY + Math.sin(ang) * 88,
-                             CX + Math.cos(ang) * 100, CY + Math.sin(ang) * 100);
-        }
-        emblem.fillStyle(GOLD, 0.12).fillCircle(CX, CY, 30);
-        emblem.fillStyle(GOLD_BRIGHT, 0.9).fillCircle(CX, CY, 5);
-        container.add(emblem);
-
-        // ---- Marcos dorados alrededor de las filas de batalla ----
-        const frameRow = (yCenter) => {
-            const positions = calculateRowPositions({ numItems: 6, itemWidth: 110, itemSpacing: 35, containerWidth: W });
-            const left = Math.min(...positions) - 82;
-            const right = Math.max(...positions) + 82;
-            const top = yCenter - 78;
-            const height = 156;
-            const g = this.add.graphics();
-            g.lineStyle(2, GOLD, 0.28).strokeRoundedRect(left, top, right - left, height, 20);
-            g.lineStyle(1, GOLD, 0.14).strokeRoundedRect(left + 9, top + 9, right - left - 18, height - 18, 16);
-            const corners = [[left, top], [right, top], [left, top + height], [right, top + height]];
-            corners.forEach(([x, y]) => {
-                g.fillStyle(GOLD_BRIGHT, 0.75);
-                g.fillPoints(diamondPts(x, y, 6), true);
-            });
-            return g;
-        };
-        container.add(frameRow(opponentFieldY));
-        container.add(frameRow(playerFieldY));
-
-        // ---- Runas de cristal en los laterales de cada fila de batalla ----
-        const rune = (x, y, color, r = 7) => {
-            const g = this.add.graphics();
-            g.fillStyle(color, 0.10).fillCircle(x, y, r * 3);
-            g.fillStyle(color, 0.18).fillCircle(x, y, r * 2);
-            g.fillStyle(color, 0.85);
-            g.fillPoints(diamondPts(x, y, r), true);
-            return g;
-        };
-
-        const battlePositions = calculateRowPositions({ numItems: 6, itemWidth: 110, itemSpacing: 35, containerWidth: W });
-        const leftEdge = Math.min(...battlePositions) - 82;
-        const rightEdge = Math.max(...battlePositions) + 82;
-
-        container.add(rune(leftEdge + 16, opponentFieldY, ORANGE));
-        container.add(rune(rightEdge - 16, opponentFieldY, ORANGE));
-        container.add(rune(leftEdge + 16, playerFieldY, BLUE));
-        container.add(rune(rightEdge - 16, playerFieldY, BLUE));
-
-        // ---- Brillo y runa junto a los mazos ----
-        const deckGlow = (x, y, color) => {
-            const g = this.add.graphics();
-            g.fillStyle(color, 0.05).fillCircle(x, y, 88);
-            g.fillStyle(color, 0.08).fillCircle(x, y, 56);
-            g.fillStyle(color, 0.14).fillCircle(x, y, 32);
-            g.lineStyle(2, GOLD, 0.24).strokeCircle(x, y, 46);
-            return g;
-        };
-        container.add(deckGlow(120, 290, ORANGE));
-        container.add(deckGlow(W - 120, H - 290, BLUE));
-        container.add(rune(120, 246, GOLD_BRIGHT));
-        container.add(rune(W - 120, H - 334, GOLD_BRIGHT));
+        ensureBoardTextures(this);
+        this.fieldDecor = createArena(this, {
+            width: this.scale.width,
+            height: this.scale.height,
+            depth: -0.4
+        });
     }
 
-    // Crear fila de slots
+    // Crear fila de slots con marcos ornamentados proceduales.
+    // Los slots de batalla usan marcos con borde luminoso (rojo = oponente,
+    // azul = jugador) y conservan su nombre/posición/interactividad original.
     createSlotsRow(y, name, numSlots = 4) { // Por defecto crea 4 slots
         const slots = [];
-        const slotWidth = 110; // Ancho reducido para 1280px
-        const slotSpacing = 35; // Espacio reducido
+        // Misma métrica que la arena y los marcos de carta (SLOT_W/SLOT_GAP).
+        const slotWidth = SLOT_W;
+        const slotSpacing = SLOT_GAP;
         const positionsX = calculateRowPositions({
             numItems: numSlots,
             itemWidth: slotWidth,
@@ -1585,22 +1656,32 @@ export default class GameScene extends Phaser.Scene {
             containerWidth: this.scale.width
         });
 
+        const isBattle = name.includes('_battle_');
+        const owner = name.startsWith('opponent') ? 'opponent' : 'player';
+        const textureKey = isBattle ? slotTextureKey(owner) : BOARD_TEXTURES.slotNeutral;
+
         for (let i = 0; i < numSlots; i++) {
-            let slot = this.add.image(positionsX[i], y, 'slot')
-                .setScale(0.25) // Escala reducida
-                .setAlpha(0.6)
+            let slot = this.add.image(positionsX[i], y, textureKey)
+                .setAlpha(isBattle ? 1 : 0.5)
+                // Los slots interactivos van por ENCIMA del vídeo de fondo y de la
+                // decoración para recibir el clic (el board está a depth -1, la
+                // arena a -0.4; el feedback de selección se ajusta por debajo).
+                .setDepth(isBattle ? 0.2 : -0.2)
                 .setName(`${name}-${i}`); // Asignamos un nombre único para identificarlo
 
             // Si es un slot del campo de batalla del jugador, lo hacemos una zona de drop
             if (name === 'player_battle_slots') {
-                slot.setInteractive({ dropZone: true }); // CORRECCIÓN: Aseguramos que sea dropzone
+                slot.setInteractive({ dropZone: true, useHandCursor: true }); // CORRECCIÓN: Aseguramos que sea dropzone
                 // Le añadimos un listener para cuando se haga clic en él
-                slot.on('pointerdown', () => {
+                slot.on('pointerdown', (pointer, localX, localY, event) => {
+                    if (event && event.stopPropagation) event.stopPropagation();
                     this.onSlotClicked(slot);
                 });
             } else if (name === 'opponent_battle_slots') {
                 // Hacemos que los slots del oponente sean interactivos para poder hacerles clic.
-                slot.setInteractive().on('pointerdown', () => {
+                slot.setInteractive({ useHandCursor: true });
+                slot.on('pointerdown', (pointer, localX, localY, event) => {
+                    if (event && event.stopPropagation) event.stopPropagation();
                     this.onOpponentSlotClicked(slot);
                 });
             }
@@ -1611,16 +1692,18 @@ export default class GameScene extends Phaser.Scene {
         this[name] = slots;
     }
 
-    // Crear fila de cartas
+    // Crear fila de cartas (mano). Tras crearlas, se aplica el abanico:
+    // las cartas se superponen ligeramente, rotan y se arquean en vertical.
     createCardsRow(y, name, hand) {
         const cards = [];
         const numCards = hand.length;
-        const cardWidth = 110; // Ancho reducido
-        const cardSpacing = 35; // Espacio reducido
+        const isPlayerHand = name === 'player-cards';
+        const cardWidth = isPlayerHand ? this.cardHandSize.width : this.cardOpponentHandSize.width;
+        const cardSpacing = isPlayerHand ? 44 : 64; // la mano rival evita el panel de perfil
         const positionsX = calculateRowPositions({
             numItems: numCards,
             itemWidth: cardWidth,
-            itemSpacing: cardSpacing, 
+            itemSpacing: cardSpacing,
             containerWidth: this.scale.width
         });
 
@@ -1628,7 +1711,7 @@ export default class GameScene extends Phaser.Scene {
             const cardData = hand[i];
 
             let card;
-            if (name === 'player-cards') {
+            if (isPlayerHand) {
                 card = this.createPlayerCard(positionsX[i], y, cardData);
             } else {
                 card = this.createOpponentCard(positionsX[i], y, cardData);
@@ -1638,6 +1721,70 @@ export default class GameScene extends Phaser.Scene {
         }
 
         this[name] = cards;
+        this.layoutHandRows();
+    }
+
+    /**
+     * Aplica la disposición de abanico (rotación + arco vertical) a las cartas
+     * de ambas manos. La posición base se guarda en 'startPosition'; la
+     * selección/animación parten de ella, por lo que el abanico es la pose de
+     * reposo y sigue siendo 100% compatible con la interacción por clic.
+     */
+    layoutHandRows() {
+        const applyFan = (cards, name) => {
+            if (!cards || !cards.length) return;
+            const isPlayer = name === 'player-cards';
+            const n = cards.length;
+            const spread = 3.0;             // grados entre cartas contiguas
+            const arc = 12;                 // arco vertical del abanico (px)
+            const hoverLift = isPlayer ? 22 : 16;
+
+            cards.forEach((card, i) => {
+                if (!card || !card.active) return;
+                const center = (n - 1) / 2;
+                const t = n > 1 ? (i - center) / center : 0; // -1..1
+                const angle = t * spread * (n > 1 ? Math.min(1, n / 3) : 0);
+                const dy = Math.abs(t) * arc * (isPlayer ? 1 : -1);
+
+                const baseX = card.x;
+                const baseY = card.getData('startPosition')?.y ?? card.y;
+                const fanY = baseY + dy;
+
+                card.setData('startPosition', { x: baseX, y: fanY });
+                card.setData('fanAngle', angle);
+                card.setData('hoverLift', hoverLift);
+                card.setAngle(angle);
+                card.setDepth(1 + i * 0.01);
+                this.tweens.add({ targets: card, y: fanY, duration: 200, ease: 'Sine.easeOut' });
+            });
+        };
+
+        applyFan(this['player-cards'], 'player-cards');
+        applyFan(this['opponent-cards'], 'opponent-cards');
+    }
+
+    // Bandejas ornamentadas bajo las manos para integrarlas con la arena.
+    createHandTrays() {
+        const { width, height } = this.scale;
+        if (this.playerHandTray) this.playerHandTray.destroy();
+        if (this.opponentHandTray) this.opponentHandTray.destroy();
+
+        this.playerHandTray = drawHandTray(this, width / 2, height * 0.875, 1560, 190, 'player')
+            .setDepth(-0.3);
+        this.opponentHandTray = drawHandTray(this, width / 2, height * 0.155, 1300, 150, 'opponent')
+            .setDepth(-0.3);
+
+        if (this.playerHandLabel) this.playerHandLabel.destroy();
+        if (this.opponentHandLabel) this.opponentHandLabel.destroy();
+        // 'TU MANO' se baja al borde inferior de la bandeja: a la altura de las
+        // cartas la tapaba el orbe de esencia del jugador (179, 847).
+        this.playerHandLabel = ornateLabel(this, 210, height - 60, 'TU MANO', {
+            fontSize: '13px', color: '#bfe1ff', letterSpacing: 3
+        }).setDepth(-0.2);
+        // 'MANO RIVAL' se baja bajo el panel de perfil (que ocupa y 88-212).
+        this.opponentHandLabel = ornateLabel(this, 230, 250, 'MANO RIVAL', {
+            fontSize: '13px', color: '#ffc2ad', letterSpacing: 3
+        }).setDepth(-0.2);
     }
 
     // Crear carta del jugador
@@ -1647,9 +1794,30 @@ export default class GameScene extends Phaser.Scene {
         card.setData('startPosition', { x, y });
         card.setData('isRevealed', false);
         card.setData('isCardOnField', false);
+        if (cardData && cardData.level === 3) card.addGemBadge();
         card.on('pointerdown', () => this.onCardClicked(card));
+        // Hover: elevación y brillo suaves al pasar el cursor.
+        card.on('pointerover', () => this.onCardHover(card, true));
+        card.on('pointerout', () => this.onCardHover(card, false));
+        card.input.cursor = 'pointer';
 
         return card;
+    }
+
+    /** Efecto de hover para cartas de la mano (elevación + brillo). */
+    onCardHover(card, over) {
+        if (!card || !card.active || card === this.selectedCard) return;
+        if (card.getData('isCardOnField')) return;
+        const base = card.getData('startPosition');
+        if (!base) return;
+        if (over) card.setDepth(25);
+        this.tweens.add({
+            targets: card,
+            y: over ? base.y - (card.getData('hoverLift') || 22) : base.y,
+            duration: 140,
+            ease: 'Sine.easeOut',
+            onComplete: () => { if (!over) this.layoutHandRows(); }
+        });
     }
 
     /**
@@ -1750,13 +1918,87 @@ export default class GameScene extends Phaser.Scene {
         // La animación de "levantar" la carta ahora solo la mueve verticalmente.
         // No cambiaremos su tamaño para mantener la consistencia.
         const isOnField = !!cardObject.getData('isCardOnField');
-        const yShift = isOnField ? -25 : -50; // Se levanta más si está en la mano
+        const yShift = isOnField ? -25 : -(cardObject.getData('hoverLift') || 50); // Se levanta más si está en la mano
+        cardObject.setDepth(isOnField ? 20 : 30); // La carta activa se ve por encima del resto
         this.tweens.add({
             targets: cardObject,
             y: cardObject.getData('startPosition').y + yShift,
+            angle: 0,
             duration: 150,
             ease: 'Power1'
         });
+        // Resplandor pulsante del elemento y feedback de acciones disponibles.
+        if (typeof cardObject.setSelectedVisual === 'function') cardObject.setSelectedVisual(true);
+        this.refreshSelectionFeedback();
+    }
+
+    /**
+     * Muestra las acciones disponibles para la carta seleccionada (responsabilidad
+     * de presentación): slots válidos para colocar, objetivos de ataque con su
+     * predicción de combate y fusiones compatibles en el campo.
+     */
+    refreshSelectionFeedback() {
+        this.clearSelectionFeedback();
+        const sel = this.selectedCard;
+        if (!sel || !sel.active) return;
+
+        const mark = (obj, name = 'selection-feedback') => {
+            obj.setName?.(name);
+            this.selectionFeedback.push(obj);
+        };
+        const attackerData = sel.cardData || sel.getData('cardData');
+        const selOnField = !!sel.getData('isCardOnField');
+
+        // Carta de la mano: resaltar slots vacíos del campo propio.
+        if (!selOnField) {
+            (this['player_battle_slots'] || []).forEach((slot, i) => {
+                if (this.player.field[i] === null) {
+                    mark(createSlotHighlight(this, slot.x, slot.y, FEEDBACK_COLORS.valid, 0.3));
+                }
+            });
+            return;
+        }
+
+        // Carta en el campo: objetivos de ataque.
+        const opponentCards = this.children.list.filter(
+            (c) => c.getData && c.getData('isOpponentCard') && c.getData('isCardOnField')
+        );
+        if (opponentCards.length && attackerData) {
+            opponentCards.forEach((target) => {
+                const targetData = target.getData('cardData') || target.cardData;
+                if (!targetData) return;
+                const result = resolveCombat(attackerData, targetData);
+                const kind = result.winner === 'attacker' ? 'advantage'
+                    : result.winner === 'defender' ? 'disadvantage'
+                        : 'neutral';
+                mark(createTargetMarker(this, target.x, target.y - target.displayHeight / 2 + 8, kind));
+            });
+        } else {
+            // Ataque directo: resaltar la fila rival.
+            (this['opponent_battle_slots'] || []).forEach((slot) => {
+                mark(createSlotHighlight(this, slot.x, slot.y, FEEDBACK_COLORS.attack, 0.3));
+            });
+        }
+
+        // Fusiones posibles entre cartas propias del campo (mismo tipo y nivel).
+        if (attackerData) {
+            this.children.list.forEach((target) => {
+                if (!target.getData || target === sel) return;
+                if (!target.getData('isCardOnField') || target.getData('isOpponentCard')) return;
+                const td = target.getData('cardData') || target.cardData;
+                if (!td) return;
+                if (td.type === attackerData.type && td.level === attackerData.level && td.level < 3) {
+                    mark(createTargetMarker(this, target.x, target.y - target.displayHeight / 2 + 8, 'fusion'));
+                }
+            });
+        }
+    }
+
+    /** Destruye suavemente los highlights/marcadores de la selección actual. */
+    clearSelectionFeedback() {
+        if (!this.selectionFeedback || !this.selectionFeedback.length) return;
+        destroyFeedbackList(this, this.selectionFeedback);
+        this.selectionFeedback = [];
     }
 
     /**
@@ -1769,17 +2011,29 @@ export default class GameScene extends Phaser.Scene {
         const cardToDeselect = this.selectedCard; // Guardamos la referencia
         this.selectedCard = null;
         console.log('Carta deseleccionada.');
-        
+
+        if (typeof cardToDeselect.setSelectedVisual === 'function') cardToDeselect.setSelectedVisual(false);
+        this.clearSelectionFeedback();
+
         // Si se debe animar, la carta (esté en la mano o en el campo) vuelve
         // a su posición original guardada en 'startPosition'.
         if (animate) {
+            const onField = !!cardToDeselect.getData('isCardOnField');
             this.tweens.add({
                 targets: cardToDeselect,
                 x: cardToDeselect.getData('startPosition').x,
                 y: cardToDeselect.getData('startPosition').y,
+                angle: onField ? 0 : (cardToDeselect.getData('fanAngle') || 0),
                 duration: 200,
-                ease: 'Power1'
+                ease: 'Power1',
+                onComplete: () => {
+                    if (onField) cardToDeselect.setDepth(1);
+                    else this.layoutHandRows();
+                }
             });
+        } else {
+            const onField = !!cardToDeselect.getData('isCardOnField');
+            if (onField) cardToDeselect.setDepth(1);
         }
     }
 
@@ -1796,7 +2050,7 @@ export default class GameScene extends Phaser.Scene {
         }
 
         // 2. Volvemos a crear la fila de cartas con los datos actualizados del modelo this.player.hand
-        this.createCardsRow(this.scale.height * 0.83, 'player-cards', this.player.hand);
+        this.createCardsRow(this.scale.height * 0.825, 'player-cards', this.player.hand);
         console.log('Mano del jugador refrescada.');
     }
 
@@ -1817,8 +2071,8 @@ export default class GameScene extends Phaser.Scene {
     // Crear carta del oponente
     createOpponentCard(x, y, cardData) {
         const card = new Card(this, x, y, cardData, true);
-        // Normalizamos el tamaño visual del reverso a tamaño de mano (evita que backs nativos grandes se vean enormes)
-        card.setDisplaySize(this.cardHandSize.width, this.cardHandSize.height); // Tamaño unificado
+        // Normalizamos el tamaño visual del reverso para no tapar el perfil rival.
+        card.setDisplaySize(this.cardOpponentHandSize.width, this.cardOpponentHandSize.height);
         card.setData('isOpponentCard', true);
         card.setData('isRevealed', false); // siempre boca abajo al colocarse en campo
         return card;
@@ -1835,6 +2089,9 @@ export default class GameScene extends Phaser.Scene {
         const { isOpponent = false, revealed = false, fieldIndex = null } = options;
         const cardObj = new Card(this, slotObj.x, slotObj.y, cardData, isOpponent);
         cardObj.setDisplaySize(this.cardFieldSize.width, this.cardFieldSize.height);
+        // Las cartas de campo van por encima de los marcos de slot y de la arena
+        // (el aura elemental se dibuja a depth 0.5, entre slot y carta).
+        cardObj.setDepth(1);
         if (isOpponent) cardObj.setData('isOpponentCard', true);
         // Aseguramos que la vista tenga la misma referencia de datos y metadata de instancia
         cardObj.setData('cardData', cardData);
@@ -1846,6 +2103,14 @@ export default class GameScene extends Phaser.Scene {
         if (fieldIndex !== null && typeof fieldIndex !== 'undefined') cardObj.setData('fieldIndex', fieldIndex);
         cardObj.setData('isRevealed', !!revealed);
         cardObj.setData('startPosition', { x: slotObj.x, y: slotObj.y });
+        // Gema distintiva en cartas de nivel 3 visibles (no en rivales boca abajo).
+        if (cardData && cardData.level === 3 && (!isOpponent || revealed)) {
+            cardObj.addGemBadge();
+        }
+        // Aura elemental en cartas reveladas (identidad visual por elemento).
+        if (cardData && cardData.type && (!isOpponent || revealed)) {
+            cardObj.attachAura(TYPE_COLORS[cardData.type] || 0xffffff);
+        }
         cardObj.on('pointerdown', () => this.onCardClicked(cardObj));
         return cardObj;
     }
@@ -1950,6 +2215,11 @@ export default class GameScene extends Phaser.Scene {
                     const fusedObj = this.createFieldCard(slot, resultCard, { isOpponent: true, revealed: true, fieldIndex: targetIndex });
                     try { fusedObj.setTexture(`card-${resultCard.type}-${resultCard.level}`); } catch (e) {}
                     console.log('[GameScene] Fusión remota en campo', { sourceIndex, targetIndex, resultCard });
+                    // Gema elemental remota (una por carta de nivel 3).
+                    if (targetModel && typeof targetModel.registerGem === 'function') {
+                        const gemType = targetModel.registerGem(resultCard);
+                        if (gemType) this.showGemPopup(fusedObj.x, fusedObj.y - 30, gemType);
+                    }
                     if (this.debugSync) console.log('[GameScene][debug] slot visual after remote fuse_cards', { created: fusedObj && fusedObj.getData && fusedObj.getData('instanceId'), slotIndex: targetIndex, timestamp: Date.now() });
                 }
                 
@@ -1986,6 +2256,11 @@ export default class GameScene extends Phaser.Scene {
                     const fusedObj = this.createFieldCard(slot, resultCard, { isOpponent: true, revealed: true, fieldIndex: targetIndex });
                     try { fusedObj.setTexture(`card-${resultCard.type}-${resultCard.level}`); } catch (e) {}
                     console.log('[GameScene] Fusión remota desde mano', { targetIndex, resultCard });
+                    // Gema elemental remota (una por carta de nivel 3).
+                    if (targetModel && typeof targetModel.registerGem === 'function') {
+                        const gemType = targetModel.registerGem(resultCard);
+                        if (gemType) this.showGemPopup(fusedObj.x, fusedObj.y - 30, gemType);
+                    }
                     if (this.debugSync) console.log('[GameScene][debug] slot visual after remote fuse_from_hand', { created: fusedObj && fusedObj.getData && fusedObj.getData('instanceId'), slotIndex: targetIndex, timestamp: Date.now() });
                 }
                 
@@ -2122,6 +2397,12 @@ export default class GameScene extends Phaser.Scene {
 
         // Marcamos la carta como revelada para no volver a hacerlo.
         cardObject.setData('isRevealed', true);
+        if (cardData.level === 3 && typeof cardObject.addGemBadge === 'function') {
+            cardObject.addGemBadge();
+        }
+        if (cardData.type && typeof cardObject.attachAura === 'function') {
+            cardObject.attachAura(TYPE_COLORS[cardData.type] || 0xffffff);
+        }
 
         // Animación de revelación: un rápido encogimiento y expansión para simular un "giro".
         this.tweens.add({
@@ -2164,34 +2445,56 @@ export default class GameScene extends Phaser.Scene {
         );
     }
 
-    // Crear mazo y cementerio
+    // Crear los mazos con marco luminoso por bando y contador en insignia.
+    // Conserva this.playerDeckText / this.opponentDeckText (los usa updateDeckCounts).
     createDecks() {
         const { width, height } = this.scale;
 
-        // Definimos un estilo y un padding para los contadores.
-        const textStyle = { 
-            fontSize: '24px', 
-            color: '#fff', 
+        const textStyle = {
+            fontSize: '26px',
+            color: '#ffffff',
             fontStyle: 'bold',
-            stroke: '#000000', // Contorno negro
-            strokeThickness: 5 // Grosor del contorno
+            fontFamily: 'Georgia, "Times New Roman", serif',
+            stroke: '#000000',
+            strokeThickness: 5
         };
-        const padding = 5; // Pequeño espacio desde el borde.
 
-        // Mazo del jugador
+        const buildDeck = (x, y, backKey, owner, count) => {
+            const theme = OWNER_THEME[owner];
 
-        const playerDeckImage = this.add.image(width - 120, height - 290, 'card-back-player').setScale(0.185);
-        const playerDeckBounds = playerDeckImage.getBounds();
-        this.playerDeckText = this.add.text(playerDeckBounds.left + padding, playerDeckBounds.bottom - padding, this.player.deck.getCardsCount(), textStyle)
-            .setOrigin(0, 1); // Anclaje en la esquina inferior izquierda.
+            // Resplandor, anillo ornamentado y placa bajo el mazo.
+            const glow = this.add.graphics().setDepth(-0.06);
+            glow.fillStyle(theme.glow, 0.05).fillCircle(x, y, 104);
+            glow.fillStyle(theme.glow, 0.09).fillCircle(x, y, 72);
+            glow.fillStyle(0x05070e, 0.55).fillRoundedRect(x - 44, y - 62, 88, 124, 14);
+            glow.lineStyle(2, theme.rune, 0.32).strokeRoundedRect(x - 44, y - 62, 88, 124, 14);
+            glow.lineStyle(2, theme.rune, 0.40).strokeCircle(x, y, 64);
+            glow.lineStyle(1, theme.glow, 0.55).strokeCircle(x, y, 76);
+            for (let a = 0; a < 8; a++) {
+                const ang = (a * Math.PI) / 4;
+                glow.fillStyle(theme.rune, 0.7).fillCircle(x + Math.cos(ang) * 70, y + Math.sin(ang) * 70, 2.5);
+            }
 
-        // Mazo del oponente
-        // Corregido y asegurado: Se crea como una imagen simple, sin interactividad.
-        // Se elimina cualquier posibilidad de que se le asigne un listener de clic por error.
-        const opponentDeckImage = this.add.image(120, 290, 'card-back-opponent').setScale(0.185);
-        const opponentDeckBounds = opponentDeckImage.getBounds();
-        this.opponentDeckText = this.add.text(opponentDeckBounds.left + padding, opponentDeckBounds.bottom - padding, this.opponent.deck.getCardsCount(), textStyle)
-            .setOrigin(0, 1); // Anclaje en la esquina inferior izquierda.
+            // Varias capas de reverso para dar volumen de "pila" de cartas.
+            this.add.image(x - 5, y - 5, backKey).setScale(0.185).setDepth(0.6).setAlpha(0.55).setTint(0x7788aa);
+            this.add.image(x - 2.5, y - 2.5, backKey).setScale(0.185).setDepth(0.8).setAlpha(0.8);
+            const img = this.add.image(x, y, backKey).setScale(0.185).setDepth(1);
+            const bounds = img.getBounds();
+
+            // Insignia con el número de cartas restantes.
+            const badgeX = bounds.right - 4;
+            const badgeY = bounds.bottom - 4;
+            const badge = this.add.graphics().setDepth(2);
+            badge.fillStyle(0x000000, 0.4).fillCircle(badgeX + 2, badgeY + 2, 22);
+            badge.fillStyle(0x070a14, 0.96).fillCircle(badgeX, badgeY, 22);
+            badge.lineStyle(3, theme.rune, 0.95).strokeCircle(badgeX, badgeY, 22);
+            badge.lineStyle(1, 0xffffff, 0.25).strokeCircle(badgeX, badgeY, 17);
+
+            return this.add.text(badgeX, badgeY, count, textStyle).setOrigin(0.5).setDepth(3);
+        };
+
+        this.playerDeckText = buildDeck(width - 120, height - 290, 'card-back-player', 'player', this.player.deck.getCardsCount());
+        this.opponentDeckText = buildDeck(120, 290, 'card-back-opponent', 'opponent', this.opponent.deck.getCardsCount());
     }
 
     // Actualizar contadores de mazos

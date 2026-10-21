@@ -21,6 +21,7 @@ import MechanicsScene from './scenes/MechanicsScene.js';
 
 const config = {
     type: Phaser.AUTO,
+    backgroundColor: '#1a1a1a',
     dom: { createContainer: true },
     width: 1600,
     height: 1000,
@@ -29,10 +30,29 @@ const config = {
         autoCenter: Phaser.Scale.CENTER_BOTH
     },
     parent: 'game-container',
+    // Ajustes de renderizado para buen rendimiento en cualquier dispositivo
+    // (WebGL por defecto y fallo automático a Canvas en navegadores sin soporte).
+    render: {
+        antialias: true,
+        roundPixels: false,
+        powerPreference: 'high-performance',
+        batchSize: 4096
+    },
+    // FPS estables en pantallas con tasa de refresco variable/alta y en
+    // dispositivos de bajos recursos.
+    fps: {
+        min: 30,
+        target: 60,
+        smoothStep: true
+    },
     loader: {
         // Generamos mipmaps durante la carga para evitar tirones (stutter) y advertencias de WebGL.
-        generateMipmap: true
+        generateMipmap: true,
+        // Límite de descargas en paralelo más prudente: evita saturar las
+        // conexiones limitadas de móviles.
+        maxParallelDownloads: 8
     },
+    title: 'Elemental Battlecards',
     /*
       * El orden de las escenas es importante. Phaser iniciará la primera escena de este array.
      * 1. BootScene: Carga los assets mínimos de la pantalla de carga.
@@ -50,3 +70,16 @@ const config = {
 }
 
 const game = new Phaser.Game(config);
+
+// Gancho de depuración: permite inspeccionar/navegar escenas desde la consola
+// del navegador (p. ej. capturas de pantalla automatizadas de la escena de combate).
+window.game = game;
+
+// Oculta la pantalla de carga estática (index.html) cuando Phaser está listo.
+game.events.once('ready', () => {
+    const splash = document.getElementById('splash-screen');
+    if (splash) {
+        splash.classList.add('fade-out');
+        setTimeout(() => splash.remove(), 500);
+    }
+});

@@ -28,7 +28,7 @@ class SocketGateway {
     this.io.on('connection', (socket) => {
       this.logger.info('Socket conectado:', socket.id, 'desde', socket.handshake.address);
 
-      socket.on('create_room', (cb) => this.handleCreateRoom(socket, cb));
+      socket.on('create_room', (data, cb) => this.handleCreateRoom(socket, data, cb));
       socket.on('join_room', (data, cb) => this.handleJoinRoom(socket, data, cb));
       socket.on('game_event', (payload) => this.handleGameEvent(socket, payload));
       socket.on('end_turn', (payload) => this.handleEndTurn(socket, payload));
@@ -36,20 +36,24 @@ class SocketGateway {
     });
   }
 
-  handleCreateRoom(socket, cb) {
-    const { code, role } = this.roomManager.createRoom(socket.id);
+  handleCreateRoom(socket, data, cb) {
+    // El cliente puede emitir create_room con payload y callback, o solo callback.
+    const payload = typeof data === 'function' ? {} : (data || {});
+    const callback = typeof data === 'function' ? data : cb;
+
+    const { code, role, gameMode } = this.roomManager.createRoom(socket.id, payload.gameMode);
 
     socket.join(code);
     socket.roomCode = code;
     socket.playerRole = role;
 
-    this.logger.info(`✅ Sala creada ${code} por ${socket.id} (host)`);
+    this.logger.info(`✅ Sala creada ${code} por ${socket.id} (host) — modo: ${gameMode}`);
     this.logger.info(`📊 Total de salas activas: ${Object.keys(this.roomManager.activeRooms()).length}`);
 
-    if (typeof cb === 'function') {
-      cb({ success: true, code, role });
+    if (typeof callback === 'function') {
+      callback({ success: true, code, role, gameMode });
     }
-    this.io.to(code).emit('room_created', { code });
+    this.io.to(code).emit('room_created', { code, gameMode });
   }
 
   handleJoinRoom(socket, data, cb) {
@@ -93,6 +97,7 @@ class SocketGateway {
         currentTurn: 'host',
         hostId: this.roomManager.hostId(result.room),
         guestId: this.roomManager.guestId(result.room),
+        gameMode: result.room.gameState ? result.room.gameState.gameMode : 'clasico',
       });
     }
   }

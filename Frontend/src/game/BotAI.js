@@ -15,7 +15,17 @@ export default class BotAI {
      * @param {number} [difficulty=3] Nivel de dificultad (1-10).
      */
     constructor(difficulty = 3) {
+        this.gemFocus = false;
         this.setDifficulty(difficulty);
+    }
+
+    /**
+     * Activa/desactiva el foco en recolectar gemas (modos con gemas): el bot
+     * siempre intenta fusionar y prioriza las fusiones hacia nivel 3.
+     * @param {boolean} enabled
+     */
+    setGemFocus(enabled) {
+        this.gemFocus = !!enabled;
     }
 
     /**
@@ -192,8 +202,9 @@ export default class BotAI {
         const currentTypes = new Set(opponentField.filter(c => c).map(c => c.type));
         const needed = getBaseCardTypes().filter(t => !currentTypes.has(t));
 
-        if (samePairs.length > 0 && (needed.length > 0 || opponentHand.length === 0)) {
-            samePairs.sort((a, b) => a.level - b.level);
+        if (samePairs.length > 0 && (needed.length > 0 || opponentHand.length === 0 || this.gemFocus)) {
+            // En modo gemas priorizamos nivel 2 -> 3 (la gema nace del nivel 3).
+            samePairs.sort((a, b) => this.gemFocus ? (b.level - a.level) : (a.level - b.level));
             return { indices: [samePairs[0].i, samePairs[0].j] };
         }
 
@@ -217,7 +228,7 @@ export default class BotAI {
         const { opponent, mustAttack, playerHasField, opponentAttackers, bestAttackPool, revealedDefenders, playerFieldCards } = opts;
 
         // 1) Intento de fusión de campo (nunca si está obligado a atacar).
-        if (!mustAttack && this.shouldAttemptFusion()) {
+        if (!mustAttack && (this.gemFocus || this.shouldAttemptFusion())) {
             const fusion = this.findBestFusion(opponent.field, opponent.hand);
             if (fusion) {
                 return { kind: 'fusion', indices: fusion.indices };

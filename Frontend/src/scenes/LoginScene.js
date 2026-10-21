@@ -215,6 +215,10 @@ export default class LoginScene extends Phaser.Scene {
                     // Guardar el token en localStorage
                     localStorage.setItem('token', data.token);
                     localStorage.setItem('user', JSON.stringify(data.user));
+
+                    // Descargar el progreso real desde el servidor (perfil/misiones/logros).
+                    const { hydrateProgressFromServer } = await import('../helpers/playerProgress.js');
+                    await hydrateProgressFromServer(data.user.username);
                     
                     // Transicionar a la pantalla de carga
                     this.scene.start('LoadingScene', { playerData: data.user });

@@ -10,7 +10,7 @@ class AppFactory {
     this.logger = logger;
   }
 
-  build({ authRouter = null } = {}) {
+  build({ authRouter = null, profileRouter = null } = {}) {
     const app = express();
 
     app.use(cors({ origin: this.config.corsOrigin }));
@@ -18,6 +18,10 @@ class AppFactory {
 
     if (authRouter) {
       app.use('/api/auth', authRouter);
+    }
+
+    if (profileRouter) {
+      app.use('/api/profile', profileRouter);
     }
 
     app.get('/ping', (req, res) => {

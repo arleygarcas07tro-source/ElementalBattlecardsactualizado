@@ -1,0 +1,818 @@
+================================================================================
+  SUSTENTACIÓN DE BASE DE DATOS — ELEMENTAL BATTLECARDS
+  Índice actualizado
+================================================================================
+
+Motor: PostgreSQL 18 (local en 127.0.0.1:5432), base de datos "elemental".
+Configuración: Backend/.env  ->  DB_USE_SQLITE=false (modo PostgreSQL activo).
+Scripts SQL: Backend/sql/  ->  schema.sql -> vistas.sql -> triggers.sql ->
+             procedimientos.sql -> datos_demo.sql  (todos idempotentes).
+Modelos ORM: Backend/src/database/models/  (Sequelize).
+Datos demo: 4 usuarios demo_* (contraseña demo1234), 18 batallas, progreso real.
+
+--------------------------------------------------------------------------------
+ÍNDICE
+--------------------------------------------------------------------------------
+  1. Arquitectura del sistema.
+  2. Tablas y relaciones de la base de datos.
+  3. Propiedades ACID: problema, solución y código.
+  4. Teorema CAP.
+  5. Vistas de PostgreSQL: código y ejecución.
+  6. Procedimientos almacenados: funcionamiento y ejecución.
+  7. Trigger: código, funcionamiento y demostración.
+  8. Resumen y conclusiones: qué hace la base de datos, cómo se relacionan sus
+     componentes y qué garantiza el funcionamiento del sistema.
+
+Conexión para la demo en vivo (PowerShell):
+
+  $env:PGPASSWORD = '123456'
+  & "C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -h 127.0.0.1 -d elemental
+
+
+================================================================================
+1. ARQUITECTURA DEL SISTEMA
+================================================================================
+
+1.1 Visión general por capas
+--------------------------------------------------------------------------------
+  ┌────────────────────────────────────────────────────────────┐
+  │  FRONTEND (Phaser 3, Vite)                                 │
+  │  Escenas de juego: login, perfil, misiones, batallas...    │
+  │  src/helpers/profileApi.js adjunta el JWT en cada petición │
+  └───────────────────────────┬────────────────────────────────┘
+                              │  HTTP (fetch) + Socket.io
+                              ▼
+  ┌────────────────────────────────────────────────────────────┐
+  │  BACKEND (Node.js + Express :3001)                         │
+  │   /api/auth    -> registro e inicio de sesión              │
+  │   /api/profile -> perfil, misiones, logros, batallas,      │
+  │                   fusiones, ataques, colección             │
+  │   authMiddleware (valida JWT) -> Controller -> Service      │
+  └───────────────────────────┬────────────────────────────────┘
+                              │  Sequelize (ORM) + SQL parametrizado
+                              ▼
+  ┌────────────────────────────────────────────────────────────┐
+  │  POSTGRESQL 18 :5432  —  BD "elemental"                    │
+  │  10 tablas · 4 vistas · 2 procedimientos · 1 trigger       │
+  │  WAL + synchronous_commit = on · READ COMMITTED            │
+  └────────────────────────────────────────────────────────────┘
+
+  El despliegue es de un nodo por capa, pero el sistema SÍ es distribuido
+  (clientes en red + servidor de aplicación + servidor de base de datos).
+
+1.2 Arranque del backend (Backend/src/bootstrap.js)
+--------------------------------------------------------------------------------
+  1) dotenv carga .env; AppConfig centraliza la configuración.
+  2) DatabaseFactory.build() crea la instancia Sequelize según el dialecto
+     (DB_USE_SQLITE=false -> dialect: 'postgres').
+  3) DatabaseInitializer.connect() -> sequelize.authenticate().
+     Si FALLA, el servidor NO se cae: se marca databaseAvailable = false.
+  4) DatabaseInitializer.sync() -> sequelize.sync({ alter:true }) alinea los
+     modelos con el esquema (no crea datos).
+  5) buildApiRouters(): los routers de auth/perfil solo se montan si hay BD.
+  6) AppFactory construye la app Express; se crea socket.io; listen en :3001.
+
+1.3 Capas de acceso a datos (quién toca la BD y cómo)
+--------------------------------------------------------------------------------
+  Las escenas de Phaser NUNCA tocan SQL ni Sequelize: hay capas.
+
+  Escenas (presentación)   Frontend/src/scenes/*          Solo dibujo/UI.
+  Cliente HTTP             Frontend/src/helpers/profileApi.js
+                                                          fetch con Bearer; sin
+                                                          token -> modo offline.
+  Rutas                    Backend/src/http/routes/*      Endpoints REST.
+  Controller               ProfileController.js           Traduce HTTP <-> servicio.
+  Servicio (negocio)       ProfileService.js              Valida y decide.
+  Repositorio (puente ORM) SequelizeProfileRepository.js  Único que usa Sequelize.
+  Modelos Sequelize         src/database/models/*         Mapeo columna<->atributo.
+  Motor                    PostgreSQL                     Restricciones, trigger,
+                                                          vistas, procedimientos.
+
+  Regla de diseño: la lógica de negocio vive en el servicio; las escenas solo
+  presentan; el repositorio es el único que habla con Sequelize.
+
+1.4 Ejemplo de recorrido completo — registrar una batalla
+--------------------------------------------------------------------------------
+  1. El frontend termina la partida y llama:
+       POST /api/profile/battles
+       { "result":"victoria", "opponent":"bot", "difficulty":"3" }
+  2. authMiddleware valida el JWT -> userId.
+  3. ProfileService.recordBattle():
+       a. valida result ∈ {victoria, derrota}   (misma regla que el CHECK).
+       b. profileRepository.createBattle(...) -> INSERT en battles.
+          El TRIGGER trg_stats_batalla se dispara y actualiza player_stats
+          (partidas, victorias, derrotas, rachas, updated_at).
+       c. relee las stats derivadas y actualiza misiones.
+       d. evalúa reglas de logros.
+       e. devuelve el perfil completo.
+  4. Si algo falla, el error sube a errorHandler -> 500 { message }.
+
+  La misma operación desde SQL puro:
+    CALL sp_registrar_batalla(:user_id, 'victoria', 'bot', '3', false, 'fuego');
+
+
+================================================================================
+2. TABLAS Y RELACIONES DE LA BASE DE DATOS
+================================================================================
+
+2.1 Resumen de las 10 tablas
+--------------------------------------------------------------------------------
+  #   TABLA                  QUÉ GUARDA                         CLAVE PRIMARIA
+  --  ---------------------  ---------------------------------  ---------------------
+  1   users                  Cuentas de jugador                 id
+  2   cards                  Catálogo 18 cartas (6 x 3)         id
+  3   player_stats           Estadísticas agregadas (1:1)       user_id
+  4   battles                Historial de partidas              id
+  5   missions               Catálogo de misiones               id (texto)
+  6   player_missions        Progreso de misiones por jugador   (user_id, mission_id)
+  7   achievements           Catálogo de logros                 id (texto)
+  8   player_achievements    Logros desbloqueados               (user_id, achievement_id)
+  9   player_cards           Colección de cartas                (user_id, card_id)
+ 10   player_attack_types    Tipos elementales con que atacó    (user_id, element)
+
+  Elementos canónicos (tipos de cartas):
+    fuego, agua, planta, luz, sombra, espiritu.
+
+2.2 Relaciones (diagrama ER en texto)
+--------------------------------------------------------------------------------
+  users 1 ──── 1  player_stats
+  users 1 ──── N  battles
+  users 1 ──── N  player_missions ──── 1  missions
+  users 1 ──── N  player_achievements ─ 1  achievements
+  users 1 ──── N  player_cards ──────── 1  cards
+  users 1 ──── N  player_attack_types
+
+  Todas las FK usan ON DELETE CASCADE: borrar un usuario limpia todo su progreso.
+
+2.3 Definición de las tablas (Backend/sql/schema.sql)
+--------------------------------------------------------------------------------
+
+  users  (gestionada por Sequelize, timestamps automáticos)
+    id           serial       PK
+    username     varchar(255) NOT NULL UNIQUE   (usado para login)
+    email        varchar(255) NOT NULL UNIQUE
+    password     varchar(255) NOT NULL          (hash bcrypt)
+    createdAt    timestamptz  NOT NULL
+    updatedAt    timestamptz  NOT NULL
+
+  cards
+    id           serial       PK
+    element      varchar(20)  NOT NULL  CHECK ∈ 6 tipos
+    level        smallint     NOT NULL  CHECK 1..3
+    name         varchar(60)  NOT NULL
+    UNIQUE (element, level) -> 6 x 3 = 18 cartas
+
+  player_stats  (1:1 con users)
+    user_id        integer     PK, FK -> users(id) ON DELETE CASCADE
+    battles_played integer     NOT NULL default 0
+    battles_won    integer     NOT NULL default 0
+    battles_lost   integer     NOT NULL default 0
+    current_streak integer     NOT NULL default 0
+    longest_streak integer     NOT NULL default 0
+    gems           integer     NOT NULL default 0
+    updated_at     timestamptz NOT NULL default now()
+
+  battles
+    id             serial       PK
+    user_id        integer      NOT NULL FK -> users(id) CASCADE
+    result         varchar(10)  NOT NULL CHECK ∈ (victoria, derrota)
+    opponent       varchar(10)  NOT NULL default 'bot' CHECK ∈ (bot, lan)
+    difficulty     varchar(30)  NULL
+    level3_on_field boolean     NOT NULL default false
+    created_at     timestamptz  NOT NULL default now()
+    Índices: idx_battles_user, idx_battles_created
+
+  missions
+    id          varchar(40) PK (slug, ej. 'primera-victoria')
+    element     varchar(20) NOT NULL CHECK
+    title       varchar(80) NOT NULL
+    description text        NULL
+    target      integer     NOT NULL default 1
+    reward_gems integer     NOT NULL default 0
+
+  player_missions
+    user_id      integer     PK, FK -> users(id) CASCADE
+    mission_id   varchar(40) PK, FK -> missions(id) CASCADE
+    progress     integer     NOT NULL default 0
+    completed    boolean     NOT NULL default false
+    completed_at timestamptz NULL
+
+  achievements
+    id          varchar(40) PK
+    element     varchar(20) NOT NULL CHECK
+    title       varchar(80) NOT NULL
+    description text        NULL
+
+  player_achievements
+    user_id        integer     PK, FK -> users(id) CASCADE
+    achievement_id varchar(40) PK, FK -> achievements(id) CASCADE
+    unlocked_at    timestamptz NOT NULL default now()
+
+  player_cards
+    user_id      integer     PK, FK -> users(id) CASCADE
+    card_id      integer     PK, FK -> cards(id) CASCADE
+    collected_at timestamptz NOT NULL default now()
+
+  player_attack_types
+    user_id integer     PK, FK -> users(id) CASCADE
+    element varchar(20) PK, CHECK
+
+2.4 Catálogos precargados
+--------------------------------------------------------------------------------
+  MISIONES (6):
+    primera-victoria    Primera victoria    objetivo 1  recompensa 50
+    coleccionista       Coleccionista       objetivo 1  recompensa 100
+    fusionador          Fusionador          objetivo 5  recompensa 150
+    racha-victorias     Racha de victorias  objetivo 3  recompensa 200
+    aprendiz-elemental  Aprendiz elemental  objetivo 6  recompensa 120
+    estratega           Estratega           objetivo 1  recompensa 250
+
+  LOGROS (6):
+    primera-llama       1 victoria
+    marea-creciente     racha de 3
+    raices-profundas    5 fusiones
+    cazador-del-viento  todas las misiones
+    coloso-invicto      10 victorias
+    senor-de-la-noche   18 cartas coleccionadas
+
+  CARDS (18): 6 elementos x 3 niveles (Fuego I/II/III, Agua I/II/III, ...).
+
+2.5 Restricciones de integridad (el andamiaje de consistencia)
+--------------------------------------------------------------------------------
+  - PK (10): una fila única por entidad.
+  - FK (12) con ON DELETE CASCADE: integridad referencial y limpieza en cascada.
+  - CHECK de dominio: result, element, level, opponent.
+  - UNIQUE: users.username, users.email, cards(element, level).
+  - NOT NULL en columnas obligatorias.
+  - Claves primarias compuestas -> un jugador no repite carta/misión/logro/tipo.
+  - Total: 77 restricciones activas.
+
+  Inventario en vivo:
+    SELECT contype, count(*) FROM pg_constraint
+    WHERE connamespace = 'public'::regnamespace GROUP BY contype;
+
+
+================================================================================
+3. PROPIEDADES ACID: PROBLEMA, SOLUCIÓN Y CÓDIGO
+================================================================================
+
+ACID = garantías de una transacción en una base de datos transaccional:
+Atomicidad, Consistencia, Aislamiento y Durabilidad.
+
+3.1 A — ATOMICIDAD  ("todo o nada")
+--------------------------------------------------------------------------------
+  PROBLEMA
+    Una operación de negocio hace 2+ escrituras (ej. registrar misión completada
+    Y pagar gemas). Si la segunda falla, la primera no debe quedar guardada.
+
+  SOLUCIÓN
+    Envolver las escrituras en una sola transacción: se aplican todas o ninguna.
+    - El DDL y los seeds de schema.sql van dentro de BEGIN; ... COMMIT;.
+        -> BEGIN abre la transacción; si cualquier CREATE/INSERT falla, al llegar
+           a COMMIT no se guarda nada: nunca queda un schema a medias.
+    - Cada CALL a un procedimiento es una transacción implícita.
+        -> No hace falta BEGIN/COMMIT externo: PostgreSQL envuelve TODO el cuerpo
+           del procedimiento en una sola transacción; un error = rollback total.
+    - En sp_registrar_batalla, battles y player_attack_types son inseparables.
+        -> Si una se escribe y la otra no, las estadísticas mentirían; van juntas
+           para no dejar el estado a medio actualizar.
+    - El INSERT de batalla y la actualización de stats del trigger son atómicos.
+        -> El trigger corre en la MISMA transacción del INSERT: player_stats se
+           actualiza junto con la batalla, nunca por separado.
+
+  CÓDIGO (Backend/sql/procedimientos.sql — sp_registrar_batalla)
+    -- El 1er INSERT (battles) puede tener éxito y el 2do fallar por el CHECK
+    -- del elemento; entonces TODA la transacción se revierte.
+    INSERT INTO battles (...) VALUES (...) RETURNING id INTO v_batalla_id;
+    IF p_elemento_ataque IS NOT NULL THEN
+        INSERT INTO player_attack_types (user_id, element)
+        VALUES (p_user_id, p_elemento_ataque)
+        ON CONFLICT DO NOTHING;   -- 'tierra' NO es válido -> error -> rollback
+    END IF;
+
+    Qué hace cada pieza:
+      - INSERT INTO battles ... RETURNING id INTO v_batalla_id: guarda la batalla
+        y captura el id generado (SERIAL) en una variable para usarlo luego.
+      - IF p_elemento_ataque IS NOT NULL: solo intenta registrar el tipo de ataque
+        si el jugador realmente informó un elemento.
+      - INSERT INTO player_attack_types ... ON CONFLICT DO NOTHING: evita
+        duplicar el par (user_id, element); si el elemento no respeta el CHECK
+        (ej. 'tierra') lanza error DESPUÉS del INSERT de la batalla, así que toda
+        la transacción se revierte -> prueba viva de atomicidad.
+
+  DEMO
+    SELECT count(*) AS antes FROM battles;   -- 18
+    CALL sp_registrar_batalla(:kai, 'victoria', 'bot', '5', false, 'tierra');
+    SELECT count(*) AS despues FROM battles; -- 18: la batalla se revirtió.
+
+    Qué demuestra: si tras el CALL el conteo sigue en 18, la batalla insertada al
+    inicio se deshizo por completo; el "todo o nada" funcionó.
+
+3.2 C — CONSISTENCIA  ("los invariantes nunca se rompen")
+--------------------------------------------------------------------------------
+  PROBLEMA
+    Datos ilegales (usuario inexistente, resultado fuera de dominio, duplicados)
+    podrían dejar la base en un estado "ilógico".
+
+  SOLUCIÓN
+    Reglas declarativas en el motor: PK, FK, CHECK, UNIQUE, NOT NULL.
+    - Catálogos sembrados con ON CONFLICT DO NOTHING (re-ejecutable, sin duplicados).
+        -> re-ejecutar el seed no falla ni duplica filas.
+    - El trigger mantiene el invariante battles_played = battles_won + battles_lost.
+        -> el total de partidas y su desglose nunca se contradicen.
+    - El servicio valida el dominio (misma regla que el CHECK) como primera barrera.
+        -> evita viajar a la BD con datos ya inválidos; el CHECK queda como red final.
+    - Qué hace cada restricción:
+        PK     -> una sola fila por entidad (identidad única).
+        FK     -> no puede existir una fila que apunte a un usuario inexistente;
+                  ON DELETE CASCADE borra lo dependiente cuando muere el usuario.
+        CHECK  -> solo acepta valores del dominio (resultado, elemento, nivel...).
+        UNIQUE -> prohibe repetidos (un usuario no repite carta/misión/logro/tipo).
+        NOT NULL-> obliga a informar la columna (no admite datos vacíos).
+
+  CÓDIGO (restricciones representativas)
+    result   varchar(10) NOT NULL CHECK (result IN ('victoria','derrota'))
+    element  varchar(20) NOT NULL CHECK (element IN
+             ('fuego','agua','planta','luz','sombra','espiritu'))
+    level    smallint    NOT NULL CHECK (level BETWEEN 1 AND 3)
+    opponent varchar(10) NOT NULL DEFAULT 'bot' CHECK (opponent IN ('bot','lan'))
+    UNIQUE (element, level)
+    FK ... REFERENCES users(id) ON DELETE CASCADE
+
+    Qué hace cada una:
+      - result/element/level/opponent: CHECK restringe el valor a una lista;
+        NOT NULL prohibe vacíos; DEFAULT 'bot' rellena si no se indica.
+      - UNIQUE (element, level): no puede haber dos cartas del mismo elemento y nivel.
+      - FK REFERENCES users(id) ON DELETE CASCADE: la fila pertenece a un usuario
+        real y se borra en cascada junto con él.
+
+  DEMO
+    BEGIN;
+    INSERT INTO battles (user_id, result) VALUES (99999, 'victoria');  -- FK falla
+    ROLLBACK;
+    BEGIN;
+    INSERT INTO battles (user_id, result) VALUES (:kai, 'empate');     -- CHECK falla
+    ROLLBACK;
+
+    Qué demuestra: ambos INSERT son rechazados (usuario 99999 no existe / 'empate'
+    no pertenece al dominio), así que la BD jamás guarda un estado ilógico.
+
+3.3 I — AISLAMIENTO  ("transacciones concurrentes no se pisan")
+--------------------------------------------------------------------------------
+  PROBLEMA
+    Dos jugadores juegan a la vez; nadie debe leer escrituras a medias de otro.
+
+  SOLUCIÓN
+    Nivel de aislamiento READ COMMITTED (default de PostgreSQL): cada transacción
+    ve solo filas ya confirmadas. Cada jugador escribe su propia fila de
+    player_stats (PK user_id) -> sin carrera sobre la misma fila.
+
+    Qué hace:
+      - READ COMMITTED: una transacción nunca ve datos sin confirmar de otra;
+        solo lee lo que ya hizo COMMIT.
+      - PK user_id en player_stats: cada jugador toca su propia fila, así dos
+        partidas simultáneas no compiten por el mismo registro.
+
+  CÓDIGO / VERIFICACIÓN
+    SHOW transaction_isolation;   -- read committed
+      -> confirma el nivel de aislamiento realmente activo en el motor.
+
+3.4 D — DURABILIDAD  ("un COMMIT confirmado sobrevive a caídas")
+--------------------------------------------------------------------------------
+  PROBLEMA
+    Si hay un corte de energía tras confirmar una victoria, no se debe perder.
+
+  SOLUCIÓN
+    PostgreSQL escribe en el WAL (Write-Ahead Log) y confirma con fsync ANTES de
+    responder: synchronous_commit = on.
+
+    Qué hace:
+      - WAL (Write-Ahead Log): registra el cambio en disco antes de tocar las
+        tablas; si hay un corte, PostgreSQL rehace lo confirmado al reiniciar.
+      - synchronous_commit = on: el COMMIT no responde hasta que el WAL está
+        físicamente escrito (fsync), garantizando que lo confirmado no se pierda.
+
+  CÓDIGO / VERIFICACIÓN
+    SHOW synchronous_commit;        -- on  -> verifica que la garantía está activa
+    SELECT pg_current_wal_lsn();    -- posición actual del WAL (avanza con cada
+                                    -- escritura durable)
+
+  RESUMEN ACID EN UNA FRASE
+    Atomicidad en cada CALL y en cada INSERT+trigger; consistencia en las 77
+    restricciones + el trigger; aislamiento READ COMMITTED entre jugadores;
+    durabilidad con WAL + synchronous_commit.
+
+
+================================================================================
+4. TEOREMA CAP
+================================================================================
+
+  Teorema (Brewer / Gilbert): en un sistema distribuido solo se garantizan 2 de 3:
+    C — Consistencia: todos los nodos leen el mismo dato actualizado.
+    A — Disponibilidad: cada petición recibe respuesta.
+    P — Tolerancia a partición: el sistema sigue aunque la red se corte.
+
+  La red es falible => P es obligatoria; la decisión real es C o A ante partición.
+
+4.1 Nuestra arquitectura vista desde CAP
+--------------------------------------------------------------------------------
+  [Clientes Phaser en la red] <-- partición posible --> [Express :3001]
+                                                             |
+                                                    partición posible
+                                                             |
+                                                    [PostgreSQL :5432]
+
+4.2 Decisión de diseño: CP (consistencia > disponibilidad)
+--------------------------------------------------------------------------------
+  SITUACIÓN                        QUÉ HACE EL SISTEMA                  CEDE
+  -------------------------------  -----------------------------------  ----
+  La BD no responde al arrancar    bootstrap.js marca databaseAvailable  A
+                                   = false; NO se montan rutas de datos
+                                   (modo LAN).
+  Error de BD en una petición      errorHandler.js -> HTTP 500; nunca    A
+                                   respuesta inventada o cacheada.
+  Escrituras en PostgreSQL         Siempre contra el primario            A
+                                   (single-writer).
+  Login/registro y rankings        Siempre necesitan el dato más         elige C
+                                   reciente (credenciales, únicos).
+
+  EVIDENCIA EN CÓDIGO (Backend/src/bootstrap.js)
+    } catch (error) {
+      logger.error('No se pudo conectar a la BD:', error.message || error);
+      databaseAvailable = false;   // la BD manda: sin BD, sin datos
+    }
+    if (!(config.dbEnabled && databaseAvailable)) {
+      logger.info('Rutas de autenticación y perfil deshabilitadas (modo LAN)');
+      return { authRouter: null, profileRouter: null };  // no se sirve stale
+    }
+
+4.3 PostgreSQL y CAP en producción
+--------------------------------------------------------------------------------
+  - Con streaming replication + failover, PostgreSQL es CP: el primario es la
+    única fuente de verdad; un secundario aislado NO acepta escrituras (evita
+    split-brain) -> prefiere no responder antes que divergir.
+  - El proyecto no usa réplicas: toda lectura va al primario => consistencia fuerte.
+  - PACELC: si hay Partición elijo C sobre A; en operación normal, con
+    synchronous_commit=on se elige C sobre Latencia.
+
+4.4 ¿Y la disponibilidad (A) dónde queda?
+--------------------------------------------------------------------------------
+  - Juego LAN / salas: el relay de socket.io (RoomManager, en memoria) NO depende
+    de la BD -> las partidas siguen aunque la BD esté caída.
+  - Frontend sin sesión: profileApi.js funciona en modo offline (no-op).
+  - Partición deliberada: cuentas y progreso = CP; relato de juego = disponible.
+
+4.5 ACID vs CAP
+--------------------------------------------------------------------------------
+  ACID  -> dentro de UNA base de datos transaccional ("¿qué pasa si fallo a
+           mitad de una escritura?").
+  CAP   -> entre NODOS distribuidos ("¿qué pasa si se corta la red?").
+  Aquí: PostgreSQL garantiza ACID local; el sistema adopta postura CP global.
+
+
+================================================================================
+5. VISTAS DE POSTGRESQL: CÓDIGO Y EJECUCIÓN
+================================================================================
+
+  Una vista es una consulta guardada: NO almacena datos (cero duplicidad), se
+  calcula al consultar y muestra siempre el dato más reciente. Oculta el JOIN
+  complejo al consumidor. Script: Backend/sql/vistas.sql (idempotente).
+
+5.1 v_ranking_jugadores
+--------------------------------------------------------------------------------
+  Resuelve: ranking con partidas, victorias, % victorias, rachas y gemas.
+  Técnicas: LEFT JOIN (incluye jugadores sin stats) + CASE + COALESCE.
+
+  CREATE VIEW v_ranking_jugadores AS
+  SELECT
+      u.id, u.username,
+      COALESCE(s.battles_played, 0) AS partidas,
+      COALESCE(s.battles_won, 0)    AS victorias,
+      COALESCE(s.battles_lost, 0)   AS derrotas,
+      CASE WHEN COALESCE(s.battles_played, 0) = 0 THEN 0.0
+           ELSE ROUND(100.0 * s.battles_won / s.battles_played, 1) END
+                                    AS pct_victorias,
+      COALESCE(s.current_streak, 0) AS racha_actual,
+      COALESCE(s.longest_streak, 0) AS mejor_racha,
+      COALESCE(s.gems, 0)           AS gemas
+  FROM users u
+  LEFT JOIN player_stats s ON s.user_id = u.id
+  ORDER BY victorias DESC, pct_victorias DESC, u.username;
+
+5.2 v_coleccion_cartas
+--------------------------------------------------------------------------------
+  Resuelve: cuántos jugadores poseen cada carta y su porcentaje.
+  Técnicas: LEFT JOIN + COUNT + NULLIF (evita división por cero).
+
+  CREATE VIEW v_coleccion_cartas AS
+  SELECT c.id, c.element, c.level, c.name,
+         COUNT(pc.user_id) AS poseedores,
+         ROUND(100.0 * COUNT(pc.user_id)
+               / NULLIF((SELECT COUNT(*) FROM users), 0), 1) AS pct_jugadores
+  FROM cards c
+  LEFT JOIN player_cards pc ON pc.card_id = c.id
+  GROUP BY c.id, c.element, c.level, c.name
+  ORDER BY c.element, c.level;
+
+5.3 v_progreso_misiones
+--------------------------------------------------------------------------------
+  Resuelve: iniciadas/completadas y progreso promedio por misión.
+  Técnicas: COUNT(...) FILTER (WHERE ...) + AVG.
+
+  CREATE VIEW v_progreso_misiones AS
+  SELECT m.id, m.element, m.title, m.target, m.reward_gems,
+         COUNT(pm.user_id)                             AS iniciadas,
+         COUNT(pm.user_id) FILTER (WHERE pm.completed) AS completadas,
+         COALESCE(ROUND(AVG(pm.progress), 2), 0)       AS progreso_promedio
+  FROM missions m
+  LEFT JOIN player_missions pm ON pm.mission_id = m.id
+  GROUP BY m.id, m.element, m.title, m.target, m.reward_gems
+  ORDER BY m.id;
+
+5.4 v_historial_batallas
+--------------------------------------------------------------------------------
+  Resuelve: historial legible (username en vez de user_id), orden cronológico.
+  Técnicas: JOIN + ORDER BY.
+
+  CREATE VIEW v_historial_batallas AS
+  SELECT b.id, u.username, b.result, b.opponent, b.difficulty,
+         b.level3_on_field, b.created_at
+  FROM battles b
+  JOIN users u ON u.id = b.user_id
+  ORDER BY b.created_at DESC, b.id DESC;
+
+5.5 EJECUCIÓN
+--------------------------------------------------------------------------------
+  -- Cargar/actualizar las vistas
+  & $psql -U postgres -h 127.0.0.1 -d elemental -f Backend\sql\vistas.sql
+
+  -- Consultarlas
+  SELECT * FROM v_ranking_jugadores;
+  SELECT * FROM v_coleccion_cartas WHERE poseedores > 0;
+  SELECT * FROM v_progreso_misiones;
+  SELECT * FROM v_historial_batallas LIMIT 10;
+
+  -- Listar las vistas existentes
+  SELECT table_name FROM information_schema.views WHERE table_schema = 'public';
+
+  NOTA: v_ranking_jugadores depende del trigger: sin él, player_stats no existiría.
+
+
+================================================================================
+6. PROCEDIMIENTOS ALMACENADOS: FUNCIONAMIENTO Y EJECUCIÓN
+================================================================================
+
+  Se ejecutan con CALL y corren en UNA transacción implícita: o se aplican todos
+  los pasos o ninguno (atomicidad ACID). Script: Backend/sql/procedimientos.sql.
+
+  LÍMITE A CONOCER: CALL no acepta subconsultas en sus argumentos (restricción de
+  PostgreSQL). En psql se usan variables con \gset.
+
+6.1 sp_registrar_batalla
+--------------------------------------------------------------------------------
+  Firma:
+    sp_registrar_batalla(p_user_id, p_resultado, p_opponent DEFAULT 'bot',
+                         p_dificultad DEFAULT NULL, p_nivel3_en_campo DEFAULT FALSE,
+                         p_elemento_ataque DEFAULT NULL)
+
+  Funcionamiento:
+    1) Valida dominio: resultado ∈ {victoria,derrota}, oponente ∈ {bot,lan},
+       y existencia del usuario -> RAISE EXCEPTION si falla.
+    2) INSERT en battles (RETURNING id).
+    3) Si se informa el elemento, INSERT en player_attack_types (ON CONFLICT DO
+       NOTHING). El CHECK de la BD valida el elemento.
+    4) RAISE NOTICE con las stats que el trigger YA actualizó.
+
+  La validación del elemento se deja a propósito en el CHECK de la BD: si es
+  inválido, el INSERT en player_attack_types falla DESPUÉS de insertar la batalla
+  y toda la transacción se revierte (demostración viva de atomicidad).
+
+  CÓDIGO (fragmento)
+    INSERT INTO battles (user_id, result, opponent, difficulty, level3_on_field,
+                         created_at)
+    VALUES (p_user_id, p_resultado, p_opponent, p_dificultad, p_nivel3_en_campo,
+            now())
+    RETURNING id INTO v_batalla_id;
+
+    IF p_elemento_ataque IS NOT NULL THEN
+        INSERT INTO player_attack_types (user_id, element)
+        VALUES (p_user_id, p_elemento_ataque)
+        ON CONFLICT DO NOTHING;
+    END IF;
+
+    SELECT * INTO v_stats FROM player_stats WHERE user_id = p_user_id;
+    RAISE NOTICE 'Batalla #% registrada ... partidas=% (V:% D:%) | racha=% | gemas=%',
+        v_batalla_id, p_user_id, p_resultado, v_stats.battles_played,
+        v_stats.battles_won, v_stats.battles_lost, v_stats.current_streak,
+        v_stats.gems;
+
+6.2 sp_completar_mision
+--------------------------------------------------------------------------------
+  Firma:
+    sp_completar_mision(p_user_id, p_mission_id)
+
+  Funcionamiento:
+    1) Valida que existan la misión y el usuario.
+    2) UPSERT en player_missions: progress = target, completed = true.
+    3) UPSERT en player_stats: gems = gems + reward_gems  (misma transacción).
+    4) RAISE NOTICE con el total de gemas.
+
+  Si la 2da escritura fallara, la 1ra se revierte: no existe misión completada
+  sin pago.
+
+  CÓDIGO (fragmento)
+    INSERT INTO player_missions (user_id, mission_id, progress, completed,
+                                 completed_at)
+    VALUES (p_user_id, p_mission_id, v_mision.target, TRUE, now())
+    ON CONFLICT (user_id, mission_id) DO UPDATE SET
+        progress = v_mision.target, completed = TRUE,
+        completed_at = COALESCE(player_missions.completed_at, now());
+
+    INSERT INTO player_stats (user_id, gems, updated_at)
+    VALUES (p_user_id, v_mision.reward_gems, now())
+    ON CONFLICT (user_id) DO UPDATE SET
+        gems = player_stats.gems + v_mision.reward_gems, updated_at = now();
+
+6.3 EJECUCIÓN
+--------------------------------------------------------------------------------
+  -- Cargar/actualizar los procedimientos
+  & $psql -U postgres -h 127.0.0.1 -d elemental -f Backend\sql\procedimientos.sql
+
+  -- OJO: CALL no acepta subconsultas -> variables psql con \gset
+  SELECT id AS kai FROM users WHERE username = 'demo_kai' \gset
+  SELECT id AS ryo FROM users WHERE username = 'demo_ryo' \gset
+
+  -- Caso de éxito
+  CALL sp_registrar_batalla(:kai, 'victoria', 'bot', '5', false, 'agua');
+  -- NOTICE: Batalla #N registrada ... partidas=7 (V:6 D:1) | racha=3 | gemas=350
+
+  CALL sp_completar_mision(:ryo, 'coleccionista');
+  -- NOTICE: Misión "Coleccionista" ... +100 gemas | total de gemas = 150
+
+  -- Caso de error (atomicidad): todo se revierte
+  CALL sp_registrar_batalla(:kai, 'victoria', 'bot', '5', false, 'tierra');
+
+  -- Caso de error (validación)
+  CALL sp_completar_mision(:kai, 'mision-fantasma');
+
+
+================================================================================
+7. TRIGGER: CÓDIGO, FUNCIONAMIENTO Y DEMOSTRACIÓN
+================================================================================
+
+  trg_stats_batalla — AFTER INSERT ON battles FOR EACH ROW
+  Función: fn_actualizar_stats_batalla()  ·  Script: Backend/sql/triggers.sql
+
+7.1 Funcionamiento
+--------------------------------------------------------------------------------
+  Cada INSERT en battles dispara automáticamente un UPSERT en player_stats:
+
+    INSERT en battles ──▶ trigger ──▶ UPSERT en player_stats
+      • battles_played  + 1
+      • battles_won     + 1 si result = 'victoria'
+      • battles_lost    + 1 si result = 'derrota'
+      • current_streak  = racha + 1 (victoria) / 0 (derrota)
+      • longest_streak  = GREATEST(máximo histórico, racha tras el resultado)
+      • updated_at      = now()
+      • si el jugador no tenía fila, la CREA con valores iniciales
+
+  Motivo de diseño: las stats son un DATO DERIVADO del historial de battles.
+  El trigger las mantiene de forma automática, atómica y sin posibilidad de
+  desincronización. Las GEMAS no están en el trigger porque pagar recompensas es
+  regla de negocio -> pertenece a sp_completar_mision.
+
+7.2 CÓDIGO
+--------------------------------------------------------------------------------
+  CREATE FUNCTION fn_actualizar_stats_batalla() RETURNS TRIGGER AS $$
+  BEGIN
+      INSERT INTO player_stats (
+          user_id, battles_played, battles_won, battles_lost,
+          current_streak, longest_streak, updated_at
+      )
+      VALUES (
+          NEW.user_id, 1,
+          CASE WHEN NEW.result = 'victoria' THEN 1 ELSE 0 END,
+          CASE WHEN NEW.result = 'derrota'  THEN 1 ELSE 0 END,
+          CASE WHEN NEW.result = 'victoria' THEN 1 ELSE 0 END,
+          CASE WHEN NEW.result = 'victoria' THEN 1 ELSE 0 END,
+          now()
+      )
+      ON CONFLICT (user_id) DO UPDATE SET
+          battles_played = player_stats.battles_played + 1,
+          battles_won    = player_stats.battles_won
+                             + CASE WHEN NEW.result = 'victoria' THEN 1 ELSE 0 END,
+          battles_lost   = player_stats.battles_lost
+                             + CASE WHEN NEW.result = 'derrota' THEN 1 ELSE 0 END,
+          current_streak = CASE WHEN NEW.result = 'victoria'
+                                THEN player_stats.current_streak + 1 ELSE 0 END,
+          longest_streak = GREATEST(player_stats.longest_streak,
+                                CASE WHEN NEW.result = 'victoria'
+                                     THEN player_stats.current_streak + 1
+                                     ELSE player_stats.current_streak END),
+          updated_at     = now();
+      RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql;
+
+  CREATE TRIGGER trg_stats_batalla
+  AFTER INSERT ON battles
+  FOR EACH ROW
+  EXECUTE FUNCTION fn_actualizar_stats_batalla();
+
+7.3 EJECUCIÓN / DEMOSTRACIÓN
+--------------------------------------------------------------------------------
+  -- Cargar/actualizar el trigger
+  & $psql -U postgres -h 127.0.0.1 -d elemental -f Backend\sql\triggers.sql
+
+  -- Demostración dentro de una transacción (no ensucia la base)
+  SELECT id AS kai FROM users WHERE username = 'demo_kai' \gset
+  BEGIN;
+  INSERT INTO battles (user_id, result, opponent, difficulty)
+  VALUES (:kai, 'victoria', 'bot', '5');
+  SELECT battles_played, battles_won, current_streak, longest_streak
+  FROM player_stats WHERE user_id = :kai;   -- subió 1 partida y la racha
+  ROLLBACK;                                 -- (o COMMIT para persistir)
+
+  NOTA: los INSERT de datos_demo.sql respetan el orden cronológico porque el
+  trigger calcula las rachas en orden de llegada.
+
+  IMPORTANTE: ProfileService.recordBattle() NO escribe stats (fuente única de
+  verdad = el trigger). Si el servicio también escribiera, se duplicarían los
+  contadores.
+
+
+================================================================================
+8. RESUMEN Y CONCLUSIONES
+================================================================================
+
+8.1 ¿Qué hace la base de datos?
+--------------------------------------------------------------------------------
+  Persiste, de forma íntegra y consistente, todo el estado de juego que va más
+  allá de una partida en memoria:
+    - Identidad (users) y credenciales (hash bcrypt).
+    - Estadísticas del jugador (player_stats) derivadas del historial.
+    - Historial de batallas (battles).
+    - Catálogos de cartas, misiones y logros.
+    - Progreso: colección, misiones, logros y tipos de ataque usados.
+  Además, ofrece objetos programados (4 vistas, 2 procedimientos, 1 trigger) que
+  encapsulan consultas y reglas en el propio motor.
+
+8.2 ¿Cómo se relacionan sus componentes?
+--------------------------------------------------------------------------------
+    users 1───1 player_stats
+    users 1───N battles ──▶ (trigger) ──▶ player_stats
+    users 1───N player_cards ────────1 cards
+    users 1───N player_missions ─────1 missions
+    users 1───N player_achievements ─1 achievements
+    users 1───N player_attack_types
+
+  - Las VISTAS leen datos (no escriben) y combinan tablas mediante JOIN.
+  - Los PROCEDIMIENTOS escriben varias tablas en una sola transacción.
+  - El TRIGGER mantiene player_stats sincronizada con battles.
+  - Las FK con ON DELETE CASCADE hacen que borrar un usuario limpie su progreso.
+  - El backend accede solo a través de modelos/repositorios (Sequelize), nunca
+    desde las escenas; la lógica de negocio vive en los servicios.
+
+8.3 ¿Qué garantiza el funcionamiento del sistema?
+--------------------------------------------------------------------------------
+  - INTEGRIDAD: 77 restricciones (PK, FK, CHECK, UNIQUE, NOT NULL) rechazan datos
+    inválidos aunque el código de aplicación tenga un error.
+  - ACID:
+      Atomicidad  -> cada CALL y cada INSERT+trigger son "todo o nada".
+      Consistencia-> invariantes siempre válidos (p. ej. partidas = V + D).
+      Aislamiento -> READ COMMITTED entre jugadores concurrentes.
+      Durabilidad -> WAL + synchronous_commit = on.
+  - CAP (CP): ante caídas o particiones, el sistema prioriza la consistencia y
+    prefiere no responder (500 / rutas deshabilitadas) antes que servir datos
+    viejos o incompletos. El plano de juego LAN (socket.io en memoria) mantiene
+    disponibilidad sin depender de la BD.
+  - DERIVACIÓN AUTOMÁTICA: el trigger evita desincronizar stats y la app no
+    mantiene contadores redundantes (fuente única de verdad).
+  - IDEMPOTENCIA: schema.sql usa ON CONFLICT DO NOTHING; los scripts pueden
+    re-ejecutarse sin duplicar datos.
+
+8.4 Frase de cierre
+--------------------------------------------------------------------------------
+  "ACID gobierna lo que pasa dentro de la base; CAP gobierna qué pasa cuando la
+  infraestructura falla. Nuestro sistema aplica ACID completo en el nodo de
+  PostgreSQL y adopta la postura CP de Brewer ante caídas: nunca servir datos
+  viejos o incompletos."
+
+8.5 Cifras de la base (estado actual)
+--------------------------------------------------------------------------------
+  10 tablas · 4 vistas · 2 procedimientos almacenados · 1 trigger
+  77 restricciones · WAL + synchronous_commit = on · READ COMMITTED
+  Demo: 4 usuarios demo_*, 18 batallas, 18 cartas, 10 misiones en progreso.
+
+8.6 Comandos de restauración del estado demo
+--------------------------------------------------------------------------------
+  $env:PGPASSWORD = '123456'
+  $psql = "C:\Program Files\PostgreSQL\18\bin\psql.exe"
+  # Re-crear los 4 usuarios demo_* (idempotente)
+  & $psql -U postgres -h 127.0.0.1 -d elemental -f Backend\sql\datos_demo.sql
+  # Borrar solo los demo (un solo DELETE gracias al ON DELETE CASCADE)
+  & $psql -U postgres -h 127.0.0.1 -d elemental -f Backend\sql\datos_demo_eliminar.sql
+
+================================================================================
+  FIN DEL DOCUMENTO — Sustentación Base de Datos · Elemental Battlecards
+================================================================================

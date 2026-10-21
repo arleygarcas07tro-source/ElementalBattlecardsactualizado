@@ -1,28 +1,11 @@
 import Phaser from 'phaser';
 import { play as playSfx } from '../helpers/audioManager.js';
 import { getProfileStats } from '../helpers/playerProgress.js';
+import DomSceneBase from './ui/DomSceneBase.js';
+import { elementByKey, elementsNavHTML, energyParticlesHTML } from './ui/elementCatalog.js';
+import { ACHIEVEMENTS } from '../game/achievementsCatalog.js';
 
-const ELEMENTS = [
-    { key: 'agua',       name: 'Agua',       color: '#38bdf8', soft: 'rgba(56,189,248,0.14)',  glow: 'rgba(56,189,248,0.42)',  img: '/assets/images/iconos/agua.jpeg' },
-    { key: 'fuego',      name: 'Fuego',      color: '#fb5a2a', soft: 'rgba(251,90,42,0.14)',   glow: 'rgba(251,90,42,0.42)',   img: '/assets/images/iconos/fuego.jpeg' },
-    { key: 'aire',       name: 'Aire',       color: '#6fe3ff', soft: 'rgba(111,227,255,0.14)', glow: 'rgba(111,227,255,0.42)', img: '/assets/images/iconos/luz.jpeg' },
-    { key: 'tierra',     name: 'Tierra',     color: '#a78bfa', soft: 'rgba(167,139,250,0.14)', glow: 'rgba(167,139,250,0.42)', img: '/assets/images/iconos/espiritu.jpeg' },
-    { key: 'naturaleza', name: 'Naturaleza', color: '#34d97b', soft: 'rgba(52,217,123,0.14)',  glow: 'rgba(52,217,123,0.42)',  img: '/assets/images/iconos/planta.jpeg' },
-    { key: 'oscuridad',  name: 'Oscuridad',  color: '#c026d3', soft: 'rgba(192,38,211,0.16)',  glow: 'rgba(192,38,211,0.45)',  img: '/assets/images/iconos/sombra.jpeg' }
-];
-
-const ACHIEVEMENTS = [
-    { el: 'fuego',      icon: '🔥', title: 'Primera llama',     desc: 'Gana tu primera batalla contra cualquier oponente.', condition: s => s.firstWin },
-    { el: 'agua',       icon: '🌊', title: 'Marea creciente',   desc: 'Consigue una racha de 3 victorias consecutivas.', condition: s => s.streak3 },
-    { el: 'naturaleza', icon: '🌱', title: 'Raíces profundas', desc: 'Realiza 5 fusiones de cartas iguales.', condition: s => s.fusions5 },
-    { el: 'aire',       icon: '⚡', title: 'Cazador del viento', desc: 'Completa todas las misiones elementales.', condition: s => s.allMissions },
-    { el: 'tierra',     icon: '🗿', title: 'Coloso invicto',    desc: 'Gana 10 batallas contra cualquier oponente.', condition: s => s.tenWins },
-    { el: 'oscuridad',  icon: '🌑', title: 'Señor de la noche', desc: 'Colecciona las 18 cartas del mundo elemental.', condition: s => s.fullCollection }
-];
-
-const elementByKey = key => ELEMENTS.find(el => el.key === key);
-
-export default class ProfileScene extends Phaser.Scene {
+export default class ProfileScene extends DomSceneBase {
     constructor() {
         super('ProfileScene');
         this.playerData = {};
@@ -63,19 +46,9 @@ export default class ProfileScene extends Phaser.Scene {
 
         const xpPercent = Math.min(100, Math.round((player.xpActual / player.xpMaxima) * 100));
 
-        const particles = Array.from({ length: 10 }, (_, i) => {
-            const left = Math.round(4 + ((i * 37) % 92));
-            const top = Math.round(8 + ((i * 53) % 70));
-            const size = 3 + (i % 3) * 2;
-            const delay = (i % 6) * -1.4;
-            return `<span class="energy" style="left:${left}%; top:${top}%; width:${size}px; height:${size}px; animation-delay:${delay}s;"></span>`;
-        }).join('');
+        const particles = energyParticlesHTML();
 
-        const elementsNavHtml = ELEMENTS.map(el => `
-            <span class="nav-orb" style="--el:${el.color}; --el-soft:${el.soft};" title="${el.name}">
-                <img src="${el.img}" alt="${el.name}">
-            </span>
-        `).join('');
+        const elementsNavHtml = elementsNavHTML();
 
         const statsCards = [
             { icon: '🃏', title: 'Cartas coleccionadas', value: `${player.collectedCards} / ${player.collectedTotal}` },
@@ -877,34 +850,13 @@ export default class ProfileScene extends Phaser.Scene {
             </nav>
         </div>`;
 
-        this.domUI = this.add.dom(0, 0).createFromHTML(html);
-        this.domUI.setOrigin(0);
-        this.domUI.setDepth(9999);
+        const node = this.mountDOM(html, { flex: true });
 
-        this.domUI.node.style.position = 'absolute';
-        this.domUI.node.style.left = '0';
-        this.domUI.node.style.top = '0';
-        this.domUI.node.style.display = 'flex';
-        this.domUI.node.style.flexDirection = 'column';
-        this.domUI.node.style.width = width + 'px';
-        this.domUI.node.style.height = height + 'px';
-
-        const node = this.domUI.node;
-
-        const bind = (selector, fn) => {
-            const els = node.querySelectorAll(selector);
-            els.forEach(el => {
-                const handler = ev => { ev.preventDefault(); playSfx('click', this); fn(ev, el); };
-                el.addEventListener('click', handler);
-                this.listeners.push({ el, handler, type: 'click' });
-            });
-        };
-
-        bind('#btn-home', () => this.scene.start('HomeScenes', { playerData: this.playerData }));
-        bind('[data-nav="home"]', () => this.scene.start('HomeScenes', { playerData: this.playerData }));
-        bind('[data-nav="cards"]', () => this.scene.start('CardsScene', { playerData: this.playerData }));
-        bind('[data-nav="missions"]', () => this.scene.start('MissionsScene', { playerData: this.playerData }));
-        bind('[data-nav="settings"]', () => this.scene.start('SettingsScene', { playerData: this.playerData }));
+        this.bind('#btn-home', () => this.scene.start('HomeScenes', { playerData: this.playerData }));
+        this.bind('[data-nav="home"]', () => this.scene.start('HomeScenes', { playerData: this.playerData }));
+        this.bind('[data-nav="cards"]', () => this.scene.start('CardsScene', { playerData: this.playerData }));
+        this.bind('[data-nav="missions"]', () => this.scene.start('MissionsScene', { playerData: this.playerData }));
+        this.bind('[data-nav="settings"]', () => this.scene.start('SettingsScene', { playerData: this.playerData }));
 
         // Animación de la barra de experiencia al entrar.
         const xpFill = node.querySelector('#xp-fill');
@@ -921,7 +873,7 @@ export default class ProfileScene extends Phaser.Scene {
         const panelSub = node.querySelector('#panel-sub');
 
         tabs.forEach(tab => {
-            const handler = () => {
+            this.track(tab, () => {
                 tabs.forEach(t => t.classList.remove('active'));
                 tab.classList.add('active');
                 const paneName = tab.dataset.tab;
@@ -936,9 +888,7 @@ export default class ProfileScene extends Phaser.Scene {
                     panelTitle.textContent = 'Información';
                     panelSub.textContent = 'Conoce tu esencia y afina tu leyenda.';
                 }
-            };
-            tab.addEventListener('click', handler);
-            this.listeners.push({ el: tab, handler, type: 'click' });
+            }, 'click');
         });
 
         // Nombre de jugador editable.
@@ -962,35 +912,27 @@ export default class ProfileScene extends Phaser.Scene {
         };
 
         if (btnEditName && nameEdit && nameText) {
-            const handler = () => {
+            this.track(btnEditName, () => {
                 playSfx('click', this);
                 nameText.hidden = true;
                 nameEdit.style.display = 'flex';
                 nameInput.value = nameText.textContent;
                 nameInput.focus();
                 nameInput.select();
-            };
-            btnEditName.addEventListener('click', handler);
-            this.listeners.push({ el: btnEditName, handler, type: 'click' });
+            }, 'click');
         }
         if (btnSaveName) {
-            const handler = () => { playSfx('card', this); stopEditing(true); };
-            btnSaveName.addEventListener('click', handler);
-            this.listeners.push({ el: btnSaveName, handler, type: 'click' });
+            this.track(btnSaveName, () => { playSfx('card', this); stopEditing(true); }, 'click');
         }
         if (btnCancelName) {
-            const handler = () => { playSfx('click', this); stopEditing(false); };
-            btnCancelName.addEventListener('click', handler);
-            this.listeners.push({ el: btnCancelName, handler, type: 'click' });
+            this.track(btnCancelName, () => { playSfx('click', this); stopEditing(false); }, 'click');
         }
         if (nameInput) {
-            const handler = (ev) => {
+            this.track(nameInput, (ev) => {
                 ev.stopPropagation();
                 if (ev.key === 'Enter') { playSfx('card', this); stopEditing(true); }
                 if (ev.key === 'Escape') { playSfx('click', this); stopEditing(false); }
-            };
-            nameInput.addEventListener('keydown', handler);
-            this.listeners.push({ el: nameInput, handler, type: 'keydown' });
+            }, 'keydown');
         }
 
         // Avatar: cambiar desde un archivo local.
@@ -999,9 +941,7 @@ export default class ProfileScene extends Phaser.Scene {
         const btnAvatar = node.querySelector('#btn-avatar');
 
         if (btnAvatar && avatarFile) {
-            const handler = () => { playSfx('click', this); avatarFile.click(); };
-            btnAvatar.addEventListener('click', handler);
-            this.listeners.push({ el: btnAvatar, handler, type: 'click' });
+            this.track(btnAvatar, () => { playSfx('click', this); avatarFile.click(); }, 'click');
         }
 
         this.imageChangeListener = (event) => {
@@ -1014,36 +954,7 @@ export default class ProfileScene extends Phaser.Scene {
             reader.readAsDataURL(file);
         };
         if (avatarFile) {
-            avatarFile.addEventListener('change', this.imageChangeListener);
-        }
-
-        this.scale.on('resize', this.onResize, this);
-        this.events.on('shutdown', this.onShutdown, this);
-    }
-
-    onResize(gameSize) {
-        if (!gameSize) return;
-        const { width, height } = gameSize;
-        if (this.domUI && this.domUI.node) {
-            this.domUI.node.style.width = width + 'px';
-            this.domUI.node.style.height = height + 'px';
-        }
-    }
-
-    onShutdown() {
-        this.listeners.forEach(({ el, handler, type }) => {
-            if (el && el.removeEventListener) el.removeEventListener(type, handler);
-        });
-        this.listeners = [];
-        if (this.domUI && this.domUI.node) {
-            const avatarFile = this.domUI.node.querySelector('#avatar-file');
-            if (avatarFile && this.imageChangeListener) avatarFile.removeEventListener('change', this.imageChangeListener);
-            this.imageChangeListener = null;
-        }
-        this.scale.off('resize', this.onResize, this);
-        if (this.domUI) {
-            this.domUI.destroy();
-            this.domUI = null;
+            this.track(avatarFile, this.imageChangeListener, 'change');
         }
     }
 }

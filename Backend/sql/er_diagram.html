@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Modelo Entidad-Relación — Elemental Battlecards</title>
+    <style>
+        :root {
+            --bg: #0f0a1a;
+            --panel: #1a1228;
+            --line: #3a2a55;
+            --text: #e8e0f0;
+            --accent: #8b5cf6;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: radial-gradient(circle at top, #2a1a4a 0%, var(--bg) 60%);
+            color: var(--text);
+            min-height: 100vh;
+        }
+        header {
+            text-align: center;
+            padding: 28px 16px 8px;
+        }
+        header h1 { margin: 0; font-size: 26px; color: #fff; }
+        header p { margin: 6px 0 0; opacity: .75; font-size: 14px; }
+        .badges { margin-top: 12px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+        .badge {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            padding: 4px 12px;
+            font-size: 12px;
+        }
+        main {
+            max-width: 1200px;
+            margin: 24px auto;
+            padding: 0 16px 48px;
+        }
+        .card {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 20px;
+            overflow-x: auto;
+        }
+        #diagram { min-height: 500px; display: flex; align-items: center; justify-content: center; }
+        footer {
+            text-align: center;
+            opacity: .6;
+            font-size: 12px;
+            padding-bottom: 24px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Modelo Entidad-Relación</h1>
+        <p>Base de datos <code>elemental</code> · PostgreSQL 18</p>
+        <div class="badges">
+            <span class="badge">10 tablas</span>
+            <span class="badge">18 cartas</span>
+            <span class="badge">6 misiones</span>
+            <span class="badge">6 logros</span>
+        </div>
+    </header>
+
+    <main>
+        <div class="card">
+            <div id="diagram" class="mermaid">
+erDiagram
+    users ||--|| player_stats : "1:1 stats"
+    users ||--o{ battles : "juega"
+    users ||--o{ player_missions : "progresa"
+    users ||--o{ player_achievements : "desbloquea"
+    users ||--o{ player_cards : "colecciona"
+    users ||--o{ player_attack_types : "ataca"
+    cards ||--o{ player_cards : "coleccionada"
+    missions ||--o{ player_missions : "objetivo"
+    achievements ||--o{ player_achievements : "logro"
+
+    users {
+        integer id PK
+        string username UK
+        string email UK
+        string password
+        timestamptz createdAt
+        timestamptz updatedAt
+    }
+    player_stats {
+        integer user_id PK,FK
+        integer battles_played
+        integer battles_won
+        integer battles_lost
+        integer current_streak
+        integer longest_streak
+        integer gems
+        timestamptz updated_at
+    }
+    battles {
+        integer id PK
+        integer user_id FK
+        string result
+        string opponent
+        string difficulty
+        boolean level3_on_field
+        timestamptz created_at
+    }
+    cards {
+        integer id PK
+        string element UK
+        smallint level UK
+        string name
+    }
+    player_cards {
+        integer user_id PK,FK
+        integer card_id PK,FK
+        timestamptz collected_at
+    }
+    missions {
+        string id PK
+        string element
+        string title
+        text description
+        integer target
+        integer reward_gems
+    }
+    player_missions {
+        integer user_id PK,FK
+        string mission_id PK,FK
+        integer progress
+        boolean completed
+        timestamptz completed_at
+    }
+    achievements {
+        string id PK
+        string element
+        string title
+        text description
+    }
+    player_achievements {
+        integer user_id PK,FK
+        string achievement_id PK,FK
+        timestamptz unlocked_at
+    }
+    player_attack_types {
+        integer user_id PK,FK
+        string element PK
+    }
+            </div>
+        </div>
+    </main>
+
+    <footer>Generado para estudio · script: Backend/sql/schema.sql</footer>
+
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            themeVariables: {
+                darkMode: true,
+                background: '#1a1228',
+                primaryColor: '#241837',
+                primaryBorderColor: '#8b5cf6',
+                primaryTextColor: '#ffffff',
+                lineColor: '#6d58b0',
+                secondaryColor: '#150f22',
+                tertiaryColor: '#241837',
+                fontSize: '14px',
+                clusterBkg: '#150f22',
+                clusterBorder: '#3a2a55'
+            },
+            er: {
+                diagramPadding: 24,
+                layoutDirection: 'TB',
+                minEntityWidth: 110,
+                minEntityHeight: 34,
+                entityPadding: 12,
+                useMaxWidth: true,
+                titleFontSize: 18
+            }
+        });
+    </script>
+</body>
+</html>

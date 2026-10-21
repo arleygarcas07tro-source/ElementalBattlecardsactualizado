@@ -1,5 +1,3 @@
-import { CARD_TYPES as CardTypes } from '../helpers/constants.js';
-
 /**
  * Esta escena se encarga de cargar todos los recursos necesarios para el juego
  * antes de que comience. Muestra una barra de progreso durante la carga.
@@ -12,18 +10,13 @@ export default class PreloaderScene extends Phaser.Scene {
     preload() {
         this.createLoadingBar();
 
-        // Asegurar como fallback que el fondo y logo de carga estén disponibles
-        // (BootScene debería cargarlos, pero algunos flujos pueden saltarlo).
-        this.load.image('loading-background', '/assets/images/pantalla de carga/pantalla de carga.jpeg');
-        this.load.image('loading-logo', '/assets/images/Logotipoletras.png');
+        // NOTA: 'loading-background' y 'loading-logo' ya los carga BootScene,
+        // así que no se cargan aquí de nuevo (evita descargas duplicadas).
 
-        // --- Carga de Recursos ---
-
-        // Ruta pública desde donde se sirven los assets (raíz del servidor)
-        // Los archivos reales en disco están en `public/assets/images/cartas/`
-        const assetPath = '/assets/images/cartas/';
-
-        // Añadimos listeners de depuración para errores de carga
+        // NOTA: Las texturas de las cartas (`card-{tipo}-{nivel}`), el reverso
+        // (`card-back-player`/`card-back-opponent`) y el slot se cargan en
+        // GameScene.pre() cuando hace falta. Aquí NO se precargan: evita
+        // peticiones duplicadas y 404 por rutas con espacios.
         this.load.on('loaderror', (file) => {
             console.error('Failed to process file:', file.type, '"' + file.key + '"', file.src || file.url || file.key);
         });
@@ -31,29 +24,9 @@ export default class PreloaderScene extends Phaser.Scene {
             console.log('¡Archivos de preload de Preloader cargados!');
         });
 
-        // 1. Cargar la imagen del reverso de la carta (archivo disponible: 'abajo.png')
-        this.load.image('card_back', `${assetPath}abajo.png`);
-
-        // 2. Cargar todas las imágenes de las caras de las cartas
-        // Los archivos en la carpeta siguen el patrón: 'carta <tipo>.jpeg', 'carta <tipo> 2.jpeg', 'carta <tipo> 3.jpeg'
-        const types = Object.values(CardTypes);
-        for (const type of types) {
-            for (let level = 1; level <= 3; level++) {
-                const key = `${type}_${level}`; // Ej: 'fuego_1'
-                // Levanta el nombre correcto según el nivel
-                const fileName = level === 1 ? `carta ${type}.jpeg` : `carta-${type}-${level}.jpeg`;
-                const url = `${assetPath}${fileName}`; // Ej: '/assets/images/cartas/carta fuego 2.jpeg'
-                this.load.image(key, url);
-            }
-        }
-
-        // Aquí también cargarías otros assets como fondos, botones, sonidos, etc.
-        // this.load.image('background', 'assets/images/background.png');
-        // this.load.audio('attackSound', 'assets/sounds/attack.mp3');
-
-        // Video de fondo del menú principal: se carga UNA vez aquí para que
-        // HomeScenes lo tome de la caché y no haya cortes/negro al volver.
-        this.load.video('menu-bg-video', '/assets/images/menu%20principal/anmenuPrincipal.mp4', { muted: true, noAudio: true });
+        // NOTA: El video del menú NO se carga aquí. Es pesado y retrasa la entrada
+        // al juego; HomeScenes lo carga de forma perezosa la primera vez que se
+        // necesita (ya tiene un fondo de respaldo para evitar pantallazos negros).
     }
 
     /**

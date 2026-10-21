@@ -1,16 +1,9 @@
 import Phaser from 'phaser';
 import { setMusicVolume, setEffectsVolume, play as playSfx } from '../helpers/audioManager.js';
+import DomSceneBase from './ui/DomSceneBase.js';
+import { elementsNavHTML, energyParticlesHTML } from './ui/elementCatalog.js';
 
-const ELEMENTS = [
-    { key: 'agua',       name: 'Agua',       color: '#38bdf8', soft: 'rgba(56,189,248,0.14)',  glow: 'rgba(56,189,248,0.42)',  img: '/assets/images/iconos/agua.jpeg' },
-    { key: 'fuego',      name: 'Fuego',      color: '#fb5a2a', soft: 'rgba(251,90,42,0.14)',   glow: 'rgba(251,90,42,0.42)',   img: '/assets/images/iconos/fuego.jpeg' },
-    { key: 'aire',       name: 'Aire',       color: '#6fe3ff', soft: 'rgba(111,227,255,0.14)', glow: 'rgba(111,227,255,0.42)', img: '/assets/images/iconos/luz.jpeg' },
-    { key: 'tierra',     name: 'Tierra',     color: '#a78bfa', soft: 'rgba(167,139,250,0.14)', glow: 'rgba(167,139,250,0.42)', img: '/assets/images/iconos/espiritu.jpeg' },
-    { key: 'naturaleza', name: 'Naturaleza', color: '#34d97b', soft: 'rgba(52,217,123,0.14)',  glow: 'rgba(52,217,123,0.42)',  img: '/assets/images/iconos/planta.jpeg' },
-    { key: 'oscuridad',  name: 'Oscuridad',  color: '#c026d3', soft: 'rgba(192,38,211,0.16)',  glow: 'rgba(192,38,211,0.45)',  img: '/assets/images/iconos/sombra.jpeg' }
-];
-
-export default class SettingsScene extends Phaser.Scene {
+export default class SettingsScene extends DomSceneBase {
     constructor() {
         super('SettingsScene');
         this.playerData = {};
@@ -35,19 +28,9 @@ export default class SettingsScene extends Phaser.Scene {
     create() {
         const { width, height } = this.scale;
 
-        const particles = Array.from({ length: 10 }, (_, i) => {
-            const left = Math.round(4 + ((i * 37) % 92));
-            const top = Math.round(8 + ((i * 53) % 70));
-            const size = 3 + (i % 3) * 2;
-            const delay = (i % 6) * -1.4;
-            return `<span class="energy" style="left:${left}%; top:${top}%; width:${size}px; height:${size}px; animation-delay:${delay}s;"></span>`;
-        }).join('');
+        const particles = energyParticlesHTML();
 
-        const elementsNavHtml = ELEMENTS.map(el => `
-            <span class="nav-orb" style="--el:${el.color}; --el-soft:${el.soft};" title="${el.name}">
-                <img src="${el.img}" alt="${el.name}">
-            </span>
-        `).join('');
+        const elementsNavHtml = elementsNavHTML();
 
         const accountStatusLabel = this.settings.accountLinked
             ? 'Vinculado'
@@ -640,34 +623,13 @@ export default class SettingsScene extends Phaser.Scene {
             </nav>
         </div>`;
 
-        this.domUI = this.add.dom(0, 0).createFromHTML(html);
-        this.domUI.setOrigin(0);
-        this.domUI.setDepth(9999);
+        const node = this.mountDOM(html, { flex: true });
 
-        this.domUI.node.style.position = 'absolute';
-        this.domUI.node.style.left = '0';
-        this.domUI.node.style.top = '0';
-        this.domUI.node.style.display = 'flex';
-        this.domUI.node.style.flexDirection = 'column';
-        this.domUI.node.style.width = width + 'px';
-        this.domUI.node.style.height = height + 'px';
-
-        const node = this.domUI.node;
-
-        const bind = (selector, fn) => {
-            const els = node.querySelectorAll(selector);
-            els.forEach(el => {
-                const handler = ev => { ev.preventDefault(); playSfx('click', this); fn(ev, el); };
-                el.addEventListener('click', handler);
-                this.listeners.push({ el, handler, type: 'click' });
-            });
-        };
-
-        bind('#btn-home', () => this.scene.start(this.returnScene, { playerData: this.playerData }));
-        bind('[data-nav="home"]', () => this.scene.start('HomeScenes', { playerData: this.playerData }));
-        bind('[data-nav="cards"]', () => this.scene.start('CardsScene', { playerData: this.playerData }));
-        bind('[data-nav="missions"]', () => this.scene.start('MissionsScene', { playerData: this.playerData }));
-        bind('[data-nav="profile"]', () => this.scene.start('ProfileScene', { playerData: this.playerData }));
+        this.bind('#btn-home', () => this.scene.start(this.returnScene, { playerData: this.playerData }));
+        this.bind('[data-nav="home"]', () => this.scene.start('HomeScenes', { playerData: this.playerData }));
+        this.bind('[data-nav="cards"]', () => this.scene.start('CardsScene', { playerData: this.playerData }));
+        this.bind('[data-nav="missions"]', () => this.scene.start('MissionsScene', { playerData: this.playerData }));
+        this.bind('[data-nav="profile"]', () => this.scene.start('ProfileScene', { playerData: this.playerData }));
 
         // Menú lateral: alternar paneles Sonido / Cuenta
         const tabs = node.querySelectorAll('.side-tab');
@@ -676,7 +638,7 @@ export default class SettingsScene extends Phaser.Scene {
         const panelSub = node.querySelector('#panel-sub');
 
         tabs.forEach(tab => {
-            const handler = () => {
+            this.track(tab, () => {
                 tabs.forEach(t => t.classList.remove('active'));
                 tab.classList.add('active');
                 const paneName = tab.dataset.tab;
@@ -690,9 +652,7 @@ export default class SettingsScene extends Phaser.Scene {
                     panelTitle.textContent = 'Sonido';
                     panelSub.textContent = 'Controla el volumen del ambiente y de tus hechizos.';
                 }
-            };
-            tab.addEventListener('click', handler);
-            this.listeners.push({ el: tab, handler, type: 'click' });
+            }, 'click');
         });
 
         const musicSlider = node.querySelector('#music-volume');
@@ -705,27 +665,23 @@ export default class SettingsScene extends Phaser.Scene {
         const linkFeedback = node.querySelector('#link-feedback');
 
         if (musicSlider && musicValue) {
-            const handler = () => {
+            this.track(musicSlider, () => {
                 this.settings.musicVolume = Number(musicSlider.value);
                 musicValue.textContent = `${this.settings.musicVolume}%`;
                 setMusicVolume(this.settings.musicVolume);
-            };
-            musicSlider.addEventListener('input', handler);
-            this.listeners.push({ el: musicSlider, handler, type: 'input' });
+            }, 'input');
         }
 
         if (effectsSlider && effectsValue) {
-            const handler = () => {
+            this.track(effectsSlider, () => {
                 this.settings.effectsVolume = Number(effectsSlider.value);
                 effectsValue.textContent = `${this.settings.effectsVolume}%`;
                 setEffectsVolume(this.settings.effectsVolume);
-            };
-            effectsSlider.addEventListener('input', handler);
-            this.listeners.push({ el: effectsSlider, handler, type: 'input' });
+            }, 'input');
         }
 
         if (linkEmail && accountStatus && accountStatusText && linkFeedback) {
-            const handler = () => {
+            this.track(linkEmail, () => {
                 if (this.settings.accountLinked) return;
                 this.settings.accountLinked = true;
                 accountStatus.classList.add('is-linked');
@@ -734,33 +690,7 @@ export default class SettingsScene extends Phaser.Scene {
                 linkEmail.textContent = 'Correo vinculado';
                 linkFeedback.classList.add('show');
                 playSfx('victory', this);
-            };
-            linkEmail.addEventListener('click', handler);
-            this.listeners.push({ el: linkEmail, handler, type: 'click' });
-        }
-
-        this.scale.on('resize', this.onResize, this);
-        this.events.on('shutdown', this.onShutdown, this);
-    }
-
-    onResize(gameSize) {
-        if (!gameSize) return;
-        const { width, height } = gameSize;
-        if (this.domUI && this.domUI.node) {
-            this.domUI.node.style.width = width + 'px';
-            this.domUI.node.style.height = height + 'px';
-        }
-    }
-
-    onShutdown() {
-        this.listeners.forEach(({ el, handler, type }) => {
-            if (el && el.removeEventListener) el.removeEventListener(type, handler);
-        });
-        this.listeners = [];
-        this.scale.off('resize', this.onResize, this);
-        if (this.domUI) {
-            this.domUI.destroy();
-            this.domUI = null;
+            }, 'click');
         }
     }
 }

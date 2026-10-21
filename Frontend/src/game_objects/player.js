@@ -2,6 +2,7 @@ import Deck from './deck.js';
 import Card from './card.js'; // CORRECCIÓN: Solo se importa el default, no 'CardTypes'
 import { CardDefinitions } from './card-definitions.js';
 import EssenceManager from './essences.js';
+import GemManager from '../game/GemManager.js';
 
 /**
  * Gestiona el estado completo de un jugador, incluyendo su mazo, mano, campo,
@@ -18,6 +19,7 @@ export default class Player {
 
         this.deck = new Deck(id);
         this.essences = new EssenceManager();
+        this.gems = new GemManager();
 
         /** @type {Card[]} */
         this.hand = [];
@@ -222,6 +224,23 @@ export default class Player {
             this.scene.events.emit('essence-activated', this.id, essenceType);
         }
         return true;
+    }
+
+    /**
+     * Registra una carta de nivel 3 en el gestor de gemas. Si la carta aún no
+     * había entregado su gema, notifica a la escena para que actualice la UI.
+     * Regla: cada carta de nivel 3 genera como máximo una gema.
+     * @param {{level: number, type: string, instanceId?: string}} cardData
+     * @returns {string|null} El elemento de la gema obtenida o null.
+     */
+    registerGem(cardData) {
+        const type = this.gems.registerLevel3Card(cardData);
+        if (!type) return null;
+        console.log('[Player] Gema obtenida', { playerId: this.id, type, total: this.gems.count(type) });
+        if (this.scene && this.scene.events) {
+            this.scene.events.emit('gem-collected', this.id, type, this.gems.progress());
+        }
+        return type;
     }
 
     /**

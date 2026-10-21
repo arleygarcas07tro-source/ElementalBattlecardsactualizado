@@ -1,111 +1,38 @@
 /**
  * Base de datos central para todas las definiciones de cartas del juego.
- * Cada carta tiene un ID único que se usará para construir los mazos.
- * Las propiedades (ataque, defensa, etc.) se definen aquí.
+ * Se genera programáticamente a partir de la plantilla { tipo x nivel }
+ * para mantener el bundle pequeño y evitar errores de tipeo repetidos.
+ * Cada carta tiene un ID único ('<tipo>-<nivel>') usado para construir los mazos.
+ *
+ * API exportada (idéntica a la versión manual):
+ *   CardDefinitions['fuego-1'] -> { id: 'fuego-1', type: 'fuego', level: 1 }
+ *   getBaseCardTypes()          -> ['sombra', 'fuego', ...]
  */
 
 import { CARD_TYPES as CardTypes } from '../helpers/constants.js';
 
-export const CardDefinitions = {
-    // --- CARTAS DE SOMBRA ---
-    'sombra-1': {
-        id: 'sombra-1',
-        type: CardTypes.SOMBRA,
-        level: 1,
-    },
-    'sombra-2': {
-        id: 'sombra-2',
-        type: CardTypes.SOMBRA,
-        level: 2,
-    },
-    'sombra-3': {
-        id: 'sombra-3',
-        type: CardTypes.SOMBRA,
-        level: 3,
-    },
+// Los 6 tipos elementales en el orden histórico de la base de datos.
+const ORDERED_TYPES = [
+    CardTypes.SOMBRA,
+    CardTypes.FUEGO,
+    CardTypes.AGUA,
+    CardTypes.PLANTA,
+    CardTypes.LUZ,
+    CardTypes.ESPIRITU
+];
 
-    // --- CARTAS DE FUEGO ---
-    'fuego-1': {
-        id: 'fuego-1',
-        type: CardTypes.FUEGO,
-        level: 1,
-    },
-    'fuego-2': {
-        id: 'fuego-2',
-        type: CardTypes.FUEGO,
-        level: 2,
-    },
-    'fuego-3': {
-        id: 'fuego-3',
-        type: CardTypes.FUEGO,
-        level: 3,
-    },
+const LEVELS = [1, 2, 3];
 
-    // --- CARTAS DE AGUA ---
-    'agua-1': {
-        id: 'agua-1',
-        type: CardTypes.AGUA,
-        level: 1,
-    },
-    'agua-2': {
-        id: 'agua-2',
-        type: CardTypes.AGUA,
-        level: 2,
-    },
-    'agua-3': {
-        id: 'agua-3',
-        type: CardTypes.AGUA,
-        level: 3,
-    },  
-    // --- CARTAS DE PLANTA ---
-    'planta-1': {
-        id: 'planta-1',
-        type: CardTypes.PLANTA,
-        level: 1,
-    },
-    'planta-2': {
-        id: 'planta-2',
-        type: CardTypes.PLANTA,
-        level: 2,
-    },
-    'planta-3': {
-        id: 'planta-3',
-        type: CardTypes.PLANTA,
-        level: 3,
-    },      
-    // --- CARTAS DE LUZ ---
-    'luz-1': {
-        id: 'luz-1',
-        type: CardTypes.LUZ,
-        level: 1,
-    },
-    'luz-2': {
-        id: 'luz-2',
-        type: CardTypes.LUZ,
-        level: 2,
-    },      
-    'luz-3': {
-        id: 'luz-3',
-        type: CardTypes.LUZ,
-        level: 3,
-    },
-    // --- CARTAS DE ESPIRITU ---
-    'espiritu-1': {
-        id: 'espiritu-1',
-        type: CardTypes.ESPIRITU,
-        level: 1,
-    },          
-    'espiritu-2': {
-        id: 'espiritu-2',
-        type: CardTypes.ESPIRITU,
-        level: 2,
-    },
-    'espiritu-3': {
-        id: 'espiritu-3',
-        type: CardTypes.ESPIRITU,
-        level: 3,
-    },
-};
+export const CardDefinitions = Object.freeze(
+    Object.fromEntries(
+        ORDERED_TYPES.flatMap((type) =>
+            LEVELS.map((level) => [
+                `${type}-${level}`,
+                { id: `${type}-${level}`, type, level }
+            ])
+        )
+    )
+);
 
 /**
  * Devuelve los tipos elementales de las cartas base (nivel 1).

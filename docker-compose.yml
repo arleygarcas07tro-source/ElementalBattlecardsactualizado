@@ -1,4 +1,26 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: elemental-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-elemental}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASS:-postgres}
+    ports:
+      # El backend lo alcanza por la red interna (DB_HOST=postgres).
+      # Se publica solo para inspección y en 5433 para no chocar con un Postgres local en 5432.
+      - "${POSTGRES_HOST_PORT:-5433}:5432"
+    volumes:
+      # Datos persistidos entre reinicios/contenedores.
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-elemental}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   backend:
     build:
       context: ./Backend
@@ -8,16 +30,20 @@ services:
       NODE_ENV: production
       PORT: "3001"
       DB_ENABLED: "true"
-      DB_DIALECT: sqlite
-      DB_USE_SQLITE: "true"
+      DB_USE_SQLITE: "false"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: ${DB_NAME:-elemental}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASS: ${DB_PASS:-postgres}
       DB_REQUIRE_SSL: "false"
       JWT_SECRET: ${JWT_SECRET:-mi_clave_super_secreta}
       CORS_ORIGIN: "*"
     ports:
       - "3001:3001"
-    volumes:
-      # Base de datos SQLite persistida en el host (mismo archivo que usa el dev).
-      - ./Backend/controllers/database.sqlite:/app/controllers/database.sqlite
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/ping').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
@@ -35,3 +61,6 @@ services:
         condition: service_healthy
     ports:
       - "8080:80"
+
+volumes:
+  postgres_data:

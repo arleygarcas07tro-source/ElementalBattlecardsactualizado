@@ -1,13 +1,17 @@
-import Phaser from 'phaser';
+import DomSceneBase from './ui/DomSceneBase.js';
+import { createVideoBackground } from './ui/videoBackground.js';
+import { DIFFICULTY_LEVELS as levels } from '../game/difficultyCatalog.js';
+import { listGameModes } from '../game/gameModes.js';
 
 /**
- * Escena para seleccionar el nivel de dificultad antes de jugar contra el bot.
- * Ofrece 10 niveles de dificultad con descripción visual.
+ * Escena para seleccionar el modo de juego y el nivel de dificultad antes de
+ * jugar contra el bot. Ofrece 4 modos y 10 niveles de dificultad.
  */
-export default class DifficultySelectScene extends Phaser.Scene {
+export default class DifficultySelectScene extends DomSceneBase {
     constructor() {
         super('DifficultySelectScene');
         this.playerData = null;
+        this.selectedMode = 'clasico';
     }
 
     init(data) {
@@ -21,52 +25,8 @@ export default class DifficultySelectScene extends Phaser.Scene {
     create() {
         const { width, height } = this.scale;
 
-        // Fondo inmediato para que nunca se vea un hueco negro mientras el video
-        // termina de preparar su primer frame.
-        this.add.rectangle(width / 2, height / 2, width, height, 0x0a0e22).setDepth(-2);
-
-        this.bg = this.add.video(width / 2, height / 2, 'levels-bg-video').setOrigin(0.5);
-        this.bg.setDepth(-1); // Poner el video al fondo
-
-        // Esperar a que el video esté listo para escalar correctamente
-        this.bg.on('play', () => {
-            const scaleX = width / this.bg.width;
-            const scaleY = height / this.bg.height;
-            const scale = Math.max(scaleX, scaleY);
-            this.bg.setScale(scale);
-        });
-
-        this.bg.once('ready', () => {
-            const videoEl = this.bg.video;
-
-            if (!videoEl) {
-                return;
-            }
-
-            videoEl.muted = true;
-            videoEl.defaultMuted = true;
-            videoEl.loop = true; // Bucle continuo: al terminar, se reinicia desde el inicio.
-            videoEl.playbackRate = 1;
-            videoEl.playsInline = true;
-            videoEl.preload = 'auto';
-            videoEl.currentTime = 0;
-            videoEl.play().catch(() => {});
-        });
-
-        this.bg.play(true); // Reproducir en bucle
-
-        const levels = [
-            { level: 1,  name: 'Muy Fácil',   icon: 'agua',   clr: '#5bc0ff', desc: 'El bot comete errores, no fusiona cartas.' },
-            { level: 2,  name: 'Fácil',       icon: 'planta', clr: '#7fe09a', desc: 'El bot juega con decisiones predecibles.' },
-            { level: 3,  name: 'Normal',      icon: 'luz',    clr: '#f1c86a', desc: 'El bot juega bien y utiliza fusiones.' },
-            { level: 4,  name: 'Difícil',     icon: 'fuego',  clr: '#ff9a5c', desc: 'El bot juega óptimamente con estrategia.' },
-            { level: 5,  name: 'Muy Difícil', icon: 'sombra', clr: '#b78bff', desc: 'El bot juega de forma casi perfecta.' },
-            { level: 6,  name: 'Experto',     icon: 'espiritu', clr: '#8b5cf6', desc: 'El bot predice movimientos y juega agresivamente.' },
-            { level: 7,  name: 'Maestro',     icon: 'agua',   clr: '#3b82f6', desc: 'El bot usa estrategias avanzadas y contrajuega.' },
-            { level: 8,  name: 'Gran Maestro',icon: 'fuego',  clr: '#ff5c5c', desc: 'El bot juega con precisión quirúrgica.' },
-            { level: 9,  name: 'Leyenda',     icon: 'planta', clr: '#34d399', desc: 'El bot es prácticamente imbatible.' },
-            { level: 10, name: 'Mito',        icon: 'luz',    clr: '#ffd666', desc: 'El bot juega como una deidad del juego.' }
-        ];
+        // Fondo de video inmediato con rectángulo de respaldo unificado.
+        this.bg = createVideoBackground(this, 'levels-bg-video');
 
         const cardsHtml = levels.map(lv => {
             const filled = Math.min(5, Math.ceil(lv.level / 2));
@@ -85,6 +45,11 @@ export default class DifficultySelectScene extends Phaser.Scene {
                 <div class="dv-desc">${lv.desc}</div>
             </div>`;
         }).join('');
+
+        const modesHtml = listGameModes().map(m => `
+            <button class="mode-btn${m.id === this.selectedMode ? ' active' : ''}" data-mode="${m.id}" title="${m.desc}">
+                ${m.name}
+            </button>`).join('');
 
         // UI TEMPLATE
         const html = `<div class="scene-root">
@@ -348,6 +313,36 @@ export default class DifficultySelectScene extends Phaser.Scene {
                 overflow: hidden;
             }
 
+            /* MODE SELECTOR */
+            .mode-select {
+                display: flex;
+                gap: 10px;
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            .mode-btn {
+                appearance: none;
+                cursor: pointer;
+                padding: 9px 18px;
+                border-radius: 12px;
+                border: 1px solid rgba(214, 180, 110, 0.42);
+                background: linear-gradient(160deg, rgba(10, 18, 48, 0.72), rgba(6, 10, 30, 0.72));
+                color: #f1e7bc;
+                font-family: Poppins, Arial, sans-serif;
+                font-size: 12px;
+                font-weight: 600;
+                letter-spacing: 0.03em;
+                transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease, border-color 160ms ease;
+            }
+            .mode-btn:hover { transform: translateY(-2px); }
+            .mode-btn:active { transform: translateY(0) scale(0.98); }
+            .mode-btn.active {
+                border-color: #5bc0ff;
+                color: #ffffff;
+                background: linear-gradient(160deg, rgba(20, 40, 90, 0.92), rgba(10, 20, 50, 0.86));
+                box-shadow: 0 0 20px rgba(91, 192, 255, 0.4), inset 0 0 14px rgba(91, 192, 255, 0.14);
+            }
+
             @media (max-width: 1160px) {
                 .difficulty-grid { grid-template-columns: repeat(5, 150px); gap: 14px; }
                 .difficulty-card { height: 205px; }
@@ -371,7 +366,11 @@ export default class DifficultySelectScene extends Phaser.Scene {
                 <div class="cards-header">
                     <p class="cards-subtitle">Modo aventura</p>
                     <h1 class="section-title">Elige tu oponente</h1>
-                    <p class="cards-desc">Cada nivel eleva la inteligencia del bot. Elige con sabiduría.</p>
+                    <p class="cards-desc">Elige el modo de juego y luego el nivel que elevará la inteligencia del bot.</p>
+                </div>
+
+                <div class="mode-select" id="mode-select">
+                    ${modesHtml}
                 </div>
 
                 <div class="difficulty-grid">
@@ -381,60 +380,48 @@ export default class DifficultySelectScene extends Phaser.Scene {
         </div>`;
 
         // DOM ELEMENT
-        this.domUI = this.add.dom(0, 0).createFromHTML(html);
-        this.domUI.setOrigin(0);
-        this.domUI.setDepth(9999);
-
-        const node = this.domUI.node;
-        node.style.position = 'absolute';
-        node.style.left = 0;
-        node.style.top = 0;
-        node.style.width = width + 'px';
-        node.style.height = height + 'px';
-        node.style.pointerEvents = 'auto';
+        const node = this.mountDOM(html);
 
         // EVENT LISTENERS
         const backBtn = node.querySelector('#back-btn');
         if (backBtn) {
-            backBtn.addEventListener('click', () => {
+            this.track(backBtn, () => {
                 this.scene.start('HomeScenes', { playerData: this.playerData });
-            });
-            try {
-                backBtn.addEventListener('pointerdown', () => { backBtn.style.transform = 'translateY(0) scale(0.98)'; });
-                backBtn.addEventListener('pointerup', () => { backBtn.style.transform = ''; });
-                backBtn.addEventListener('pointerleave', () => { backBtn.style.transform = ''; });
-            } catch (e) {
-                console.warn('No se pudieron inicializar animaciones en DifficultySelectScene', e);
-            }
+            }, 'click');
+            this.track(backBtn, () => { backBtn.style.transform = 'translateY(0) scale(0.98)'; }, 'pointerdown');
+            this.track(backBtn, () => { backBtn.style.transform = ''; }, 'pointerup');
+            this.track(backBtn, () => { backBtn.style.transform = ''; }, 'pointerleave');
         }
+
+        // Mode selection
+        const modeButtons = node.querySelectorAll('.mode-btn');
+        modeButtons.forEach(btn => {
+            this.track(btn, () => {
+                this.selectedMode = btn.getAttribute('data-mode');
+                modeButtons.forEach(b => b.classList.toggle('active', b === btn));
+                console.log(`Modo de juego seleccionado: ${this.selectedMode}`);
+            }, 'click');
+        });
 
         // Difficulty card selection
         const difficultyCards = node.querySelectorAll('.difficulty-card');
         difficultyCards.forEach(card => {
-            card.addEventListener('click', () => {
+            this.track(card, () => {
                 const level = parseInt(card.getAttribute('data-level'));
-                console.log(`Iniciando partida con dificultad nivel ${level}`);
+                console.log(`Iniciando partida con dificultad nivel ${level} (modo ${this.selectedMode})`);
                 this.scene.start('GameScene', {
                     playerData: this.playerData,
                     vsBot: true,
-                    botDifficulty: level
+                    botDifficulty: level,
+                    gameMode: this.selectedMode
                 });
-            });
+            }, 'click');
         });
-
-        // Responsive resize handler
-        this.scale.on('resize', this.onResize, this);
     }
 
     onResize(gameSize) {
         const { width, height } = gameSize;
         if (this.bg) this.bg.setDisplaySize(width, height);
-        if (this.domUI && this.domUI.node) {
-            const node = this.domUI.node;
-            if (node.style) {
-                node.style.width = width + 'px';
-                node.style.height = height + 'px';
-            }
-        }
+        super.onResize(gameSize);
     }
 }

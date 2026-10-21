@@ -14,6 +14,8 @@ export default class GameSceneLAN extends Phaser.Scene {
     this.socket = data.socket || null;
     this.playerRole = data.playerRole || null; // 'host' o 'guest'
     this.gameStartData = data.gameStartData || null;
+    // Modo de juego: viene del evento game_start (o directo desde el host).
+    this.gameMode = (data.gameMode) || (this.gameStartData && this.gameStartData.gameMode) || 'clasico';
   }
 
   create() {
@@ -58,6 +60,7 @@ export default class GameSceneLAN extends Phaser.Scene {
           socket: this.socket, 
           isLAN: true,
           playerRole: this.playerRole,
+          gameMode: this.gameMode,
           gameStartData: this.gameStartData
         });
       });
@@ -68,7 +71,8 @@ export default class GameSceneLAN extends Phaser.Scene {
         roomCode: null, 
         socket: this.socket, 
         isLAN: true,
-        playerRole: this.playerRole
+        playerRole: this.playerRole,
+        gameMode: this.gameMode
       });
     }
   }

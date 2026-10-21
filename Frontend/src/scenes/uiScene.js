@@ -1,21 +1,37 @@
 import Phaser from 'phaser';
-import { CARD_TYPES as CardTypes } from '../helpers/constants.js';
+import { createGemVisual, ELEMENT_ORDER } from '../helpers/gemVisual.js';
+import { drawOrnatePanel, ornateLabel } from '../helpers/battlefieldArt.js';
+
+const ELEMENTS = ELEMENT_ORDER;
+
+const COLORS = {
+    gold: 0xcfaf6d,
+    goldBright: 0xe8cf8f,
+    blue: 0x4fb3ff,
+    red: 0xff5a3c,
+    panel: 0x0a0e1c,
+    panelDeep: 0x060912
+};
 
 /**
  * La escena de la interfaz de usuario (UI) se ejecuta sobre la GameScene.
- * Se encarga de mostrar información como los datos del jugador, botones
- * y, en este caso, los orbes de esencia.
+ * Presenta perfiles (datos reales de mazo/mano/campo), fase de turno, relojes,
+ * botones y el panel de gemas elementales. Rediseñada con estética de fantasía
+ * (marcos ornamentales, gemas cristalinas) sin alterar eventos ni lógica.
  */
 export default class UIScene extends Phaser.Scene {
     constructor() {
         super('UIScene');
         this.playerOrbs = {};
         this.opponentOrbs = {};
+        this.gemIcons = { player: {}, opponent: {} };
+        this.gemShelves = {};
+        this.gemTotals = {};
+        this.profileTexts = { player: null, opponent: null };
     }
 
     preload() {
-        // Cargamos aquí los assets de la UI para mantener el código organizado
-        console.log('[UIScene] Cargando assets de UI...');
+        // Assets de los orbes de esencia (se mantienen para las insignias elementales).
         this.load.image('orb-fuego', '/assets/images/iconos/fuego.jpeg');
         this.load.image('orb-agua', '/assets/images/iconos/agua.jpeg');
         this.load.image('orb-planta', '/assets/images/iconos/planta.jpeg');
@@ -25,288 +41,396 @@ export default class UIScene extends Phaser.Scene {
     }
 
     create(data) {
-        console.log('[UIScene] Creada', { player: this.playerData?.username || 'Jugador' });
-        this.playerData = data.playerData || { username: 'Jugador' }; // Fallback por si no hay datos
-        const username = this.playerData.username;
-
-        // Obtenemos una referencia a la GameScene para comunicarnos con ella
+        this.playerData = data.playerData || { username: 'Jugador' };
+        this.username = this.playerData.username || 'Jugador';
         this.gameScene = this.scene.get('GameScene');
 
-        // Creamos los orbes para ambos jugadores
-        this.createEssenceOrbs();
-
         const { width, height } = this.scale;
+        this.W = width;
+        this.H = height;
 
-        // ---------- BARRA SUPERIOR ----------
-        const topBarY = 50; // Eje vertical central para los elementos superiores
+        // Reloj de turno: sobre la bandeja de la mano, a la izquierda de las
+        // cartas (que ahora llegan hasta x≈1110).
+        this.turnTimerPos = { x: 300, y: this.H - 125 };
 
-        // --- BOTÓN DE PAUSA (esquina superior izquierda) ---
-        const pauseBtn = this.add.text(30, 30, '⏸', { 
-            fontSize: '40px', 
-            color: '#fff',
-            fontStyle: 'bold'
-        })
-        .setInteractive({ useHandCursor: true })
-        .setDepth(1000)
-        .on('pointerdown', () => {
-            this.scene.pause('GameScene');
-            this.scene.pause('UIScene');
-            this.scene.launch('PauseScene');
-        })
-        .on('pointerover', () => {
-            pauseBtn.setScale(1.15);
-            pauseBtn.setColor('#ffd700');
-        })
-        .on('pointerout', () => {
-            pauseBtn.setScale(1);
-            pauseBtn.setColor('#fff');
-        });
-
-        // --- Panel central (TU vs OPONENTE) ---
-        const barWidth = 360;
-        const barHeight = 48;
-        const barX = Math.round((width - barWidth) / 2);
-        const barY = topBarY - barHeight / 2;
-
-        const cornerRadius = 12;
-
-        const bar = this.add.graphics();
-        bar.fillStyle(0x1a001a, 0.9); // Un morado oscuro más sutil
-        bar.lineStyle(2, 0xc49bff, 1); // Un borde de neón más brillante
-        bar.fillRoundedRect(0, 0, barWidth, barHeight, cornerRadius);
-        bar.strokeRoundedRect(0, 0, barWidth, barHeight, cornerRadius);
-        bar.setPosition(barX, barY);
-
-        const textStyle = {
-            fontSize: '20px',
-            fontFamily: 'Arial',
-            color: '#ffffff',
-            fontStyle: 'bold',
-            shadow: { offsetX: 2, offsetY: 2, color: '#000', blur: 3, fill: true }
-        };
-        this.add.text(barX + barWidth * 0.22, topBarY, 'Jugador', textStyle).setOrigin(0.5);
-        this.add.text(barX + barWidth * 0.5, topBarY, "VS", { ...textStyle, fontSize: '18px', fontStyle: 'normal' }).setOrigin(0.5);
-        this.add.text(barX + barWidth * 0.78, topBarY, "Oponente", textStyle).setOrigin(0.5);
-
-        // --- Botón Iniciar Partida (ahora en la parte superior derecha) ---
-        const btnStartWidth = 180;
-        const btnStartHeight = 45;
-        const btnStartX = width - (btnStartWidth / 2) - 20; // Posición en la esquina superior derecha
-        const btnStartY = topBarY;
-
-        const startContainer = this.add.container(btnStartX, btnStartY);
-        const startBg = this.add.graphics();
-        startBg.fillStyle(0x006400, 0.9); // Color verde para la acción de iniciar
-        startBg.fillRoundedRect(-btnStartWidth / 2, -btnStartHeight / 2, btnStartWidth, btnStartHeight, 12);
-        startBg.lineStyle(2, 0x00ff00, 1);
-        startBg.strokeRoundedRect(-btnStartWidth / 2, -btnStartHeight / 2, btnStartWidth, btnStartHeight, 12);
-
-        const startText = this.add.text(0, 0, "Iniciar Partida", { ...textStyle, fontSize: '18px' }).setOrigin(0.5);
-
-        startContainer.add([startBg, startText]);
-        startContainer.setSize(btnStartWidth, btnStartHeight).setInteractive({ cursor: 'pointer' });
-
-        // Conectamos el evento para que avise a la GameScene que debe empezar
-        startContainer.on('pointerdown', () => {
-            this.gameScene.events.emit('start-game');
-            startContainer.setVisible(false); // Ocultamos el botón después de usarlo
-        });
-
-        // ---------- BARRA INFERIOR ----------
-        const bottomBarY = height - 50; // Eje vertical para alinear elementos inferiores
-        const bottomTextStyle = {
-            fontSize: '18px',
-            color: '#fff',
-            fontFamily: 'Arial',
-            fontStyle: 'bold',
-            shadow: { offsetX: 1, offsetY: 1, color: '#000', blur: 2, fill: true }
-        };
-
-        // --- CONTADOR DE ATAQUE DEL JUGADOR (Izquierda) ---
-        const playerCounterX = 150;
-        const counterWidth = 220;
-        const counterHeight = 40;
-
-        const playerCounterFrame = this.add.graphics({ x: playerCounterX, y: bottomBarY });
-        playerCounterFrame.lineStyle(2, 0xc49bff, 1);
-        playerCounterFrame.strokeRoundedRect(-counterWidth / 2, -counterHeight / 2, counterWidth, counterHeight, 10);
-
-        this.attackCounterTexts = {};
-        this.attackCounterTexts.player = this.add.text(playerCounterX, bottomBarY, `Jugador ataque: turno 1`, bottomTextStyle).setOrigin(0.5);
-
-        // --- TEMPORIZADOR DE TURNO (Centro) ---
-        const timerWidth = 200;
-        const timerHeight = 50;
-        const timerFrame = this.add.graphics({ x: width / 2, y: bottomBarY });
-        timerFrame.lineStyle(2, 0xffff00, 1);
-        timerFrame.strokeRoundedRect(-timerWidth / 2, -timerHeight / 2, timerWidth, timerHeight, 10);
-
-        this.timerText = this.add.text(width / 2, bottomBarY, '', {
-            ...bottomTextStyle,
-            fontSize: '28px',
-            color: '#ffff00'
-        }).setOrigin(0.5);
-
-        // --- CONTADOR DE ATAQUE DEL OPONENTE (Derecha) ---
-        const opponentCounterX = width - 150;
-        const opponentCounterFrame = this.add.graphics({ x: opponentCounterX, y: bottomBarY });
-        opponentCounterFrame.lineStyle(2, 0xc49bff, 1);
-        opponentCounterFrame.strokeRoundedRect(-counterWidth / 2, -counterHeight / 2, counterWidth, counterHeight, 10);
-
-        this.attackCounterTexts.opponent = this.add.text(opponentCounterX, bottomBarY, 'Bot ataque: turno 1', bottomTextStyle).setOrigin(0.5);
-
-        // Escuchar actualizaciones que envía GameScene para los contadores
-        this.scene.get('GameScene').events.on('update-attack-counter', (owner, turnIndex, mustAttack) => {
-            const textObj = this.attackCounterTexts[owner];
-            if (!textObj) return;
-
-            let label = '';
-            if (owner === 'player') {
-                label = `${username} ataque`;
-            } else {
-                label = 'Bot ataque';
-            }
-
-            const obliged = mustAttack ? ' - ¡OBLIGADO!' : '';
-            textObj.setText(`${label}: turno ${turnIndex}${obliged}`);
-            // opcional: cambiar color cuando está obligado
-            textObj.setStyle({ fill: mustAttack ? '#ff4444' : '#ffffff' });
-        });
+        // --- Construcción del HUD ---
+        this.createProfiles();
+        this.createPhaseBanner();
+        this.createButtons();
+        this.createTurnTimer();
+        this.createMatchTimer();
+        this.createEssenceOrbs();
+        this.createGemPanels();
 
         // --- LISTENER DE EVENTOS ---
-        // Escuchamos eventos de la GameScene para actualizar la UI.
         this.gameScene.events.on('update-timer', this.updateTimer, this);
         this.gameScene.events.on('game-over', this.showGameOverModal, this);
         this.gameScene.events.on('essence-activated', this.handleEssenceActivation, this);
+        this.gameScene.events.on('objectives-ready', this.handleObjectivesReady, this);
+        this.gameScene.events.on('gem-collected', this.handleGemCollected, this);
+        this.gameScene.events.on('update-match-timer', this.updateMatchTimer, this);
+        this.gameScene.events.on('update-turn-indicator', this.handleTurnIndicator, this);
 
-        // Nos aseguramos de limpiar el listener cuando la escena se destruya
+        this.scene.get('GameScene').events.on('update-attack-counter', (owner, turnIndex, mustAttack) => {
+            const textObj = this.attackCounterTexts && this.attackCounterTexts[owner];
+            if (!textObj) return;
+            const label = owner === 'player' ? `${this.username}` : (this.gameScene && this.gameScene.vsBot ? 'Bot' : 'Rival');
+            const obliged = mustAttack ? '  ·  ¡OBLIGADO!' : '';
+            textObj.setText(`${label}: turno de ataque ${turnIndex}${obliged}`);
+            textObj.setColor(mustAttack ? '#ff6b6b' : '#d7e6ff');
+        });
+
+        // Limpieza al apagar la escena.
         this.events.on('shutdown', () => {
-            // Limpiamos todos los listeners para evitar fugas de memoria
             if (this.gameScene) {
                 this.gameScene.events.off('update-timer', this.updateTimer, this);
                 this.gameScene.events.off('game-over', this.showGameOverModal, this);
                 this.gameScene.events.off('essence-activated', this.handleEssenceActivation, this);
-                // Nos aseguramos de eliminar también el listener del contador de ataque
-                // para evitar que la UI de una partida anterior reaccione a eventos de una nueva.
+                this.gameScene.events.off('objectives-ready', this.handleObjectivesReady, this);
+                this.gameScene.events.off('gem-collected', this.handleGemCollected, this);
+                this.gameScene.events.off('update-match-timer', this.updateMatchTimer, this);
+                this.gameScene.events.off('update-turn-indicator', this.handleTurnIndicator, this);
                 this.gameScene.events.off('update-attack-counter');
+                this.gameScene.events.off('update-turn-counter');
             }
         });
 
-        // --- CONTADOR VISIBLE DE ATAQUE OBLIGATORIO ---
-        // Si UI emite 'end-player-turn' en botones antiguos, asegurarse de eliminar ese listener
-        this.events.off('end-player-turn'); // seguro: elimina escuchas previas
+        this.events.off('end-player-turn');
     }
 
     /**
-     * Crea los indicadores visuales (orbes) para las esencias de ambos jugadores.
-     * Ahora organizados en triángulos (uno arriba del otro) y con flechas
-     * dibujadas como línea + punta.
+     * Actualiza cada frame los datos reales de los perfiles (mazo, mano, campo,
+     * gemas) leídos del modelo de la GameScene. No altera la lógica del juego.
      */
+    update() {
+        this.refreshProfiles();
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Construcción del HUD
+     * ------------------------------------------------------------------ */
+
+    createProfiles() {
+        this.playerProfile = this.buildProfile('player');
+        this.opponentProfile = this.buildProfile('opponent');
+    }
+
+    /**
+     * Construye un panel de perfil con nombre y estadísticas reales.
+     * @param {'player'|'opponent'} owner
+     */
+    buildProfile(owner) {
+        const isPlayer = owner === 'player';
+        const w = 330;
+        const h = 124;
+        // Rival arriba-izquierda (sobre su bandeja de mano, a la derecha del
+        // botón de pausa), jugador abajo-derecha. El rival se baja a y=88 para
+        // no asomar por encima de la bandeja (como sí hace el del jugador).
+        const x = isPlayer ? this.W - w - 30 : 100;
+        const y = isPlayer ? this.H - h - 24 : 88;
+        const accent = isPlayer ? COLORS.blue : COLORS.red;
+
+        const panel = drawOrnatePanel(this, { x, y, w, h, accent, fill: COLORS.panel });
+
+        const name = isPlayer
+            ? this.username
+            : (this.gameScene && this.gameScene.vsBot
+                ? 'BOT · NIVEL ' + ((this.gameScene.bot && this.gameScene.bot.difficulty) || 3)
+                : (this.gameScene && this.gameScene.isLAN ? 'RIVAL · LAN' : 'RIVAL · EN LÍNEA'));
+
+        const title = ornateLabel(this, x + 20, y + 22, name.toUpperCase(), {
+            fontSize: '16px', color: isPlayer ? '#bfe1ff' : '#ffc2ad', originX: 0, originY: 0.5
+        });
+        title.setDepth(5);
+
+        const role = this.add.text(x + w - 20, y + 22, isPlayer ? 'TÚ' : 'RIVAL', {
+            fontFamily: 'Georgia, serif', fontSize: '13px', fontStyle: 'bold',
+            color: isPlayer ? '#8fd4ff' : '#ffb08f', stroke: '#000', strokeThickness: 3
+        }).setOrigin(1, 0.5).setDepth(5);
+
+        const mkStat = (labelText, statsX) => {
+            const label = this.add.text(statsX, y + 58, labelText, {
+                fontFamily: 'Georgia, serif', fontSize: '12px', color: '#9fb0c8'
+            }).setOrigin(0.5, 0.5).setDepth(5);
+            const value = this.add.text(statsX, y + 82, '0', {
+                fontFamily: 'Georgia, serif', fontSize: '22px', fontStyle: 'bold',
+                color: '#ffffff', stroke: '#000', strokeThickness: 4
+            }).setOrigin(0.5, 0.5).setDepth(5);
+            return { label, value };
+        };
+
+        const colW = (w - 40) / 3;
+        const baseX = x + 20;
+        const deck = mkStat('MAZO', baseX + colW * 0.5);
+        const hand = mkStat('MANO', baseX + colW * 1.5);
+        const field = mkStat('CAMPO', baseX + colW * 2.5);
+
+        const attackText = this.add.text(x + w / 2, y + h - 12, '', {
+            fontFamily: 'Arial', fontSize: '12px', fontStyle: 'bold',
+            color: '#d7e6ff', stroke: '#000', strokeThickness: 3
+        }).setOrigin(0.5, 1).setDepth(5);
+
+        if (!this.attackCounterTexts) this.attackCounterTexts = {};
+        this.attackCounterTexts[owner] = attackText;
+
+        return { panel, title, role, deck, hand, field, attackText };
+    }
+
+    /** Refresca los valores de los perfiles desde el modelo real de la partida. */
+    refreshProfiles() {
+        const gs = this.gameScene;
+        if (!gs || !gs.player || !gs.opponent) return;
+
+        const fill = (profile, player) => {
+            if (!profile) return;
+            try {
+                profile.deck.value.setText(String(player.deck.getCardsCount()));
+                profile.hand.value.setText(String((player.hand || []).length));
+                profile.field.value.setText(String((player.field || []).filter(Boolean).length));
+            } catch (e) { /* modelo aún no listo */ }
+        };
+
+        fill(this.playerProfile, gs.player);
+        fill(this.opponentProfile, gs.opponent);
+    }
+
+    createPhaseBanner() {
+        const w = 400;
+        const h = 54;
+        const x = this.W / 2 - w / 2;
+        const y = 22;
+        drawOrnatePanel(this, { x, y, w, h, accent: COLORS.gold, fill: COLORS.panelDeep });
+
+        this.phaseText = this.add.text(this.W / 2, y + h / 2, 'PREPARADO', {
+            fontFamily: 'Georgia, serif', fontSize: '22px', fontStyle: 'bold',
+            color: '#e8cf8f', stroke: '#000', strokeThickness: 5, letterSpacing: 2
+        }).setOrigin(0.5).setDepth(5);
+
+        // Contador de turnos en la esquina del estandarte (se actualiza por evento).
+        this.turnCounterText = this.add.text(x + w - 14, y + h / 2, '', {
+            fontFamily: 'Georgia, serif', fontSize: '14px', fontStyle: 'bold',
+            color: '#bfe1ff', stroke: '#000', strokeThickness: 3
+        }).setOrigin(1, 0.5).setDepth(5);
+        this.events.off('update-turn-counter');
+        this.gameScene.events.off('update-turn-counter');
+        this.gameScene.events.on('update-turn-counter', (current, max) => {
+            if (!this.turnCounterText) return;
+            this.turnCounterText.setText(max ? `T${current}/${max}` : `T${current}`);
+        });
+
+        this.phaseSub = this.add.text(this.W / 2, y + h + 16, '', {
+            fontFamily: 'Arial', fontSize: '13px', color: '#9fb0c8', stroke: '#000', strokeThickness: 3
+        }).setOrigin(0.5).setDepth(5);
+
+        this.objectiveSub = this.add.text(this.W / 2, y + h + 38, '', {
+            fontFamily: 'Georgia, serif', fontSize: '13px', fontStyle: 'bold',
+            color: '#e8cf8f', stroke: '#000', strokeThickness: 3, letterSpacing: 1
+        }).setOrigin(0.5).setDepth(5);
+    }
+
+    createButtons() {
+        // --- BOTÓN DE PAUSA ---
+        const px = 62;
+        const py = 54;
+        const ring = this.add.graphics().setDepth(1000);
+        ring.fillStyle(0x0a0e1c, 0.92).fillCircle(px, py, 28);
+        ring.lineStyle(3, COLORS.gold, 0.9).strokeCircle(px, py, 28);
+        ring.lineStyle(1, COLORS.goldBright, 0.4).strokeCircle(px, py, 22);
+
+        const pauseBtn = this.add.text(px, py, '⏸', {
+            fontSize: '32px', color: '#e8cf8f', fontStyle: 'bold'
+        }).setOrigin(0.5).setDepth(1001);
+
+        const pauseZone = this.add.zone(px, py, 64, 64).setOrigin(0.5)
+            .setInteractive({ useHandCursor: true }).setDepth(1002);
+        pauseZone.on('pointerover', () => pauseBtn.setColor('#ffffff'));
+        pauseZone.on('pointerout', () => pauseBtn.setColor('#e8cf8f'));
+        pauseZone.on('pointerdown', () => {
+            this.scene.pause('GameScene');
+            this.scene.pause('UIScene');
+            this.scene.launch('PauseScene');
+        });
+
+        // --- BOTÓN INICIAR PARTIDA ---
+        const bw = 210;
+        const bh = 48;
+        const bx = this.W - bw / 2 - 24;
+        const by = 48;
+
+        const startContainer = this.add.container(bx, by).setDepth(5);
+        const startBg = this.add.graphics();
+        startBg.fillStyle(0x0c2a12, 0.92);
+        startBg.fillRoundedRect(-bw / 2, -bh / 2, bw, bh, 12);
+        startBg.lineStyle(2, 0x49d17a, 0.95);
+        startBg.strokeRoundedRect(-bw / 2, -bh / 2, bw, bh, 12);
+        startBg.lineStyle(1, 0x9effc0, 0.35);
+        startBg.strokeRoundedRect(-bw / 2 + 5, -bh / 2 + 5, bw - 10, bh - 10, 8);
+
+        const startText = this.add.text(0, 0, 'INICIAR PARTIDA', {
+            fontFamily: 'Georgia, serif', fontSize: '18px', fontStyle: 'bold',
+            color: '#d8ffe6', stroke: '#000', strokeThickness: 4
+        }).setOrigin(0.5);
+
+        startContainer.add([startBg, startText]);
+        startContainer.setSize(bw, bh).setInteractive({ useHandCursor: true });
+        startContainer.on('pointerover', () => startContainer.setScale(1.04));
+        startContainer.on('pointerout', () => startContainer.setScale(1));
+        startContainer.on('pointerdown', () => {
+            this.gameScene.events.emit('start-game');
+            startContainer.setVisible(false);
+        });
+    }
+
+    createTurnTimer() {
+        const cx = this.turnTimerPos.x;
+        const cy = this.turnTimerPos.y;
+
+        const base = this.add.graphics().setDepth(6);
+        base.fillStyle(0x000000, 0.4).fillCircle(cx, cy + 3, 48);
+        base.fillStyle(0x0a0e1c, 0.94).fillCircle(cx, cy, 48);
+        base.lineStyle(3, COLORS.gold, 0.55).strokeCircle(cx, cy, 48);
+        base.lineStyle(1, 0xffffff, 0.12).strokeCircle(cx, cy, 40);
+
+        // Arco de progreso (se redibuja en cada tick).
+        this.timerArc = this.add.graphics().setDepth(7);
+
+        this.timerText = this.add.text(cx, cy, '', {
+            fontFamily: 'Georgia, serif', fontSize: '34px', fontStyle: 'bold',
+            color: '#ffffff', stroke: '#000', strokeThickness: 6
+        }).setOrigin(0.5).setDepth(8);
+
+        this.timerLabel = this.add.text(cx, cy - 70, 'TIEMPO DE TURNO', {
+            fontFamily: 'Georgia, serif', fontSize: '12px', color: '#9fb0c8',
+            stroke: '#000', strokeThickness: 3, letterSpacing: 1
+        }).setOrigin(0.5).setDepth(8);
+
+        this._timerColor = COLORS.blue;
+        this._timerFrac = 1;
+        this.drawTimerArc();
+    }
+
+    /** Redibuja el arco de progreso del temporizador. */
+    drawTimerArc() {
+        if (!this.timerArc) return;
+        const cx = this.turnTimerPos.x;
+        const cy = this.turnTimerPos.y;
+        const frac = Phaser.Math.Clamp(this._timerFrac, 0, 1);
+        this.timerArc.clear();
+        this.timerArc.lineStyle(6, 0x12233d, 1).strokeCircle(cx, cy, 42);
+        if (frac > 0) {
+            const start = -Math.PI / 2;
+            const end = start + frac * Math.PI * 2;
+            this.timerArc.lineStyle(6, this._timerColor, 0.98);
+            this.timerArc.beginPath();
+            this.timerArc.arc(cx, cy, 42, start, end, false);
+            this.timerArc.strokePath();
+        }
+        this.timerArc.lineStyle(1, 0xffffff, 0.15).strokeCircle(cx, cy, 34);
+    }
+
+    /** Redibuja el anillo del temporizador con el color de la fase activa. */
+    drawTurnRing(color) {
+        this._timerColor = color;
+        this.drawTimerArc();
+    }
+
+    createMatchTimer() {
+        const w = 210;
+        const h = 56;
+        // Entre el estandarte de fase y el botón de inicio, en la franja
+        // superior. Arriba-derecha chocaba con el orbe superior del rival.
+        const x = this.W - w - 340;
+        const y = 24;
+        this.matchPanel = drawOrnatePanel(this, { x, y, w, h, accent: COLORS.gold, fill: COLORS.panelDeep });
+        this.matchPanel.setVisible(false);
+
+        this.matchTimerText = this.add.text(x + w / 2, y + h / 2, '', {
+            fontFamily: 'Georgia, serif', fontSize: '22px', fontStyle: 'bold',
+            color: '#ffff88', stroke: '#000', strokeThickness: 5
+        }).setOrigin(0.5).setDepth(6).setVisible(false);
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Orbes de esencia
+     * ------------------------------------------------------------------ */
+
     createEssenceOrbs() {
         const { width, height } = this.scale;
-        const orbSize = 40; // tamaño base que usamos para el posicionamiento y offsets
-        const radius = 52; // radio del triángulo
-        const paddingY = 60;
+        const orbSize = 40;
+        const radius = 54;
 
-        // Posiciones: Triángulos apilados
-        const playerCenterX = 130;
-        const playerTopY = height - 370;   // fuego-planta-agua (arriba, jugador)
-        const playerBottomY = height - 170; // luz-sombra-espiritu (abajo, jugador)
+        const playerCenterX = 132;
+        const playerTopY = height - 380;
+        const playerBottomY = height - 180;
 
-        const opponentCenterX = width - 130;
-        const opponentTopY = 390;   // fuego-planta-agua (arriba, oponente)
-        const opponentBottomY = 190; // luz-sombra-espiritu (abajo, oponente)
+        const opponentCenterX = width - 132;
+        const opponentTopY = 392;
+        const opponentBottomY = 192;
 
-        // Limpiamos cualquier grupo anterior (por si se vuelve a crear)
         if (this.essenceGraphics && this.essenceGraphics.length) {
             this.essenceGraphics.forEach(g => g.destroy?.());
         }
         this.essenceGraphics = [];
 
-        // Crear triángulos: fuego>planta>agua y luz>sombra>espiritu
-        // Energía azul para el jugador y naranja para el oponente.
-        this.createEssenceTriangle(playerCenterX, playerTopY, radius, ['fuego', 'planta', 'agua'], 'player', 0x5bc0ff, orbSize);
-        this.createEssenceTriangle(playerCenterX, playerBottomY, radius, ['luz', 'sombra', 'espiritu'], 'player', 0x5bc0ff, orbSize);
-
-        this.createEssenceTriangle(opponentCenterX, opponentTopY, radius, ['fuego', 'planta', 'agua'], 'opponent', 0xff9a5c, orbSize);
-        this.createEssenceTriangle(opponentCenterX, opponentBottomY, radius, ['luz', 'sombra', 'espiritu'], 'opponent', 0xff9a5c, orbSize);
+        this.createEssenceTriangle(playerCenterX, playerTopY, radius, ['fuego', 'planta', 'agua'], 'player', COLORS.blue, orbSize);
+        this.createEssenceTriangle(playerCenterX, playerBottomY, radius, ['luz', 'sombra', 'espiritu'], 'player', COLORS.blue, orbSize);
+        this.createEssenceTriangle(opponentCenterX, opponentTopY, radius, ['fuego', 'planta', 'agua'], 'opponent', COLORS.red, orbSize);
+        this.createEssenceTriangle(opponentCenterX, opponentBottomY, radius, ['luz', 'sombra', 'espiritu'], 'opponent', COLORS.red, orbSize);
     }
 
     /**
      * Crea un triángulo de 3 orbes con flechas (línea + punta).
-     * @param {number} cx - centro X del triángulo
-     * @param {number} cy - centro Y del triángulo
-     * @param {number} r - radio de colocación de orbes
-     * @param {Array<string>} typesArray - ['fuego','planta','agua']
-     * @param {string} ownerId - 'player'|'opponent'
-     * @param {number} arrowColor - color en hex (0xRRGGBB)
-     * @param {number} orbSize - tamaño base para offsets
      */
     createEssenceTriangle(cx, cy, r, typesArray, ownerId, arrowColor = 0xff3333, orbSize = 40) {
-        const anglesDeg = [-90, 30, 150]; // top, bottom-right, bottom-left (clockwise)
+        const anglesDeg = [-90, 30, 150];
         const elements = [];
 
-        // container para flechas (por debajo) y para orbes (encima)
         const arrowsGraphics = this.add.graphics({ x: 0, y: 0 }).setDepth(5);
         const orbsContainer = this.add.container(0, 0).setDepth(10);
-        const scaleValue = 0.08; // escala que hemos usado por consistencia al render de UI
+        const scaleValue = 0.085;
 
         for (let i = 0; i < 3; i++) {
             const angle = Phaser.Math.DegToRad(anglesDeg[i]);
             const x = Math.round(cx + r * Math.cos(angle));
             const y = Math.round(cy + r * Math.sin(angle));
 
+            // Marco circular del orbe (integra las esencias con el HUD).
+            const ring = this.add.graphics().setDepth(9);
+            ring.fillStyle(0x05070e, 0.85).fillCircle(x, y, 31);
+            ring.lineStyle(2, arrowColor, 0.7).strokeCircle(x, y, 31);
+            ring.lineStyle(1, 0xcfaf6d, 0.5).strokeCircle(x, y, 27);
+
             const assetKey = `orb-${typesArray[i]}`;
             const sprite = this.add.image(x, y, assetKey)
                 .setInteractive()
                 .setOrigin(0.5)
                 .setScale(scaleValue)
-                .setTint(0x666666); // apagado por defecto
-            // Guardamos datos para referencia
+                .setTint(0x555555);
             sprite.setData('type', typesArray[i]);
             sprite.setData('owner', ownerId);
             sprite.setData('active', false);
+            sprite.setData('ring', ring);
 
             elements.push(sprite);
             orbsContainer.add(sprite);
 
-            // Guardar en map
             if (ownerId === 'player') this.playerOrbs[typesArray[i]] = sprite;
             else this.opponentOrbs[typesArray[i]] = sprite;
         }
 
-        // Dibujar flechas: 0->1, 1->2, 2->0 (clockwise)
         for (let i = 0; i < 3; i++) {
             const a = elements[i];
             const b = elements[(i + 1) % 3];
-
-            // Calculamos offsets en base al displayWidth/Height reales para que la flecha no cubra las esferas
             const startOffset = (a.displayWidth || orbSize) / 2 + 6;
             const endOffset = (b.displayWidth || orbSize) / 2 + 6;
-
             this.drawArrowLine(arrowsGraphics, a.x, a.y, b.x, b.y, arrowColor, 4, 12, startOffset, endOffset);
         }
 
-        // Guardar para referencia si necesitamos manipular más adelante
         this.essenceGraphics.push(arrowsGraphics);
         this.essenceGraphics.push(orbsContainer);
     }
 
-    /**
-     * Dibuja una flecha (línea + punta) entre dos puntos en Graphics.
-     * @param {Phaser.GameObjects.Graphics} g
-     * @param {number} fromX
-     * @param {number} fromY
-     * @param {number} toX
-     * @param {number} toY
-     * @param {number} color - 0xRRGGBB
-     * @param {number} thickness - grosor de la línea
-     * @param {number} headLen - longitud de la punta de flecha
-     * @param {number} startOffset - separación desde el origen (px)
-     * @param {number} endOffset - separación hasta llegar al destino (px)
-     */
     drawArrowLine(g, fromX, fromY, toX, toY, color = 0xff3333, thickness = 3, headLen = 12, startOffset = 0, endOffset = 0) {
-        // Dirección y unit vector
         const angle = Math.atan2(toY - fromY, toX - fromX);
         const dx = Math.cos(angle), dy = Math.sin(angle);
 
@@ -315,17 +439,14 @@ export default class UIScene extends Phaser.Scene {
         const tx = toX - dx * endOffset;
         const ty = toY - dy * endOffset;
 
-        // Línea principal (shaft) sin cubrir las orbes
         g.lineStyle(thickness, color, 1);
         g.beginPath();
         g.moveTo(sx, sy);
-        // la línea termina en la base de la punta:
         const baseX = tx - dx * headLen;
         const baseY = ty - dy * headLen;
         g.lineTo(baseX, baseY);
         g.strokePath();
 
-        // Triángulo para la punta de flecha
         const leftX = tx - headLen * Math.cos(angle - Math.PI / 6);
         const leftY = ty - headLen * Math.sin(angle - Math.PI / 6);
         const rightX = tx - headLen * Math.cos(angle + Math.PI / 6);
@@ -340,93 +461,384 @@ export default class UIScene extends Phaser.Scene {
         g.fillPath();
     }
 
-    /**
-     * Actualiza el texto del temporizador en la UI.
-     * @param {number} time - El tiempo restante en segundos.
-     */
+    /* ------------------------------------------------------------------ *
+     * Temporizadores
+     * ------------------------------------------------------------------ */
+
     updateTimer(time) {
+        if (!this.timerText) return;
+        const limit = (this.gameScene && this.gameScene.turn && this.gameScene.turn.config && this.gameScene.turn.config.TURN_TIME_LIMIT_MS) || 12000;
+        this._timerFrac = time > 0 ? Phaser.Math.Clamp(time / (limit / 1000), 0, 1) : 0;
+        this.drawTimerArc();
         if (time > 0) {
-            this.timerText.setText(`Tiempo: ${time}`);
+            this.timerText.setText(`${time}`);
+            this.timerText.setColor(time <= 4 ? '#ff6b6b' : '#ffffff');
         } else {
-            this.timerText.setText(''); // Limpiamos el texto si no hay tiempo
+            this.timerText.setText('');
         }
     }
 
+    updateMatchTimer(seconds) {
+        if (!this.matchTimerText) return;
+        if (seconds <= 0) {
+            this.matchTimerText.setVisible(false);
+            if (this.matchPanel) this.matchPanel.setVisible(false);
+            return;
+        }
+        this.matchTimerText.setVisible(true);
+        if (this.matchPanel) this.matchPanel.setVisible(true);
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        this.matchTimerText.setText(`PARTIDA  ${m}:${s.toString().padStart(2, '0')}`);
+        this.matchTimerText.setColor(seconds <= 15 ? '#ff6b6b' : '#ffff88');
+    }
+
     /**
-     * Muestra un modal de fin de partida.
-     * @param {string} winner - Quién ganó la partida ('player' u 'opponent').
+     * Actualiza el indicador de fase (turno propio / del rival) y el color del
+     * anillo del temporizador. Presentación basada en el evento real del juego.
+     * @param {'player'|'opponent'} side
      */
-    showGameOverModal(winner) {
+    handleTurnIndicator(side) {
+        const mine = side === 'player';
+        if (this.phaseText) {
+            this.phaseText.setText(mine ? 'TU TURNO' : (this.gameScene && this.gameScene.isLAN ? 'TURNO DEL RIVAL' : 'TURNO DEL OPONENTE'));
+            this.phaseText.setColor(mine ? '#bfe1ff' : '#ffc2ad');
+        }
+        if (this.phaseSub) {
+            this.phaseSub.setText(mine ? 'Coloca, fusiona o ataca' : 'El oponente está actuando...');
+        }
+        this.drawTurnRing(mine ? COLORS.blue : COLORS.red);
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Panel de gemas
+     * ------------------------------------------------------------------ */
+
+    createGemPanels() {
         const { width, height } = this.scale;
 
-        // 1. Creamos un fondo semitransparente que cubra toda la pantalla
-        const overlay = this.add.graphics({ fillStyle: { color: 0x000000, alpha: 0.7 } });
-        overlay.fillRect(0, 0, width, height);
-        overlay.setDepth(100); // Nos aseguramos que esté por encima de todo
+        const shelfW = 290;
+        const shelfH = 130;
+        const gap = 48;
+        const gemSize = 24;
+        const startXOffset = (gap * (ELEMENTS.length - 1)) / 2;
 
-        // 2. Creamos el panel del modal
-        const panelWidth = 500;
-        const panelHeight = 250;
-        const panel = this.add.graphics({ fillStyle: { color: 0x1a001a }, lineStyle: { width: 2, color: 0xc49bff } });
-        panel.fillRoundedRect(width / 2 - panelWidth / 2, height / 2 - panelHeight / 2, panelWidth, panelHeight, 15);
-        panel.strokeRoundedRect(width / 2 - panelWidth / 2, height / 2 - panelHeight / 2, panelWidth, panelHeight, 15);
-        panel.setDepth(101);
+        const titleStyle = {
+            fontFamily: 'Georgia, serif', fontSize: '13px', fontStyle: 'bold',
+            color: '#e8cf8f', stroke: '#000000', strokeThickness: 3, letterSpacing: 1
+        };
+        const countStyle = {
+            fontFamily: 'Arial', fontSize: '15px', fontStyle: 'bold',
+            color: '#ffffff', stroke: '#000000', strokeThickness: 3
+        };
 
-        // 3. Añadimos el texto de victoria o derrota
-        const titleText = this.add.text(width / 2, height / 2 - 50, 'Fin de la Partida', { fontSize: '48px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5).setDepth(101);
-        
-        const resultText = (winner === 'player') ? '¡Has Ganado!' : '¡Has Perdido!';
-        const resultColor = (winner === 'player') ? '#28a745' : '#dc3545';
-        const messageText = this.add.text(width / 2, height / 2 + 30, resultText, { fontSize: '40px', color: resultColor, fontStyle: 'bold' }).setOrigin(0.5).setDepth(101);
+        const paintShelf = (g, cx, cy, highlight) => {
+            const x = cx - shelfW / 2;
+            const y = cy - shelfH / 2;
+            g.clear();
+            g.fillStyle(0x000000, 0.35).fillRoundedRect(x, y + 4, shelfW, shelfH, 16);
+            g.fillStyle(highlight ? 0x2a1f04 : COLORS.panel, highlight ? 0.86 : 0.82)
+                .fillRoundedRect(x, y, shelfW, shelfH, 16);
+            const stroke = highlight ? 0xffd75a : COLORS.gold;
+            g.lineStyle(2, stroke, highlight ? 0.95 : 0.7).strokeRoundedRect(x, y, shelfW, shelfH, 16);
+            g.lineStyle(1, stroke, 0.3).strokeRoundedRect(x + 6, y + 6, shelfW - 12, shelfH - 12, 12);
+            g.fillStyle(highlight ? 0xffd75a : COLORS.goldBright, 0.9);
+            [[x, y], [x + shelfW, y], [x, y + shelfH], [x + shelfW, y + shelfH]]
+                .forEach(([px, py]) => g.fillPoints([
+                    new Phaser.Geom.Point(px, py - 6), new Phaser.Geom.Point(px + 6, py),
+                    new Phaser.Geom.Point(px, py + 6), new Phaser.Geom.Point(px - 6, py)
+                ], true));
+        };
 
-        // Podríamos añadir un botón para volver al menú principal en el futuro
-        // Botón para volver al menú principal
-        const btnWidth = 200;
-        const btnHeight = 48;
+        const buildShelf = (ownerId, cx, cy) => {
+            const bg = this.add.graphics().setDepth(8);
+            paintShelf(bg, cx, cy, false);
+
+            const title = this.add.text(cx - shelfW / 2 + 16, cy - 44, ownerId === 'player' ? 'TUS GEMAS' : 'GEMAS RIVAL', titleStyle)
+                .setOrigin(0, 0.5).setDepth(9);
+            const total = this.add.text(cx + shelfW / 2 - 16, cy - 44, '0 / 0', {
+                ...titleStyle, fontSize: '14px', color: '#f1c86a'
+            }).setOrigin(1, 0.5).setDepth(9);
+
+            // Barra de progreso bajo el panel: transparente hasta que hay requisitos.
+            const bar = this.add.graphics().setDepth(8).setAlpha(0);
+            const drawBar = (frac, complete) => {
+                const bw = shelfW - 40;
+                const bx = cx - bw / 2;
+                const by = cy + shelfH / 2 + 8;
+                bar.clear();
+                bar.fillStyle(0x05070e, 0.9).fillRoundedRect(bx, by, bw, 8, 4);
+                bar.lineStyle(1, COLORS.gold, 0.5).strokeRoundedRect(bx, by, bw, 8, 4);
+                const fillW = Math.max(0, Math.min(1, frac)) * (bw - 4);
+                if (fillW > 0) {
+                    bar.fillStyle(complete ? 0x49d17a : COLORS.goldBright, 0.95)
+                        .fillRoundedRect(bx + 2, by + 2, fillW, 4, 2);
+                }
+            };
+            drawBar(0, false);
+
+            this.gemShelves[ownerId] = { bg, title, bar, cx, cy, w: shelfW, h: shelfH, drawShelf: (h) => paintShelf(bg, cx, cy, h), drawBar };
+            this.gemTotals[ownerId] = total;
+
+            ELEMENTS.forEach((type, i) => {
+                const x = cx - startXOffset + i * gap;
+                const gem = createGemVisual(this, x, cy - 2, type, gemSize, { depth: 9, filled: false });
+                const count = this.add.text(x, cy + 38, '0/0', countStyle).setOrigin(0.5).setDepth(9);
+                this.gemIcons[ownerId][type] = { gem, count, type };
+            });
+        };
+
+        buildShelf('player', 165, height / 2);
+        buildShelf('opponent', width - 165, height / 2);
+
+        this.setGemPanelsVisible(false);
+    }
+
+    renderGems(ownerId, progress) {
+        const row = this.gemIcons[ownerId];
+        if (!row || !progress) return;
+
+        let totalHave = 0;
+        let totalNeed = 0;
+        let allMet = true;
+        let anyRequirement = false;
+
+        ELEMENTS.forEach((type) => {
+            const slot = row[type];
+            if (!slot) return;
+            const p = progress[type] || { have: 0, need: 0, met: false };
+            const filled = p.need > 0 && p.have >= p.need;
+
+            slot.gem.setFilled(filled);
+            slot.count.setText(`${p.have}/${p.need}`);
+            slot.count.setColor(filled ? '#7CFC00' : '#ffffff');
+
+            totalHave += p.have;
+            totalNeed += p.need;
+            if (p.need > 0) anyRequirement = true;
+            if (!filled) allMet = false;
+        });
+
+        if (this.gemTotals[ownerId]) {
+            this.gemTotals[ownerId].setText(`${totalHave} / ${totalNeed}`);
+        }
+
+        const shelf = this.gemShelves[ownerId];
+            if (shelf && shelf.drawShelf && anyRequirement) {
+            shelf.drawShelf(allMet);
+            if (shelf.title) shelf.title.setColor(allMet ? '#ffd75a' : '#e8cf8f');
+            if (shelf.bar) shelf.bar.setAlpha(1);
+            if (shelf.drawBar) {
+                const frac = totalNeed > 0 ? totalHave / totalNeed : 0;
+                shelf.drawBar(frac, allMet);
+            }
+        }
+    }
+
+    handleObjectivesReady(payload) {
+        if (!payload) return;
+        const usesGems = !!(payload.mode && payload.mode.usesGems);
+        this.setGemPanelsVisible(usesGems);
+        this.renderGems('player', payload.player);
+        this.renderGems('opponent', payload.opponent);
+        this.updateObjectiveText(payload);
+    }
+
+    /**
+     * Resume en una sola línea el objetivo de victoria del modo activo:
+     * gemas requeridas, límite de turnos o reloj global. Solo presentación.
+     * @param {object} payload Estado de objetivos emitido por GameScene.
+     */
+    updateObjectiveText(payload) {
+        if (!this.objectiveSub) return;
+        const mode = payload.mode || {};
+        const parts = [];
+        if (mode.usesGems && payload.requirements) {
+            const reqs = Object.values(payload.requirements).filter((v) => v > 0);
+            const total = reqs.reduce((a, b) => a + b, 0);
+            const distinct = reqs.length;
+            parts.push(`OBJETIVO · 6 elementos en campo · ${total} GEMAS (${distinct} TIPOS)`);
+        } else {
+            parts.push('OBJETIVO · 6 elementos en campo');
+        }
+        if (mode.maxTurns) parts.push(`${mode.maxTurns} TURNOS`);
+        if (mode.matchTimeMs) parts.push(`${Math.round(mode.matchTimeMs / 60000)} MIN`);
+        this.objectiveSub.setText(parts.join('   ·   '));
+    }
+
+    setGemPanelsVisible(visible) {
+        ['player', 'opponent'].forEach((ownerId) => {
+            const shelf = this.gemShelves[ownerId];
+            if (shelf) {
+                if (shelf.bg) shelf.bg.setVisible(visible);
+                if (shelf.title) shelf.title.setVisible(visible);
+                if (shelf.bar) shelf.bar.setAlpha(visible ? 1 : 0);
+            }
+            if (this.gemTotals[ownerId]) this.gemTotals[ownerId].setVisible(visible);            const row = this.gemIcons[ownerId] || {};
+            ELEMENTS.forEach((type) => {
+                const slot = row[type];
+                if (!slot) return;
+                if (slot.gem) slot.gem.setVisible(visible);
+                if (slot.count) slot.count.setVisible(visible);
+            });
+        });
+    }
+
+    handleGemCollected(ownerId, type, progress) {
+        this.renderGems(ownerId, progress);
+        const slot = this.gemIcons[ownerId] && this.gemIcons[ownerId][type];
+        if (!slot) return;
+
+        if (slot.gem) {
+            slot.gem.setScale(1);
+            this.tweens.add({
+                targets: slot.gem,
+                scale: { from: 1, to: 1.5 },
+                duration: 150,
+                yoyo: true,
+                ease: 'Back.easeOut'
+            });
+        }
+
+        if (slot.count) {
+            this.tweens.add({
+                targets: slot.count,
+                yoyo: true,
+                duration: 160,
+                scaleX: { from: 1, to: 1.6 },
+                scaleY: { from: 1, to: 1.6 },
+                ease: 'Back.easeOut',
+                onComplete: () => slot.count.setScale(1)
+            });
+        }
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Fin de partida y esencias
+     * ------------------------------------------------------------------ */
+
+    showGameOverModal(winner, reason = null) {
+        const { width, height } = this.scale;
+
+        const modalObjects = [];
+        const track = (obj) => { modalObjects.push(obj); return obj; };
+
+        const REASON_LABELS = {
+            timeExpired: 'Se agotó el tiempo: ambos pierden',
+            playerInactive: 'Victoria por inactividad del rival',
+            opponentInactive: 'El rival estuvo inactivo',
+            playerObjectives: 'Gemas + control de campo cumplidos',
+            opponentObjectives: 'El rival cumplió gemas y control de campo',
+            playerFieldControl: 'Control de campo: 6 elementos',
+            opponentFieldControl: 'El rival logró 6 elementos en campo',
+            playerEssences: 'Las 6 esencias han sido activadas',
+            opponentEssences: 'El rival activó las 6 esencias',
+            playerTurnLimit: 'Se agotaron tus turnos sin cumplir el objetivo',
+            opponentTurnLimit: 'El rival agotó sus turnos'
+        };
+
+        const overlay = track(this.add.rectangle(0, 0, width, height, 0x000000, 0.75).setOrigin(0).setDepth(100));
+
+        const panelWidth = 560;
+        const panelHeight = 330;
+        track(drawOrnatePanel(this, {
+            x: width / 2 - panelWidth / 2,
+            y: height / 2 - panelHeight / 2,
+            w: panelWidth,
+            h: panelHeight,
+            accent: COLORS.gold
+        })).setDepth(101);
+
+        track(ornateLabel(this, width / 2, height / 2 - 96, 'FIN DE LA PARTIDA', {
+            fontSize: '26px', color: '#e8cf8f'
+        })).setDepth(102);
+
+        let resultText;
+        let resultColor;
+        if (winner === 'player') {
+            resultText = '¡Has Ganado!';
+            resultColor = '#49d17a';
+        } else if (winner === 'opponent') {
+            resultText = '¡Has Perdido!';
+            resultColor = '#ff5a3c';
+        } else if (reason === 'timeExpired') {
+            resultText = '¡Tiempo Agotado!';
+            resultColor = '#ffb300';
+        } else {
+            resultText = 'Empate';
+            resultColor = '#cccccc';
+        }
+        track(this.add.text(width / 2, height / 2 - 30, resultText, {
+            fontFamily: 'Georgia, serif', fontSize: '44px', fontStyle: 'bold',
+            color: resultColor, stroke: '#000', strokeThickness: 6
+        }).setOrigin(0.5).setDepth(102));
+
+        const reasonLabel = (reason && REASON_LABELS[reason]) || '';
+        if (reasonLabel) {
+            track(this.add.text(width / 2, height / 2 + 22, reasonLabel, {
+                fontSize: '17px', color: '#ffd75a', fontStyle: 'italic',
+                fontFamily: 'Arial', stroke: '#000000', strokeThickness: 3
+            }).setOrigin(0.5).setDepth(102));
+        }
+
+        const detailText = this.buildGameOverDetail();
+        if (detailText) {
+            track(this.add.text(width / 2, height / 2 + 54, detailText, {
+                fontSize: '17px', color: '#bfe1ff', fontStyle: 'bold',
+                fontFamily: 'Arial', stroke: '#000000', strokeThickness: 3
+            }).setOrigin(0.5).setDepth(102));
+        }
+
+        const btnWidth = 220;
+        const btnHeight = 50;
         const btnX = width / 2;
-        const btnY = height / 2 + 90;
+        const btnY = height / 2 + 116;
 
-        const backBtnBg = this.add.graphics();
-        backBtnBg.fillStyle(0x303df1, 1);
-        backBtnBg.fillRoundedRect(btnX - btnWidth / 2, btnY - btnHeight / 2, btnWidth, btnHeight, 10);
-        backBtnBg.lineStyle(2, 0xffffff, 0.15);
-        backBtnBg.strokeRoundedRect(btnX - btnWidth / 2, btnY - btnHeight / 2, btnWidth, btnHeight, 10);
+        const backBtnBg = track(this.add.graphics());
+        backBtnBg.fillStyle(0x3348d8, 1);
+        backBtnBg.fillRoundedRect(btnX - btnWidth / 2, btnY - btnHeight / 2, btnWidth, btnHeight, 12);
+        backBtnBg.lineStyle(2, COLORS.gold, 0.9);
+        backBtnBg.strokeRoundedRect(btnX - btnWidth / 2, btnY - btnHeight / 2, btnWidth, btnHeight, 12);
         backBtnBg.setDepth(102);
 
-        const backBtnText = this.add.text(btnX, btnY, 'Ir al inicio', { fontSize: '20px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5).setDepth(103);
+        track(this.add.text(btnX, btnY, 'Ir al inicio', {
+            fontFamily: 'Georgia, serif', fontSize: '20px', color: '#ffffff', fontStyle: 'bold',
+            stroke: '#000', strokeThickness: 4
+        }).setOrigin(0.5).setDepth(103));
 
-        // Hacer clickable el botón
-        const backBtnZone = this.add.zone(btnX, btnY, btnWidth, btnHeight).setOrigin(0.5).setInteractive({ cursor: 'pointer' }).setDepth(104);
-        // quitar efecto hover/animación para que el botón no cambie de posición ni escala al pasar el ratón
+        const backBtnZone = track(this.add.zone(btnX, btnY, btnWidth, btnHeight).setOrigin(0.5)
+            .setInteractive({ cursor: 'pointer' }).setDepth(104));
         backBtnZone.on('pointerdown', () => {
-            // Limpiar modal
-            overlay.destroy();
-            panel.destroy();
-            titleText.destroy();
-            messageText.destroy();
-            backBtnBg.destroy();
-            backBtnText.destroy();
-            backBtnZone.destroy();
-
-            // Detenemos las escenas de juego y UI. NO las eliminamos con .remove().
-            // Esto permite que Phaser pueda volver a iniciarlas en una nueva partida.
+            modalObjects.forEach((obj) => { if (obj) obj.destroy(); });
             this.scene.stop('GameScene');
             this.scene.stop('UIScene');
-
-            // Ir al menú principal (HomeScenes) PRIMERO
             this.scene.start('HomeScenes');
         });
     }
 
+    buildGameOverDetail() {
+        try {
+            const gs = this.gameScene;
+            if (!gs || typeof gs.getObjectivesPayload !== 'function') return '';
+            const payload = gs.getObjectivesPayload();
+            if (!payload || !payload.mode) return '';
+            let text = `Modo: ${payload.mode.name}`;
+            if (payload.mode.usesGems && payload.player) {
+                let have = 0;
+                let need = 0;
+                Object.keys(payload.player).forEach((type) => {
+                    have += payload.player[type].have;
+                    need += payload.player[type].need;
+                });
+                text += ` · Gemas ${have}/${need}`;
+            }
+            return text;
+        } catch (e) {
+            return '';
+        }
+    }
 
-    /**
-     * Manejador que se ejecuta cuando se recibe el evento 'essence-activated'.
-     * @param {string} playerId 'player' u 'opponent'
-     * @param {string} essenceType El tipo de esencia activada (ej. 'fuego')
-     */
     handleEssenceActivation(playerId, essenceType) {
-        console.log('[UIScene] Recibido evento: activar esencia', { essenceType, playerId });
-
         let targetOrb;
         if (playerId === 'player') {
             targetOrb = this.playerOrbs[essenceType];
@@ -435,11 +847,8 @@ export default class UIScene extends Phaser.Scene {
         }
 
         if (targetOrb) {
-            // Quitamos el tinte gris para indicar activación
             targetOrb.clearTint();
-
-            // Pulsación visual: aumentamos ligeramente la escala y volvemos al valor original
-            const baseScale = targetOrb.scaleX || 0.08;
+            const baseScale = targetOrb.scaleX || 0.085;
             const pulseScale = baseScale * 1.25;
             this.tweens.add({
                 targets: targetOrb,

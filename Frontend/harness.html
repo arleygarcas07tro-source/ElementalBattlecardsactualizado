@@ -1,0 +1,45 @@
+import Phaser from 'phaser';
+import BootScene from './scenes/bootScene.js';
+import PreloaderScene from './scenes/Preloader.js';
+import GameScene from './scenes/GameScene.js';
+import UIScene from './scenes/uiScene.js';
+
+const config = {
+    type: Phaser.AUTO,
+    backgroundColor: '#1a1a1a',
+    dom: { createContainer: true },
+    width: 1600,
+    height: 1000,
+    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+    parent: 'game-container',
+    render: { antialias: true, roundPixels: false, powerPreference: 'high-performance', batchSize: 4096 },
+    fps: { min: 30, target: 60, smoothStep: true },
+    loader: { generateMipmap: true, maxParallelDownloads: 8 },
+    title: 'Elemental Battlecards - Harness',
+    scene: [BootScene, PreloaderScene, GameScene, UIScene]
+};
+
+const game = new Phaser.Game(config);
+window.game = game;
+
+// Salta directo a la escena de combate contra el bot con datos falsos.
+game.events.once('ready', () => {
+    const start = () => {
+        const gs = game.scene.getScene('GameScene');
+        if (!gs) { setTimeout(start, 100); return; }
+        game.scene.stop('Preloader');
+        game.scene.start('GameScene', {
+            playerData: { username: 'Harnes' },
+            vsBot: true,
+            botDifficulty: 3,
+            gameMode: 'gemas',
+            objectiveDifficulty: 3
+        });
+        // Auto-inicia la partida (equivale a pulsar INICIAR PARTIDA).
+        setTimeout(() => {
+            const s = game.scene.getScene('GameScene');
+            if (s) s.events.emit('start-game');
+        }, 1200);
+    };
+    start();
+});

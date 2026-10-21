@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
+import DomSceneBase from './ui/DomSceneBase.js';
 
-export default class StatsScene extends Phaser.Scene {
+export default class StatsScene extends DomSceneBase {
     constructor() {
         super('StatsScene');
         this.playerData = {};
@@ -397,23 +398,14 @@ export default class StatsScene extends Phaser.Scene {
             </div>
         `;
 
-        this.domElement = this.add.dom(0, 0).createFromHTML(html);
-        this.domElement.setOrigin(0);
-        this.domElement.setDepth(9999);
-        const node = this.domElement.node;
-        node.style.position = 'absolute';
-        node.style.left = '0';
-        node.style.top = '0';
-        node.style.width = `${width}px`;
-        node.style.height = `${height}px`;
-        node.style.pointerEvents = 'auto';
+        const node = this.mountDOM(html);
 
         const backButton = node.querySelector('#stats-back');
 
         if (backButton) {
-            backButton.addEventListener('click', () => {
+            this.track(backButton, () => {
                 this.scene.start(this.returnScene, { playerData: this.playerData });
-            });
+            }, 'click');
         }
 
         const fill = node.querySelector('.player-fill');

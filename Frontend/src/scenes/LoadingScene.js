@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { ELEMENT_ICONS as elementIcons } from './ui/elementCatalog.js';
 
 export default class LoadingScene extends Phaser.Scene {
     constructor() {
@@ -62,15 +63,6 @@ export default class LoadingScene extends Phaser.Scene {
 
         this.add.text(width / 2, height * 0.30, 'Elemental Battlecards', titleStyle).setOrigin(0.5).setDepth(5);
         this.add.text(width / 2, height * 0.375, 'Cargando reino elemental...', subtitleStyle).setOrigin(0.5).setDepth(5);
-
-        const elementIcons = [
-            { key: 'icon-agua', label: 'Agua', fallback: '💧' },
-            { key: 'icon-fuego', label: 'Fuego', fallback: '🔥' },
-            { key: 'icon-espiritu', label: 'Tierra', fallback: '🌍' },
-            { key: 'icon-luz', label: 'Aire', fallback: '🌬️' },
-            { key: 'icon-planta', label: 'Naturaleza', fallback: '🌿' },
-            { key: 'icon-sombra', label: 'Oscuridad', fallback: '🌑' }
-        ];
 
         const iconXStart = width / 2 - ((elementIcons.length - 1) * 100) / 2;
         const iconY = height * 0.48;

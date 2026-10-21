@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Exposición — Base de Datos · Elemental Battlecards</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Spectral:ital,wght@0,300;0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#07060b;
+    --bg2:#0c0a14;
+    --panel:#131019;
+    --panel2:#1c1725;
+    --ink:#f4ecda;
+    --ink-dim:#bcaf92;
+    --ink-faint:#7f7663;
+    --gold:#e6c069;
+    --gold-hi:#f8e6b0;
+    --gold-deep:#9c7a2c;
+    --fire:#ff6a3d;
+    --water:#3fa9ff;
+    --plant:#4fd98a;
+    --light:#ffdc7a;
+    --shadow:#b487ff;
+    --spirit:#3fe0cf;
+    --line:rgba(230,192,105,.20);
+    --line-2:rgba(230,192,105,.42);
+    --code-bg:#0a090f;
+    --r:16px;
+    --mono:"JetBrains Mono","Cascadia Code","Consolas","Courier New",monospace;
+    --serif:"Spectral",Georgia,"Palatino Linotype","Times New Roman",serif;
+    --display:"Cinzel","Palatino Linotype",Georgia,serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:var(--bg);
+    color:var(--ink);font-family:var(--serif);line-height:1.62;font-size:16px;
+    overflow:hidden;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+  }
+  body::before{
+    content:"";position:fixed;inset:-12%;z-index:0;pointer-events:none;
+    background:
+      radial-gradient(58% 44% at 84% 4%, rgba(180,135,255,.22), transparent 62%),
+      radial-gradient(52% 40% at 4% 14%, rgba(255,106,61,.14), transparent 60%),
+      radial-gradient(60% 50% at 64% 110%, rgba(63,224,207,.13), transparent 62%),
+      radial-gradient(42% 34% at 32% 58%, rgba(230,192,105,.08), transparent 70%);
+    animation:drift 28s ease-in-out infinite alternate;
+  }
+  body::after{
+    content:"";position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.28;mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  @keyframes drift{from{transform:translate3d(-1.5%,-1%,0) scale(1.03)}to{transform:translate3d(1.5%,1.4%,0) scale(1.07)}}
+  ::selection{background:var(--gold);color:#160f00}
+
+  /* ---------- Progress ---------- */
+  .progress{position:fixed;top:0;left:0;right:0;height:3px;z-index:60;background:rgba(230,192,105,.08)}
+  .progress i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--gold-deep),var(--gold-hi));box-shadow:0 0 16px rgba(230,192,105,.7);transition:width .45s cubic-bezier(.2,.7,.2,1)}
+
+  /* ---------- Deck / slides ---------- */
+  .deck{position:relative;z-index:2;min-height:100vh}
+  .slide{
+    display:none;height:100vh;width:100%;
+    padding:46px clamp(28px,6.5vw,104px);
+    position:relative;overflow:auto;
+  }
+  .slide.on{display:flex;animation:reveal .5s cubic-bezier(.2,.7,.2,1)}
+  @keyframes reveal{from{opacity:0;transform:translateY(22px);filter:blur(7px)}to{opacity:1;transform:none;filter:blur(0)}}
+  .slide.on .slide-inner>*{animation:rise .6s both cubic-bezier(.2,.7,.2,1)}
+  .slide.on .slide-inner>*:nth-child(1){animation-delay:.04s}
+  .slide.on .slide-inner>*:nth-child(2){animation-delay:.1s}
+  .slide.on .slide-inner>*:nth-child(3){animation-delay:.16s}
+  .slide.on .slide-inner>*:nth-child(4){animation-delay:.22s}
+  .slide.on .slide-inner>*:nth-child(5){animation-delay:.28s}
+  .slide.on .slide-inner>*:nth-child(6){animation-delay:.34s}
+  @keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+  .slide-inner{max-width:1160px;width:100%;margin:auto}
+
+  /* ---------- Typography ---------- */
+  .kicker{
+    font-family:var(--display);font-size:11.5px;font-weight:600;letter-spacing:.34em;
+    text-transform:uppercase;color:var(--gold);
+    display:flex;align-items:center;gap:14px;margin-bottom:16px;
+  }
+  .kicker::before{content:"";width:42px;height:1px;background:linear-gradient(90deg,transparent,var(--gold))}
+  .kicker::after{content:"◆";font-size:7px;color:var(--gold);opacity:.75}
+  h1.big{
+    font-family:var(--display);font-weight:600;font-size:clamp(38px,5.6vw,78px);
+    line-height:1.06;margin-bottom:24px;letter-spacing:.01em;
+    text-shadow:0 2px 44px rgba(230,192,105,.15);
+  }
+  h1.big em{font-style:italic;font-family:var(--serif);color:var(--gold-hi);text-shadow:0 0 32px rgba(230,192,105,.35)}
+  h2.t{font-family:var(--display);font-weight:600;font-size:clamp(28px,4.2vw,50px);line-height:1.14;margin-bottom:12px}
+  h2.t em{font-style:italic;font-family:var(--serif);color:var(--gold-hi);text-shadow:0 0 26px rgba(230,192,105,.3)}
+  .lead{color:var(--ink-dim);font-size:clamp(15px,1.7vw,18.5px);max-width:76ch}
+  .lead b, p b{color:var(--ink)}
+  h3.lbl{font-family:var(--display);font-weight:600;color:var(--gold);font-size:22px;margin:26px 0 12px;letter-spacing:.02em}
+  p+p{margin-top:4px}
+
+  /* ---------- Layout helpers ---------- */
+  .row{display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap}
+  .col{flex:1;min-width:280px}
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px;margin-top:22px}
+  .grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:22px}
+
+  /* ---------- Cards ---------- */
+  .box{
+    position:relative;overflow:hidden;
+    background:linear-gradient(158deg,var(--panel),var(--panel2));
+    border:1px solid var(--line);border-radius:var(--r);padding:22px 22px 20px;
+    box-shadow:0 20px 44px -28px rgba(0,0,0,.95),inset 0 1px 0 rgba(255,255,255,.03);
+  }
+  .box::before{content:"";position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--line-2),transparent)}
+  .box h4{font-family:var(--display);font-weight:600;font-size:18px;color:var(--gold);margin-bottom:9px}
+  .box p, .box li{color:var(--ink-dim);font-size:14.5px}
+  .box ul{list-style:none;display:flex;flex-direction:column;gap:8px;padding:0}
+  .box ul li{padding-left:20px;position:relative}
+  .box ul li::before{content:"◆";position:absolute;left:0;top:.42em;color:var(--gold);font-size:8px}
+
+  /* ---------- Element chips ---------- */
+  .chip{display:inline-block;padding:3px 12px;border-radius:999px;font-size:12.5px;font-weight:600;color:#0b0a10;margin:3px;box-shadow:0 6px 16px -8px rgba(0,0,0,.8)}
+  .e-fuego{background:var(--fire)}.e-agua{background:var(--water)}
+  .e-planta{background:var(--plant)}.e-luz{background:var(--light)}
+  .e-sombra{background:var(--shadow)}.e-espiritu{background:var(--spirit)}
+
+  /* ---------- ACID letters ---------- */
+  .letter{
+    font-family:var(--display);font-weight:700;font-size:32px;line-height:1;
+    display:inline-flex;align-items:center;justify-content:center;
+    width:70px;height:70px;border-radius:20px;color:#0b0a10;margin-bottom:12px;
+    box-shadow:0 16px 36px -14px rgba(0,0,0,.95),inset 0 1px 0 rgba(255,255,255,.4);
+  }
+  .L-a{background:linear-gradient(150deg,#ffb199,var(--fire))}
+  .L-c{background:linear-gradient(150deg,var(--gold-hi),var(--gold))}
+  .L-i{background:linear-gradient(150deg,#a9d6ff,var(--water))}
+  .L-d{background:linear-gradient(150deg,#a8f4c6,var(--plant))}
+
+  /* ---------- Code ---------- */
+  pre{
+    position:relative;background:var(--code-bg);
+    border:1px solid var(--line);border-left:3px solid var(--gold-deep);border-radius:12px;
+    padding:18px 20px;overflow:auto;font-family:var(--mono);font-size:13px;line-height:1.62;
+    color:#d6cdf0;margin:16px 0;max-height:52vh;
+    box-shadow:inset 0 0 70px -34px rgba(230,192,105,.3);
+  }
+  .c{color:#6d6685}.k{color:var(--gold-hi)}.s{color:var(--plant)}.n{color:var(--water)}
+  code.inline{font-family:var(--mono);font-size:.86em;background:rgba(230,192,105,.10);border:1px solid var(--line);padding:1px 7px;border-radius:6px;color:var(--gold-hi)}
+  .file{font-family:var(--mono);font-size:12px;color:var(--ink-faint);background:rgba(230,192,105,.07);border:1px dashed var(--line);padding:1px 9px;border-radius:6px}
+
+  /* ---------- Tables ---------- */
+  .tw{overflow:auto;margin:18px 0;border:1px solid var(--line);border-radius:var(--r);max-height:55vh;box-shadow:0 20px 44px -30px rgba(0,0,0,.95)}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;min-width:520px;background:rgba(7,6,11,.5)}
+  thead th{text-align:left;font-family:var(--display);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);background:linear-gradient(180deg,rgba(230,192,105,.10),rgba(230,192,105,.03));padding:12px 15px;border-bottom:1px solid var(--line-2)}
+  tbody td{padding:11px 15px;border-bottom:1px solid rgba(230,192,105,.09);color:var(--ink-dim);vertical-align:top}
+  tbody tr{transition:background .18s}
+  tbody tr:hover{background:rgba(230,192,105,.05)}
+  tbody td b{color:var(--ink)}
+  td.mono{font-family:var(--mono);font-size:12px;color:var(--gold-hi)}
+  tbody tr:last-child td{border-bottom:none}
+
+  /* ---------- ER / diagrams ---------- */
+  .er{
+    background:var(--code-bg);border:1px solid var(--line);border-left:3px solid var(--gold-deep);
+    border-radius:12px;padding:20px;font-family:var(--mono);font-size:12.5px;overflow:auto;
+    color:#d6cdf0;line-height:2.1;
+  }
+  .er .t{color:var(--gold-hi)}
+
+  /* ---------- Steps ---------- */
+  .steps{counter-reset:st;list-style:none;margin:16px 0}
+  .steps li{counter-increment:st;position:relative;padding:0 0 18px 48px;color:var(--ink-dim)}
+  .steps li::before{content:counter(st);position:absolute;left:0;top:-2px;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-family:var(--display);font-weight:700;font-size:14px;background:linear-gradient(158deg,var(--panel2),var(--panel));border:1px solid var(--line-2);color:var(--gold);box-shadow:0 10px 22px -12px rgba(0,0,0,.95)}
+  .steps li::after{content:"";position:absolute;left:17px;top:36px;bottom:2px;width:1px;background:var(--line)}
+  .steps li:last-child::after{display:none}
+  .steps b{color:var(--ink)}
+
+  /* ---------- Notes ---------- */
+  .note{border-left:3px solid var(--gold);background:linear-gradient(90deg,rgba(230,192,105,.09),rgba(230,192,105,.02));border-radius:0 12px 12px 0;padding:14px 18px;margin:18px 0;color:var(--ink-dim)}
+  .note b{color:var(--gold-hi)}
+  .note.cp{border-left-color:var(--shadow);background:linear-gradient(90deg,rgba(180,135,255,.10),rgba(180,135,255,.02))}
+  .note.cp b{color:#cbb0ff}
+  .note.green{border-left-color:var(--plant);background:linear-gradient(90deg,rgba(79,217,138,.10),rgba(79,217,138,.02))}
+  .note.green b{color:#8ff0bb}
+
+  /* ---------- Cover orbs ---------- */
+  .orbs{display:flex;gap:14px;margin-top:34px;flex-wrap:wrap}
+  .orb{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;font-family:var(--display);font-weight:700;font-size:18px;color:#0b0a10;box-shadow:0 0 0 1px rgba(255,255,255,.22),0 14px 30px -10px rgba(0,0,0,.9);transition:transform .28s cubic-bezier(.2,.7,.2,1);cursor:default}
+  .orb:hover{transform:translateY(-7px) scale(1.09)}
+  .orb.f{background:radial-gradient(circle at 32% 30%,#ffd9b0,var(--fire))}
+  .orb.a{background:radial-gradient(circle at 32% 30%,#cfe9ff,var(--water))}
+  .orb.p{background:radial-gradient(circle at 32% 30%,#d4ffe2,var(--plant))}
+  .orb.l{background:radial-gradient(circle at 32% 30%,#fff6cf,var(--light))}
+  .orb.s{background:radial-gradient(circle at 32% 30%,#ecd6ff,var(--shadow))}
+  .orb.e{background:radial-gradient(circle at 32% 30%,#ccfff6,var(--spirit))}
+
+  /* ---------- Nav controls ---------- */
+  .pager{position:fixed;bottom:16px;right:18px;display:flex;align-items:center;gap:9px;z-index:50;background:rgba(9,8,14,.8);border:1px solid var(--line);border-radius:999px;padding:5px 9px;backdrop-filter:blur(10px);box-shadow:0 18px 40px -24px rgba(0,0,0,.95)}
+  .pager button{display:grid;place-items:center;background:none;border:1px solid var(--line);color:var(--gold);border-radius:999px;width:28px;height:28px;cursor:pointer;font-size:14px;line-height:1;transition:.2s;font-family:var(--serif)}
+  .pager button:hover{background:linear-gradient(150deg,var(--gold-hi),var(--gold));color:#1a1200;border-color:var(--gold-hi)}
+  .pager .cnt{font-family:var(--mono);font-size:11px;color:var(--ink-dim);min-width:48px;text-align:center}
+  .pager .dots{display:flex;gap:4px;padding:0 2px}
+  .pager .dot{width:5px;height:5px;border-radius:999px;background:#332b4a;cursor:pointer;border:none;padding:0;transition:.25s}
+  .pager .dot.on{background:var(--gold);width:13px;box-shadow:0 0 8px rgba(230,192,105,.85)}
+  .slide-num{position:fixed;top:16px;right:18px;font-family:var(--display);font-weight:600;font-size:11.5px;color:var(--gold);letter-spacing:.22em;z-index:50;background:rgba(9,8,14,.72);padding:6px 12px;border-radius:999px;border:1px solid var(--line);backdrop-filter:blur(8px)}
+  .hint{position:fixed;bottom:18px;left:20px;font-family:var(--display);font-size:10px;color:var(--ink-faint);letter-spacing:.18em;text-transform:uppercase;z-index:50}
+  @media (max-width:900px){.pager .dots{display:none}}
+  .hint kbd{font-family:var(--mono);color:var(--gold);background:rgba(230,192,105,.1);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:10px}
+
+  /* ---------- Scrollbars ---------- */
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:#332b4a;border-radius:8px;border:2px solid var(--bg)}
+  ::-webkit-scrollbar-thumb:hover{background:var(--gold)}
+
+  /* ---------- Reduced motion ---------- */
+  @media (prefers-reduced-motion:reduce){
+    body::before{animation:none}
+    .slide.on,.slide.on .slide-inner>*{animation:none !important}
+  }
+
+  /* ---------- Print ---------- */
+  @media print{
+    body{overflow:auto;background:#fff;color:#111}
+    body::before,body::after,.progress{display:none}
+    .slide{display:flex !important;height:auto;min-height:100vh;page-break-inside:avoid;padding:40px 30px;overflow:visible}
+    .slide-inner{max-width:100%}
+    .slide.on,.slide.on .slide-inner>*{animation:none !important}
+    .pager,.slide-num,.hint{display:none}
+    .box{background:#faf7ef;border-color:#d8c9a0;box-shadow:none}
+    .box::before{display:none}
+    pre,.er{background:#f4f1e8;border-color:#d8c9a0;border-left-color:#b98f2e;color:#222;max-height:none}
+    table{background:#fff}
+    h1.big em,h2.t em{text-shadow:none}
+  }
+</style>
+</head>
+<body>
+
+<div class="progress"><i id="bar"></i></div>
+
+<div class="deck">
+
+  <!-- ============ 1 · PORTADA ============ -->
+  <section class="slide on">
+    <div class="slide-inner">
+      <div class="kicker">Sustentación · Bases de datos</div>
+      <h1 class="big">Elemental <em>Battlecards</em><br>La base de <em>datos</em></h1>
+      <p class="lead">Diseño y construcción de la base de datos del juego: <b>PostgreSQL&nbsp;18</b>, 10 tablas, 1 vista, 1 procedimiento almacenado y 1 trigger. <b>ACID</b> completo en cada transacción y postura <b>CP</b> de Brewer ante caídas.</p>
+      <div class="orbs">
+        <div class="orb f">F</div><div class="orb a">A</div><div class="orb p">P</div>
+        <div class="orb l">L</div><div class="orb s">S</div><div class="orb e">E</div>
+      </div>
+      <div class="grid3">
+        <div class="box"><h4>Motor</h4><p>PostgreSQL 18 local<br><code class="inline">127.0.0.1:5432</code> · BD <code class="inline">elemental</code></p></div>
+        <div class="box"><h4>Objetos</h4><p>10 tablas · 1 vista ·<br>1 procedimiento · 1 trigger</p></div>
+        <div class="box"><h4>Integridad</h4><p>77 restricciones<br>WAL + <code class="inline">synchronous_commit = on</code></p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 2 · ARQUITECTURA ============ -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="kicker">01 — Arquitectura</div>
+      <h2 class="t">¿Dónde vive la <em>base de datos</em>?</h2>
+      <p class="lead">Tres capas conectadas por HTTP y Sequelize. La BD está <b>desacoplada</b>: las escenas de Phaser jamás tocan SQL; el repositorio es el único puente con el ORM.</p>
+
+      <pre><span class="c">┌─────────────────────────────┐</span>
+<span class="c">│  FRONTEND (Phaser 3 + Vite)  │  escenas: login, perfil, misiones…</span>
+<span class="c">│  src/helpers/profileApi.js   │  fetch + Authorization: Bearer &lt;jwt&gt;</span>
+<span class="c">└──────────────┬──────────────┘</span>
+               <span class="k">│ HTTP / fetch</span>
+<span class="c">┌──────────────▼──────────────┐</span>
+<span class="c">│  BACKEND (Express :3001)     │  /api/auth · /api/profile</span>
+<span class="c">│  middleware JWT → controller → service → repository</span>
+<span class="c">└──────────────┬──────────────┘</span>
+               <span class="k">│ Sequelize (ORM)</span>
+<span class="c">┌──────────────▼──────────────┐</span>
+<span class="k">│  POSTGRESQL 18 :5432 — "elemental"  │  10 tablas · 1 vista</span>
+<span class="k">│  1 procedimiento · 1 trigger       │  WAL + synchronous_commit=on</span>
+<span class="c">└─────────────────────────────┘</span></pre>
+
+      <div class="grid2">
+        <div class="box">
+          <h4>Arranque del backend</h4>
+          <ol class="steps">
+            <li><b>dotenv</b> carga .env → AppConfig.</li>
+            <li><b>DatabaseFactory</b> crea Sequelize según <code class="inline">DB_USE_SQLITE=false</code> → dialecto postgres.</li>
+            <li><b>DatabaseInitializer.connect()</b> → authenticate. Si falla: <code class="inline">databaseAvailable=false</code>, el servidor no se cae.</li>
+            <li><code class="inline">sync({ alter: true })</code> alinea modelos ↔ tablas.</li>
+            <li>Se montan routers (solo si hay BD) y se hace <b>listen</b>.</li>
+          </ol>
+        </div>
+        <div class="box">
+          <h4>Regla de diseño</h4>
+          <ul>
+            <li>La <b>lógica de negocio</b> vive en el servicio.</li>
+            <li>Las <b>escenas solo presentan</b>.</li>
+            <li>El <b>repositorio</b> es el único que habla con Sequelize.</li>
+            <li>El <b>motor</b> aporta restricciones, trigger, vista y procedimiento.</li>
+            <li>Contratos por interfaz verificados con <code class="inline">assertContract</code> (Liskov / ISP).</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 3 · TABLAS ============ -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="kicker">02 — Modelado</div>
+      <h2 class="t">Las <em>10 tablas</em> y sus relaciones</h2>
+      <div class="er">
+<div class="t">users</div> 1 ──── 1 <div class="t">player_stats</div>
+<div class="t">users</div> 1 ──── N <div class="t">battles</div>
+<div class="t">users</div> 1 ──── N <div class="t">player_cards</div> ──── 1 <div class="t">cards</div>
+<div class="t">users</div> 1 ──── N <div class="t">player_missions</div> ─ 1 <div class="t">missions</div>
+<div class="t">users</div> 1 ──── N <div class="t">player_achievements</div> ─ 1 <div class="t">achievements</div>
+<div class="t">users</div> 1 ──── N <div class="t">player_attack_types</div></div>
+
+      <div class="grid2">
+        <div class="box"><h4>¿Qué guarda cada grupo?</h4>
+          <ul>
+            <li><b>Identidad:</b> <code class="inline">users</code> (username único para login, email único, hash bcrypt).</li>
+            <li><b>Catálogos:</b> <code class="inline">cards</code> (18 = 6×3), <code class="inline">missions</code> (6), <code class="inline">achievements</code> (6) — se leen, no cambian.</li>
+            <li><b>Estado 1:1:</b> <code class="inline">player_stats</code> — la crea el trigger.</li>
+            <li><b>Historial:</b> <code class="inline">battles</code> (resultado, oponente, dificultad, nivel-3).</li>
+            <li><b>Progreso N:1:</b> <code class="inline">player_cards / player_missions / player_achievements / player_attack_types</code> — con PK compuestas.</li>
+          </ul>
+        </div>
+        <div class="box"><h4>Los elementos canónicos</h4>
+          <p>Tipo de carta validado por CHECK de dominio:</p>
+          <p><span class="chip e-fuego">fuego</span><span class="chip e-agua">agua</span><span class="chip e-planta">planta</span><span class="chip e-luz">luz</span><span class="chip e-sombra">sombra</span><span class="chip e-espiritu">espiritu</span></p>
+          <ul style="margin-top:10px">
+            <li><code class="inline">cards</code>: UNIQUE <code class="inline">(element, level)</code> → garantiza las 18 cartas.</li>
+            <li>Toda FK con <code class="inline">ON DELETE CASCADE</code>: borrar un usuario limpia todo su progreso (un solo DELETE).</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 4 · RESTRICCIONES ============ -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="kicker">02 — Modelado</div>
+      <h2 class="t">Las <em>77 restricciones</em>: el andamiaje de integridad</h2>
+      <p class="lead">El motor rechaza datos ilegales <b>aunque el código de aplicación tenga un bug</b>.</p>
+      <div class="grid3">
+        <div class="box"><h4>PK (10)</h4><p>Una fila única por entidad; compuestas para progreso <code class="inline">(user_id, mission_id)</code>… → un jugador no repite carta/misión/logro.</p></div>
+        <div class="box"><h4>FK (12) + CASCADE</h4><p>Integridad referencial y limpieza automática del progreso al borrar un usuario.</p></div>
+        <div class="box"><h4>CHECK de dominio</h4><p><code class="inline">result</code> ∈ {victoria, derrota} · <code class="inline">element</code> ∈ 6 tipos · <code class="inline">level</code> 1..3 · <code class="inline">opponent</code> {bot, lan}.</p></div>
+        <div class="box"><h4>UNIQUE</h4><p><code class="inline">users.username</code>, <code class="inline">users.email</code>, <code class="inline">cards(element, level)</code>.</p></div>
+        <div class="box"><h4>NOT NULL</h4><p>Todas las columnas obligatorias con valores por defecto donde corresponde.</p></div>
+        <div class="box"><h4>Trigger (invariante)</h4><p>Mantiene <code class="inline">battles_played = battles_won + battles_lost</code>.</p></div>
+      </div>
+<pre><span class="k">SELECT</span> contype, <span class="n">count</span>(<span class="n">*</span>) <span class="k">FROM</span> pg_constraint
+<span class="k">WHERE</span> connamespace = <span class="s">'public'</span>::regnamespace <span class="k">GROUP BY</span> contype;
+<span class="c">-- p (PK)=10 · f (FK)=12 · c (CHECK)≈8 · u (UNIQUE)=… · n (NOT NULL)=resto</span>
+<span class="k">SELECT</span> <span class="n">count</span>(<span class="n">*</span>) <span class="k">FROM</span> pg_constraint <span class="k">WHERE</span> connamespace = <span class="s">'public'</span>::regnamespace;
+<span class="c">-- 77</span></pre>
+    </div>
+  </section>
+
+  <!-- ============ 5 · ACID ATOMICIDAD ============ -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="kicker">03 — ACID · A</div>
+      <h2 class="t">Atomicidad — "todo o <em>nada</em>"</h2>
+      <div class="row">
+        <div class="col">
+          <div class="letter L-a">A</div>
+          <p class="lead" style="font-size:16px">Una transacción con varias escrituras se aplica <b>completa o se revierte completa</b>; nunca queda a medias.</p>
+          <div class="box"><h4>Dónde está en el proyecto</h4>
+            <ul>
+              <li>El DDL + seeds de <code class="inline">schema.sql</code> van en <code class="inline">BEGIN; … COMMIT;</code>.</li>
+              <li>Cada <code class="inline">CALL</code> es <b>una transacción implícita</b> con 2+ escrituras.</li>
+              <li><code class="inline">sp_completar_mision</code> escribe <code class="inline">player_missions</code> + <code class="inline">player_stats</code>.</li>
+              <li>INSERT de batalla + actualización del trigger: inseparables.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="col">
+          <pre><span class="c">-- El INSERT del historial y el UPDATE del trigger van juntos:</span>
+<span class="c">-- si la 2ª sentencia falla, la 1ª también se revierte</span>
+BEGIN;
+INSERT INTO battles (user_id, result)
+  VALUES (:kai, <span class="s">'victoria'</span>);   <span class="c">-- el trigger suma +1 en player_stats</span>
+INSERT INTO battles (user_id, result)
+  VALUES (<span class="n">99999</span>, <span class="s">'victoria'</span>);   <span class="c">-- ✗ FK: usuario inexistente</span>
+COMMIT;
+
+SELECT count(*) AS despues <span class="k">FROM</span> battles;                       <span class="c">-- ¡igual! se revirtió todo</span>
+SELECT battles_played <span class="k">FROM</span> player_stats <span class="k">WHERE</span> user_id = :kai;  <span class="c">-- ¡igual! el trigger también</span></pre>
+          <div class="note"><b>Frase clave:</b> "la batalla ya estaba escrita en memoria cuando falló la 2ª sentencia; PostgreSQL revirtió la transacción completa: <b>0 filas persistidas</b> — ni la batalla ni la actualización del trigger."</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 6 · ACID CONSISTENCIA ============ -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="kicker">03 — ACID · C</div>
+      <h2 class="t">Consistencia — "los invariantes <em>nunca</em> se rompen"</h2>
+      <div class="row">
+        <div class="col">
+          <div class="letter L-c">C</div>
+          <p class="lead" style="font-size:16px">Cada escritura deja la BD en un estado <b>válido</b> según todas las reglas declarativas y de dominio.</p>
+          <div class="box"><h4>Evidencias</h4>
+            <ul>
+              <li><b>77 restricciones</b> (PK/FK/CHECK/UNIQUE/NOT NULL).</li>
+              <li>Catálogos con <code class="inline">ON CONFLICT DO NOTHING</code> → re-ejecución sin duplicados.</li>
+              <li>Validación de dominio también en el servicio (<code class="inline">ValidationError</code>).</li>
+              <li>Trigger que mantiene <code class="inline">partidas = V + D</code>.</li>
+              <li>Hash <b>bcrypt</b> de contraseñas.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="col">
+          <pre><span class="c">-- Fuerza bruta contra los invariantes (fallan)</span>
+BEGIN;
+INSERT INTO battles (user_id, result)
+VALUES (99999, <span class="s">'victoria'</span>);   <span class="c">-- ✗ FK: usuario inexistente</span>
+ROLLBACK;
+
+BEGIN;
+INSERT INTO battles (user_id, result)
+VALUES (:kai, <span class="s">'empate'</span>);        <span class="c">-- ✗ CHECK: fuera de dominio</span>
+ROLLBACK;
+
+<span class="c">-- La BD rechaza los datos inválidos aunque nadie valide en JS.</span></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 7 · ACID AISLAMIENTO ============ -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="kicker">03 — ACID · I</div>
+      <h2 class="t">Aislamiento — "las transacciones <em>concurrentes</em> no se pisan"</h2>
+      <div class="row">
+        <div class="col">
+          <div class="letter L-i">I</div>
+          <p class="lead" style="font-size:16px">Transacciones simultáneas no ven los <b>datos a medias</b> de otras; el resultado equivale a ejecutarlas una tras otra.</p>
+          <div class="box"><h4>En el proyecto</h4>
+            <ul>
+              <li>Nivel del servidor: <b>READ COMMITTED</b> (default de PostgreSQL).</li>
+              <li>Dos jugadores terminan partidas a la vez: cada POST es una transacción sobre su propia fila de <code class="inline">player_stats</code> (PK user_id → sin carrera).</li>
+              <li>El UNIQUE de <code class="inline">username</code> rechaza registros simultáneos duplicados al confirmar.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="col">
+          <pre>SHOW transaction_isolation;
+<span class="c">-- read committed</span>
+
+<span class="c">-- Demostración en serio: dos ventanas de psql,</span>
+<span class="c">-- una escribe sin confirmar y la otra no la ve</span>
+<span class="c">-- hasta el COMMIT.</span>
+TV1&gt; BEGIN; UPDATE player_stats SET gems = gems + 50 WHERE user_id = 1;
+TV2&gt; SELECT gems FROM player_stats WHERE user_id = 1;  <span class="c">-- no ve el cambio</span>
+TV1&gt; COMMIT;</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 8 · ACID DURABILIDAD ============ -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="kicker">03 — ACID · D</div>
+      <h2 class="t">Durabilidad — "un COMMIT <em>confirmado</em> sobrevive a caídas"</h2>
+      <div class="row">
+        <div class="col">
+          <div class="letter L-d">D</div>
+          <p class="lead" style="font-size:16px">Una vez respondido "commit OK", el dato <b>no se pierde</b> ni con un corte de energía.</p>
+          <div class="box"><h4>Cómo lo garantiza PostgreSQL</h4>
+            <ul>
+              <li>Cada transacción se registra en el <b>WAL</b> (Write-Ahead Log).</li>
+              <li>Se confirma con <b>fsync</b> <i>antes</i> de responder al cliente.</li>
+              <li><code class="inline">synchronous_commit = on</code> → consistente en disco al confirmar.</li>
+            </ul>
+          </div>
+          <div class="note"><b>Traducción al juego:</b> si confirmaste una victoria y se fue la luz, la victoria y sus gemas siguen ahí al reconectar.</div>
+        </div>
+        <div class="col">
+          <pre>SHOW synchronous_commit;   <span class="c">-- on</span>
+SELECT pg_current_wal_lsn();  <span class="c">-- posición actual del WAL</span>
+
+<span class="c">-- Resumen ACID en una frase:</span>
+<span class="c">· atomicidad en cada CALL y en cada INSERT+trigger;</span>
+<span class="c">· consistencia en 77 restricciones + el trigger;</span>
+<span class="c">· aislamiento READ COMMITTED entre jugadores;</span>
+<span class="c">· durabilidad con WAL + synchronous_commit.</span></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 9 · CAP ============ -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="kicker">04 — Teorema CAP</div>
+      <h2 class="t">CAP — ¿qué pasa cuando <em>la red falla</em>?</h2>
+      <p class="lead">En un sistema distribuido solo se garantizan 2 de 3: <b>C</b>onsistencia, <b>A</b>disponibilidad y <b>P</b> tolerancia a partición. Como la red es falible, <b>P es obligatoria</b> → la decisión real es <b>C o A</b>.</p>
+<pre><span class="c">[Clientes Phaser en la red]  ←── partición →─  [Express :3001]  ←─┐</span>
+                                                               <span class="k">│ partición</span>
+                                                   <span class="k">[PostgreSQL :5432]</span> ←┘</pre>
+
+      <div class="grid2">
+        <div class="box"><h4>Nuestra decisión: CP 🔒</h4>
+          <ul>
+            <li>BD no responde al arrancar → <code class="inline">databaseAvailable=false</code>, <b>no</b> se montan rutas de datos (modo LAN). <span style="color:var(--ink-faint)">→ cede A</span></li>
+            <li>Error de BD en petición → HTTP 500, <b>jamás</b> una respuesta cacheada o inventada. <span style="color:var(--ink-faint)">→ cede A</span></li>
+            <li>Escrituras siempre contra el <b>primario</b> (sin primario, no hay escritura). <span style="color:var(--ink-faint)">→ cede A</span></li>
+            <li>Login y rankings necesitan SIEMPRE el dato más reciente → <b>elijo C</b>.</li>
+          </ul>
+        </div>
+        <div class="box"><h4>La evidencia no es teoría</h4>
+<pre style="margin:6px 0 0"><span class="c">// Backend/src/bootstrap.js</span>
+} <span class="k">catch</span> (error) {
+  logger.error(<span class="s">'No se pudo conectar a la BD:'</span>, error.message);
+  databaseAvailable = <span class="k">false</span>;   <span class="c">// la BD manda</span>
+}
+<span class="k">if</span> (!(config.dbEnabled &amp;&amp; databaseAvailable)) {
+  <span class="k">return</span> disabled;   <span class="c">// se desmontan, no se sirve stale</span>
+}</pre>
+        </div>
+      </div>
+      <div class="note cp"><b>Pregunta clásica:</b> ¿ACID y CAP no chocan? No: ACID es la semántica <b>dentro</b> del nodo; CAP es el trade-off <b>entre</b> nodos cuando hay partición. PG da <b>ACID local</b> y es <b>CP</b> en distribución.</div>
+    </div>
+  </section>
+
+  <!-- ============ 10 · CAP Y DISPONIBILIDAD ============ -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="kicker">04 — CAP aplicado</div>
+      <h2 class="t">¿Entonces dónde queda la <em>disponibilidad</em>?</h2>
+      <div class="grid2">
+        <div class="box"><h4>Plano de juego: disponible</h4>
+          <ul>
+            <li>El relay de <b>socket.io</b> (<code class="inline">RoomManager</code>, en memoria) <b>no depende de la BD</b> → las partidas LAN siguen con la BD caída.</li>
+            <li>El frontend sin sesión entra en <b>modo offline</b> (no-op) en vez de romper la UI.</li>
+          </ul>
+          <p style="margin-top:10px">Partición deliberada del sistema: <b>cuentas y progreso = CP; partida = disponible.</b></p>
+        </div>
+        <div class="box"><h4>PostgreSQL en producción</h4>
+          <ul>
+            <li>Con streaming replication + failover, PG es <b>CP</b>: el primario es única fuente de verdad; un secundario aislado <b>no acepta escrituras</b> (sin split-brain).</li>
+            <li>Sin réplicas: toda lectura va al primario → <b>consistencia fuerte</b>.</li>
+            <li><b>PACELC:</b> incluso en operación normal elegimos <b>C sobre latencia</b> (<code class="inline">synchronous_commit=on</code>).</li>
+          </ul>
+        </div>
+      </div>
+      <div class="grid2" style="margin-top:16px">
+        <div class="box"><h4>Contraste SQLite (DatabaseFactory)</h4>
+          <ul>
+            <li>Un archivo local, mismo proceso → <b>sin red = CAP trivial</b> (CP por construcción).</li>
+            <li>El dialecto lo decide <code class="inline">.env</code>; esquema y scripts funcionan igual.</li>
+            <li>Limitación: sin procedimientos almacenados (vista y trigger sí existen).</li>
+          </ul>
+        </div>
+        <div class="box"><h4>Frase de cierre</h4>
+          <p style="font-style:italic;color:var(--ink)">"ACID gobierna lo que pasa dentro de la base; CAP gobierna qué pasa cuando la infraestructura falla. Nuestro sistema aplica ACID completo en el nodo de PostgreSQL y adopta la postura CP de Brewer ante caídas: <b>nunca servir datos viejos o incompletos</b>."</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 11 · VISTAS ============ -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="kicker">05 — Objetos programados</div>
+      <h2 class="t">La <em>vista</em></h2>
+      <p class="lead">Una vista es una <b>consulta guardada</b>: no almacena datos (cero duplicidad), se calcula al consultar y siempre muestra el dato más reciente. Script: <span class="file">Backend/sql/vistas.sql</span>.</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Vista</th><th>Resuelve</th><th>Técnicas (preguntarán esto)</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">v_historial_batallas</td><td>Historial legible de batallas con el <code class="inline">username</code>, en orden cronológico inverso.</td><td class="mono">JOIN + ORDER BY</td></tr>
+          </tbody>
+        </table>
+      </div>
+<pre><span class="k">SELECT</span> <span class="n">*</span> <span class="k">FROM</span> v_historial_batallas <span class="k">LIMIT</span> <span class="n">10</span>;</pre>
+      <div class="note"><b>¿Por qué una vista y no una tabla?</b> No duplica datos, oculta el JOIN complejo al consumidor y siempre está fresca.</div>
+    </div>
+  </section>
+
+  <!-- ============ 12 · DETALLE · VISTA — v_historial_batallas ============ -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="kicker">05 — Objetos programados · Vista</div>
+      <h2 class="t">La vista — <em>v_historial_batallas</em></h2>
+      <p class="lead">Historial legible: muestra el <code class="inline">username</code> en lugar del id, en orden cronológico inverso. <span class="file">Backend/sql/vistas.sql</span></p>
+<pre><span class="k">DROP VIEW IF EXISTS</span> v_historial_batallas;
+
+<span class="k">CREATE VIEW</span> v_historial_batallas <span class="k">AS</span>
+<span class="k">SELECT</span>
+    b.id,
+    u.username,
+    b.result,
+    b.opponent,
+    b.difficulty,
+    b.level3_on_field,
+    b.created_at
+<span class="k">FROM</span> battles b
+<span class="k">JOIN</span> users u <span class="k">ON</span> u.id = b.user_id
+<span class="k">ORDER BY</span> b.created_at <span class="k">DESC</span>, b.id <span class="k">DESC</span>;</pre>
+      <div class="note"><b>Claves:</b> <code class="inline">JOIN</code> (no <code class="inline">LEFT</code>) porque toda batalla tiene usuario garantizado por la FK; <code class="inline">ORDER BY created_at DESC</code> deja lo más reciente arriba.</div>
+    </div>
+  </section>
+
+  <!-- ============ 13 · PROCEDIMIENTOS ============ -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="kicker">05 — Objetos programados</div>
+      <h2 class="t">El <em>procedimiento</em> almacenado</h2>
+      <p class="lead">Se ejecuta con <code class="inline">CALL</code>. Corre en <b>una transacción implícita</b>: o se aplican todos los pasos o ninguno (atomicidad ACID).</p>
+      <div class="box">
+        <h4>sp_completar_mision <span style="color:var(--ink-faint)">(user, misión)</span></h4>
+        <ol class="steps">
+          <li>Valida que existan misión y usuario → <b>RAISE EXCEPTION</b>.</li>
+          <li>UPSERT en <code class="inline">player_missions</code> → progress = target, completed = true.</li>
+          <li>UPSERT en <code class="inline">player_stats</code> → <code class="inline">gems += reward_gems</code>. <b>Misma transacción.</b></li>
+          <li>RAISE NOTICE con el total de gemas.</li>
+        </ol>
+      </div>
+<pre><span class="c">-- OJO: CALL no acepta subconsultas (limitación de PG) → variables con \gset</span>
+SELECT id AS ryo <span class="k">FROM</span> users <span class="k">WHERE</span> username = <span class="s">'demo_ryo'</span> \gset
+CALL sp_completar_mision(:ryo, <span class="s">'coleccionista'</span>);
+<span class="c">-- NOTICE: Misión "Coleccionista" ... +100 gemas | total de gemas = 150</span></pre>
+      <div class="note"><b>Clímax de atomicidad:</b> las dos escrituras (progreso + gemas) son inseparables: si la 2ª fallara, la 1ª se revierte → el jugador no queda con misión completada sin cobrar (ni al revés).</div>
+    </div>
+  </section>
+
+  <!-- ============ 14 · DETALLE · PROCEDIMIENTO — sp_completar_mision ============ -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="kicker">05 — Objetos programados · Procedimiento</div>
+      <h2 class="t">El procedimiento — <em>sp_completar_mision</em></h2>
+      <p class="lead">Marca una misión como completada y acredita la recompensa de gemas en la misma transacción. <span class="file">Backend/sql/procedimientos.sql</span></p>
+<pre><span class="k">DROP PROCEDURE IF EXISTS</span> sp_completar_mision(INTEGER, VARCHAR);
+
+<span class="k">CREATE PROCEDURE</span> sp_completar_mision(
+    p_user_id    INTEGER,
+    p_mission_id VARCHAR
+)
+<span class="k">LANGUAGE</span> plpgsql
+<span class="k">AS</span> $$
+<span class="k">DECLARE</span>
+    v_mision missions%ROWTYPE;
+    v_gemas  INTEGER;
+<span class="k">BEGIN</span>
+    <span class="c">-- ===== Validaciones (antes de escribir) =====</span>
+    <span class="k">SELECT</span> * <span class="k">INTO</span> v_mision <span class="k">FROM</span> missions <span class="k">WHERE</span> id = p_mission_id;
+    <span class="k">IF NOT FOUND THEN</span>
+        <span class="k">RAISE EXCEPTION</span> <span class="s">'La misión "%" no existe'</span>, p_mission_id;
+    <span class="k">END IF</span>;
+
+    <span class="k">IF NOT EXISTS</span> (<span class="k">SELECT</span> <span class="n">1</span> <span class="k">FROM</span> users <span class="k">WHERE</span> id = p_user_id) <span class="k">THEN</span>
+        <span class="k">RAISE EXCEPTION</span> <span class="s">'El usuario con id % no existe'</span>, p_user_id;
+    <span class="k">END IF</span>;
+
+    <span class="c">-- ===== Escritura 1: progreso de la misión =====</span>
+    <span class="k">INSERT INTO</span> player_missions (user_id, mission_id, progress, completed, completed_at)
+    <span class="k">VALUES</span> (p_user_id, p_mission_id, v_mision.target, <span class="k">TRUE</span>, <span class="n">now</span>())
+    <span class="k">ON CONFLICT</span> (user_id, mission_id) <span class="k">DO UPDATE SET</span>
+        progress     = v_mision.target,
+        completed    = <span class="k">TRUE</span>,
+        completed_at = <span class="n">COALESCE</span>(player_missions.completed_at, <span class="n">now</span>());
+
+    <span class="c">-- ===== Escritura 2: recompensa en gemas =====</span>
+    <span class="k">INSERT INTO</span> player_stats (user_id, gems, updated_at)
+    <span class="k">VALUES</span> (p_user_id, v_mision.reward_gems, <span class="n">now</span>())
+    <span class="k">ON CONFLICT</span> (user_id) <span class="k">DO UPDATE SET</span>
+        gems       = player_stats.gems + v_mision.reward_gems,
+        updated_at = <span class="n">now</span>();
+
+    <span class="k">SELECT</span> gems <span class="k">INTO</span> v_gemas <span class="k">FROM</span> player_stats <span class="k">WHERE</span> user_id = p_user_id;
+
+    <span class="k">RAISE NOTICE</span> <span class="s">'Misión "%" completada: +% gemas | total = %'</span>,
+        v_mision.title, v_mision.reward_gems, v_gemas;
+<span class="k">END</span>;
+$$;</pre>
+      <div class="note"><b>Atomicidad:</b> dos <code class="inline">UPSERT</code> (progreso + gemas) en la misma transacción: o se aplican ambos o ninguno. <code class="inline">COALESCE</code> conserva la fecha de la primera vez que se completó.</div>
+    </div>
+  </section>
+
+  <!-- ============ 15 · TRIGGER ============ -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="kicker">05 — Objetos programados</div>
+      <h2 class="t">El <em>trigger</em></h2>
+      <p class="lead"><code class="inline">trg_stats_batalla</code> — <code class="inline">AFTER INSERT ON battles FOR EACH ROW</code> → función <code class="inline">fn_actualizar_stats_batalla()</code>. Script: <span class="file">Backend/sql/triggers.sql</span>.</p>
+<pre>INSERT en battles ──▶ <span class="k">trigger</span> ──▶ UPSERT en player_stats
+   • battles_played  +1
+   • battles_lost/won +1 según result
+   • current_streak  = racha +1 (victoria) / 0 (derrota)
+   • longest_streak  = GREATEST(máximo histórico, racha actual)
+   • updated_at      = now()
+   • si el jugador no tenía fila, la crea</pre>
+      <div class="grid2">
+        <div class="box"><h4>Por qué existe</h4>
+          <p>Las stats son un <b>dato derivado</b> del historial de <code class="inline">battles</code>. El trigger las mantiene de forma <b>automática, atómica y sin posibilidad de desincronización</b> — no hay código de aplicación que pueda olvidarse de actualizarlas.</p>
+        </div>
+        <div class="box"><h4>Por qué las gemas NO están en el trigger</h4>
+          <p>Pagar recompensas es <b>regla de negocio</b> con validación y dos escrituras → pertenece a <code class="inline">sp_completar_mision</code> (fallas controladas), no a un reflejo automático oculto.</p>
+        </div>
+      </div>
+      <div class="note green"><b>Dato verificado por integración:</b> <code class="inline">ProfileService.recordBattle()</code> <b>no escribe stats</b> (3 batallas → pj=3, V=2, D=1, racha=1). Fuente única de verdad = el trigger.<br>
+      <b>Demo:</b> <code class="inline">BEGIN; INSERT INTO battles (user_id, result, opponent, difficulty) VALUES (:kai,'victoria','bot','5'); SELECT battles_played, current_streak FROM player_stats WHERE user_id = :kai; ROLLBACK;</code></div>
+    </div>
+  </section>
+
+  <!-- ============ 16 · DETALLE · TRIGGER ============ -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="kicker">05 — Objetos programados · Trigger</div>
+      <h2 class="t">Trigger — <em>trg_stats_batalla</em></h2>
+      <p class="lead"><code class="inline">AFTER INSERT ON battles FOR EACH ROW</code> → ejecuta <code class="inline">fn_actualizar_stats_batalla()</code>. <span class="file">Backend/sql/triggers.sql</span></p>
+<pre><span class="k">DROP TRIGGER IF EXISTS</span> trg_stats_batalla <span class="k">ON</span> battles;
+<span class="k">DROP FUNCTION IF EXISTS</span> fn_actualizar_stats_batalla();
+
+<span class="k">CREATE FUNCTION</span> fn_actualizar_stats_batalla() <span class="k">RETURNS TRIGGER AS</span> $$
+<span class="k">BEGIN</span>
+    <span class="k">INSERT INTO</span> player_stats (
+        user_id, battles_played, battles_won, battles_lost,
+        current_streak, longest_streak, updated_at
+    )
+    <span class="k">VALUES</span> (
+        NEW.user_id,
+        <span class="n">1</span>,
+        <span class="k">CASE WHEN</span> NEW.result = <span class="s">'victoria'</span> <span class="k">THEN</span> <span class="n">1</span> <span class="k">ELSE</span> <span class="n">0</span> <span class="k">END</span>,
+        <span class="k">CASE WHEN</span> NEW.result = <span class="s">'derrota'</span> <span class="k">THEN</span> <span class="n">1</span> <span class="k">ELSE</span> <span class="n">0</span> <span class="k">END</span>,
+        <span class="k">CASE WHEN</span> NEW.result = <span class="s">'victoria'</span> <span class="k">THEN</span> <span class="n">1</span> <span class="k">ELSE</span> <span class="n">0</span> <span class="k">END</span>,
+        <span class="k">CASE WHEN</span> NEW.result = <span class="s">'victoria'</span> <span class="k">THEN</span> <span class="n">1</span> <span class="k">ELSE</span> <span class="n">0</span> <span class="k">END</span>,
+        <span class="n">now</span>()
+    )
+    <span class="k">ON CONFLICT</span> (user_id) <span class="k">DO UPDATE SET</span>
+        battles_played = player_stats.battles_played + <span class="n">1</span>,
+        battles_won    = player_stats.battles_won
+                            + <span class="k">CASE WHEN</span> NEW.result = <span class="s">'victoria'</span> <span class="k">THEN</span> <span class="n">1</span> <span class="k">ELSE</span> <span class="n">0</span> <span class="k">END</span>,
+        battles_lost   = player_stats.battles_lost
+                            + <span class="k">CASE WHEN</span> NEW.result = <span class="s">'derrota'</span> <span class="k">THEN</span> <span class="n">1</span> <span class="k">ELSE</span> <span class="n">0</span> <span class="k">END</span>,
+        current_streak = <span class="k">CASE</span>
+                            <span class="k">WHEN</span> NEW.result = <span class="s">'victoria'</span> <span class="k">THEN</span> player_stats.current_streak + <span class="n">1</span>
+                            <span class="k">ELSE</span> <span class="n">0</span>
+                         <span class="k">END</span>,
+        longest_streak = <span class="n">GREATEST</span>(
+                            player_stats.longest_streak,
+                            <span class="k">CASE</span>
+                                <span class="k">WHEN</span> NEW.result = <span class="s">'victoria'</span> <span class="k">THEN</span> player_stats.current_streak + <span class="n">1</span>
+                                <span class="k">ELSE</span> player_stats.current_streak
+                            <span class="k">END</span>
+                         ),
+        updated_at     = <span class="n">now</span>();
+
+    <span class="k">RETURN</span> NEW;
+<span class="k">END</span>;
+$$ <span class="k">LANGUAGE</span> plpgsql;
+
+<span class="k">CREATE TRIGGER</span> trg_stats_batalla
+<span class="k">AFTER INSERT ON</span> battles
+<span class="k">FOR EACH ROW</span>
+<span class="k">EXECUTE FUNCTION</span> fn_actualizar_stats_batalla();</pre>
+      <div class="note"><b>Por qué existe:</b> las estadísticas son un dato derivado del historial. El trigger las mantiene automática y atómicamente — <code class="inline">battles_played = won + lost</code> nunca se desincroniza. El <code class="inline">INSERT ... ON CONFLICT</code> crea la fila la primera vez y la actualiza después.</div>
+    </div>
+  </section>
+
+  <!-- ============ 17 · DEMO EN VIVO ============ -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="kicker">06 — Demostración</div>
+      <h2 class="t">Demo en vivo — orden <em>exacto</em> (~5 min)</h2>
+      <ol class="steps">
+        <li><b>Panorama:</b> <code class="inline">\dt</code> y conteo de usuarios / batallas / stats.</li>
+        <li><b>ACID:</b> inventario de 77 restricciones; FK falla; CHECK falla; <code class="inline">SHOW transaction_isolation</code>; <code class="inline">SHOW synchronous_commit</code>; <code class="inline">pg_current_wal_lsn()</code>.</li>
+        <li><b>La vista:</b> consultar <code class="inline">v_historial_batallas</code>.</li>
+        <li><b>Trigger:</b> INSERT dentro de <code class="inline">BEGIN;…ROLLBACK;</code> y releer stats.</li>
+        <li><b>Procedimiento (éxito):</b> <code class="inline">sp_completar_mision(:ryo,…)</code>.</li>
+        <li><b>Clímax (atomicidad):</b> count antes → <code class="inline">CALL sp_completar_mision(:kai, 'mision_inexistente')</code> → count después = igual.</li>
+      </ol>
+<pre>$env:PGPASSWORD = <span class="s">'123456'</span>
+& <span class="s">"C:\Program Files\PostgreSQL\18\bin\psql.exe"</span> -U postgres -h 127.0.0.1 -d elemental
+<span class="c"># Re-crear los 4 usuarios demo (idempotente)</span>
+& $psql -U postgres -h 127.0.0.1 -d elemental -f Backend\sql\datos_demo.sql</pre>
+      <div class="note"><b>Para CAP</b> se proyecta <code class="inline">Backend/src/bootstrap.js</code> (líneas 38-51 y 82-85). Restaurar demo: <code class="inline">datos_demo.sql</code> (re-crea) · <code class="inline">datos_demo_eliminar.sql</code> (borra todo el demo con 1 DELETE gracias al CASCADE).</div>
+    </div>
+  </section>
+
+  <!-- ============ 18 · PREGUNTAS ============ -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="kicker">07 — Defensa</div>
+      <h2 class="t">Preguntas probables de <em>la defensa</em></h2>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Pregunta</th><th>Respuesta corta</th></tr></thead>
+          <tbody>
+            <tr><td><b>¿ACID y CAP no chocan?</b></td><td>No: ACID es la semántica <i>dentro</i> del nodo; CAP es el trade-off <i>entre</i> nodos cuando hay partición. PG da ACID local y es CP en distribución.</td></tr>
+            <tr><td><b>¿Por qué CALL y no una función?</b></td><td>Es un procedimiento almacenado como pide el enunciado; además podría hacer su propio COMMIT. Ojo: <code class="inline">CALL</code> no acepta subconsultas → variables <code class="inline">\gset</code>.</td></tr>
+            <tr><td><b>¿Por qué el trigger solo calcula stats y no gemas?</b></td><td>Separación de responsabilidades: el trigger refleja datos derivados automáticamente; pagar gemas es negocio con validación y transacción explícita → procedimiento.</td></tr>
+            <tr><td><b>¿Y si el backend cae, pierdo lo escrito?</b></td><td>No: <code class="inline">synchronous_commit = on</code> + WAL; el COMMIT confirmado es durable.</td></tr>
+            <tr><td><b>¿sync({alter:true}) no rompe el esquema?</b></td><td>Puede quitar los <code class="inline">DEFAULT now()</code>; por eso <code class="inline">schema.sql</code> los restaura (sección 8 de TABLAS.md) y los procedimientos escriben fechas explícitas.</td></tr>
+            <tr><td><b>¿Cuántos datos hay?</b></td><td>10 tablas, 1 vista, 1 procedimiento, 1 trigger, 77 restricciones; demo: 4 usuarios, 18 batallas, 18 cartas, 10 misiones.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 19 · CIERRE ============ -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="kicker">08 — Conclusiones</div>
+      <h2 class="t">Resumen y <em>conclusiones</em></h2>
+      <div class="grid3">
+        <div class="box"><h4>¿Qué hace la BD?</h4>
+          <p>Persiste con integridad todo el estado que va más allá de la partida: identidad, credenciales bcrypt, stats derivadas, historial, catálogos y progreso.</p>
+        </div>
+        <div class="box"><h4>¿Cómo se relaciona?</h4>
+          <p>La vista lee con JOIN (no escribe), el procedimiento escribe en transacción, el trigger sincroniza stats, y las FK CASCADE limpian el progreso al borrar un usuario.</p>
+        </div>
+        <div class="box"><h4>¿Qué garantiza?</h4>
+          <p><b>Integridad</b> (77 restricciones), <b>ACID</b> completo, <b>CP</b> ante caídas, <b>derivación automática</b> (trigger) e <b>idempotencia</b> de los scripts.</p>
+        </div>
+      </div>
+      <div class="note" style="margin-top:22px"><b>Cifras ·</b> 10 tablas · 1 vista · 1 procedimiento · 1 trigger · 77 restricciones · WAL + <code class="inline">synchronous_commit=on</code> · READ COMMITTED · 4 usuarios demo · 18 batallas.</div>
+      <p style="font-family:var(--serif);font-style:italic;font-size:20px;color:var(--ink);margin-top:20px">"ACID gobierna lo que pasa dentro de la base; CAP gobierna qué pasa cuando la infraestructura falla. Nunca servir datos viejos o incompletos."</p>
+    </div>
+  </section>
+
+</div><!-- /deck -->
+
+<!-- ============ CONTROLES ============ -->
+<div class="slide-num" id="slideNum">01 / 19</div>
+<div class="pager">
+  <button id="prev" aria-label="Anterior">‹</button>
+  <span class="cnt" id="cnt">1 / 19</span>
+  <button id="next" aria-label="Siguiente">›</button>
+  <span class="dots" id="dots"></span>
+</div>
+<div class="hint">Usa <kbd>←</kbd> <kbd>→</kbd> para navegar · <kbd>P</kbd> impresión</div>
+
+<script>
+  const slides = [...document.querySelectorAll('.slide')];
+  let cur = 0;
+  const cnt = document.getElementById('cnt');
+  const slideNum = document.getElementById('slideNum');
+  const dotsWrap = document.getElementById('dots');
+  const bar = document.getElementById('bar');
+
+  slides.forEach((s, i) => {
+    const d = document.createElement('button');
+    d.className = 'dot' + (i === 0 ? ' on' : '');
+    d.setAttribute('aria-label', 'Ir a diapositiva ' + (i + 1));
+    d.addEventListener('click', () => go(i));
+    dotsWrap.appendChild(d);
+  });
+  const dots = [...dotsWrap.children];
+
+  function go(i) {
+    cur = Math.max(0, Math.min(slides.length - 1, i));
+    slides.forEach((s, k) => s.classList.toggle('on', k === cur));
+    cnt.textContent = (cur + 1) + ' / ' + slides.length;
+    slideNum.textContent = String(cur + 1).padStart(2, '0') + ' / ' + slides.length;
+    dots.forEach((d, k) => d.classList.toggle('on', k === cur));
+    if (bar) bar.style.width = ((cur + 1) / slides.length * 100) + '%';
+    slides[cur].scrollTop = 0;
+  }
+
+  document.getElementById('prev').addEventListener('click', () => go(cur - 1));
+  document.getElementById('next').addEventListener('click', () => go(cur + 1));
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'PageDown') { go(cur + 1); e.preventDefault(); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { go(cur - 1); e.preventDefault(); }
+    else if (e.key === 'Home') { go(0); }
+    else if (e.key === 'End') { go(slides.length - 1); }
+    else if (e.key === 'p' || e.key === 'P') { window.print(); }
+  });
+
+  let touchX = 0;
+  window.addEventListener('touchstart', (e) => { touchX = e.changedTouches[0].clientX; }, { passive: true });
+  window.addEventListener('touchend', (e) => {
+    const dx = e.changedTouches[0].clientX - touchX;
+    if (Math.abs(dx) > 60) go(cur + (dx < 0 ? 1 : -1));
+  }, { passive: true });
+
+  go(0);
+</script>
+</body>
+</html>

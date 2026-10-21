@@ -18,15 +18,15 @@ class AppConfig {
   }
 
   get dbEnabled() {
-    return (this.env.DB_ENABLED || 'false').toLowerCase() === 'true';
+    return (this.env.DB_ENABLED || 'true').toLowerCase() === 'true';
   }
 
   get useSqlite() {
-    return (this.env.DB_USE_SQLITE || 'false').toLowerCase() === 'true';
+    return (this.env.DB_USE_SQLITE || 'true').toLowerCase() === 'true';
   }
 
   get dbRequireSSL() {
-    return (this.env.DB_REQUIRE_SSL || 'true').toString().toLowerCase() === 'true';
+    return (this.env.DB_REQUIRE_SSL || 'false').toString().toLowerCase() === 'true';
   }
 
   get dbHost() {

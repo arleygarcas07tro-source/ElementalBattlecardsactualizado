@@ -1,8 +1,12 @@
 import Phaser from "phaser";
 import { startMenuMusic, play as playSfx } from '../helpers/audioManager.js';
 import { getProfileStats } from '../helpers/playerProgress.js';
+import DomSceneBase from './ui/DomSceneBase.js';
+import { loadVideoIfNeeded, createVideoBackground } from './ui/videoBackground.js';
+import { energyParticlesHTML } from './ui/elementCatalog.js';
+import { MENU_MODULES as cards } from '../content/menuModules.js';
 
-export default class HomeScenes extends Phaser.Scene {
+export default class HomeScenes extends DomSceneBase {
     constructor() {
         super("HomeScenes");
         this.playerData = null;
@@ -18,50 +22,19 @@ export default class HomeScenes extends Phaser.Scene {
     }
 
     preload() {
-        // El video del menú se precarga UNA VEZ en PreloaderScene para que al
+        // El video del menú ya NO se precarga en PreloaderScene (pesaba en la entrada
+        // al juego). Se descarga aquí, una sola vez, y queda en caché para que al
         // volver a esta escena no haya recorte/negro por recarga de red.
-        if (!this.cache.video.exists('menu-bg-video')) {
-            this.load.video('menu-bg-video', "/assets/images/menu%20principal/anmenuPrincipal.mp4", { muted: true, noAudio: true });
-        }
+        loadVideoIfNeeded(this, 'menu-bg-video', "/assets/images/menu%20principal/anmenuPrincipal.mp4");
     }
 
     create() {
         const { width, height } = this.scale;
 
         // BACKGROUND
-        // Fondo inmediato para que nunca se vea un hueco negro mientras el video
-        // (aunque venga de caché) termina de preparar su primer frame.
-        this.add.rectangle(width / 2, height / 2, width, height, 0x0f0a1a).setDepth(-2);
-
-        this.bg = this.add.video(width / 2, height / 2, 'menu-bg-video').setOrigin(0.5);
-        this.bg.setDepth(-1); // Poner el video al fondo
-
-        // Esperar a que el video esté listo para escalar correctamente
-        this.bg.on('play', () => {
-            const scaleX = width / this.bg.width;
-            const scaleY = height / this.bg.height;
-            const scale = Math.max(scaleX, scaleY);
-            this.bg.setScale(scale);
-        });
-
-        this.bg.once('ready', () => {
-            const videoEl = this.bg.video;
-
-            if (!videoEl) {
-                return;
-            }
-
-            videoEl.muted = true;
-            videoEl.defaultMuted = true;
-            videoEl.loop = true; // Bucle continuo: al terminar, se reinicia desde el inicio.
-            videoEl.playbackRate = 1;
-            videoEl.playsInline = true;
-            videoEl.preload = 'auto';
-            videoEl.currentTime = 0;
-            videoEl.play().catch(() => {});
-        });
-
-        this.bg.play(true);
+        // Fondo de video inmediato con rectángulo de respaldo para que nunca se vea
+        // un hueco negro mientras el video (aunque venga de caché) prepara su frame.
+        this.bg = createVideoBackground(this, 'menu-bg-video', 0x0f0a1a);
 
         // Música ambiental del menú (procedural, bucle continuo sin cortes).
         startMenuMusic(this);
@@ -70,33 +43,6 @@ export default class HomeScenes extends Phaser.Scene {
         const username = (this.playerData && this.playerData.username) || 'Jugador';
         const stats = getProfileStats(username);
         const xpPercent = Math.min(100, Math.round((stats.xpActual / stats.xpMaxima) * 100));
-
-        const cards = [
-            {
-                eyebrow: 'Explora',
-                title: "Niveles",
-                desc: "Abre la selección de niveles y enfréntate a nuevos desafíos.",
-                image: "/assets/images/mod%C3%BAlos%20menuprincipal/niveles%20fondo.jpeg",
-                accent: "rgba(92, 196, 255, 0.20)",
-                glow: "rgba(92, 196, 255, 0.35)"
-            },
-            {
-                eyebrow: 'Multijugador',
-                title: "Juego LAN",
-                desc: "Inicia la conexión LAN y enfréntate a otros jugadores.",
-                image: "/assets/images/mod%C3%BAlos%20menuprincipal/juego%20en%20linea.jpeg",
-                accent: "rgba(168, 130, 255, 0.20)",
-                glow: "rgba(168, 130, 255, 0.35)"
-            },
-            {
-                eyebrow: 'Aprende',
-                title: "Mecánicas",
-                desc: "Consulta las reglas, ventajas y estrategias del juego.",
-                image: "/assets/images/mod%C3%BAlos%20menuprincipal/mecanicas%20fondo.jpeg",
-                accent: "rgba(201, 170, 92, 0.20)",
-                glow: "rgba(201, 170, 92, 0.35)"
-            }
-        ];
 
         const cardsHtml = cards.map((card, index) => `
             <div class="card" data-index="${index}" style="--card-accent:${card.accent}; --card-glow:${card.glow};">
@@ -112,13 +58,12 @@ export default class HomeScenes extends Phaser.Scene {
             </div>
         `).join('');
 
-        const energy = Array.from({ length: 8 }, (_, i) => {
-            const left = Math.round(6 + ((i * 47) % 88));
-            const top = Math.round(10 + ((i * 61) % 70));
-            const size = 3 + (i % 3) * 2;
-            const delay = (i % 6) * -1.6;
-            return `<span class="energy" style="left:${left}%; top:${top}%; width:${size}px; height:${size}px; animation-delay:${delay}s;"></span>`;
-        }).join('');
+        const energy = energyParticlesHTML({
+            count: 8,
+            leftOffset: 6, leftSlope: 47, leftMod: 88,
+            topOffset: 10, topSlope: 61, topMod: 70,
+            delayStep: -1.6
+        });
 
         // UI TEMPLATE (incluye modal overlay)
         const html = `<div class="scene-root">
@@ -801,17 +746,7 @@ export default class HomeScenes extends Phaser.Scene {
         </div>`;
 
         // DOM ELEMENT
-        this.domUI = this.add.dom(0, 0).createFromHTML(html);
-        this.domUI.setOrigin(0);
-        this.domUI.setDepth(9999);
-
-        const node = this.domUI.node;
-        node.style.position = "absolute";
-        node.style.left = 0;
-        node.style.top = 0;
-        node.style.width = width + "px";
-        node.style.height = height + "px";
-        node.style.pointerEvents = "auto";
+        const node = this.mountDOM(html);
 
         // Añadir clases de animación y manejadores de interacción a los botones
         try {
@@ -822,9 +757,9 @@ export default class HomeScenes extends Phaser.Scene {
                     b.classList.add('pulse');
                     b.style.animationDelay = (Math.random() * 2) + 's';
                 }
-                b.addEventListener('pointerdown', () => { b.style.transform = 'translateY(0) scale(0.98)'; });
-                b.addEventListener('pointerup', () => { b.style.transform = ''; });
-                b.addEventListener('pointerleave', () => { b.style.transform = ''; });
+                this.track(b, () => { b.style.transform = 'translateY(0) scale(0.98)'; }, 'pointerdown');
+                this.track(b, () => { b.style.transform = ''; }, 'pointerup');
+                this.track(b, () => { b.style.transform = ''; }, 'pointerleave');
             });
         } catch (e) {
             console.warn('No se pudieron inicializar animaciones de botones', e);
@@ -834,7 +769,7 @@ export default class HomeScenes extends Phaser.Scene {
         try {
             const clickables = node.querySelectorAll('.header-btn, .btn-exit, .bottom-btn, .btn-profile, .card');
             clickables.forEach(el => {
-                el.addEventListener('pointerup', () => playSfx('click', this));
+                this.track(el, () => playSfx('click', this), 'pointerup');
             });
         } catch (e) {
             console.warn('No se pudieron conectar sonidos de clic', e);
@@ -843,7 +778,7 @@ export default class HomeScenes extends Phaser.Scene {
         // --- LÓGICA DE LOS BOTONES ---
         // EXIT BUTTON
         const exitBtn = node.querySelector(".btn-exit");
-        if (exitBtn) exitBtn.onclick = () => this.scene.switch("LoginScene");
+        if (exitBtn) this.track(exitBtn, () => this.scene.switch("LoginScene"), 'click');
 
         // Modal elements and helpers
         const modalOverlay = node.querySelector('#scene-modal');
@@ -868,10 +803,10 @@ export default class HomeScenes extends Phaser.Scene {
             wrap.style.filter = "";
         };
 
-        if (modalClose) modalClose.addEventListener('click', closeModal);
-        if (modalOverlay) modalOverlay.addEventListener('click', (e) => {
+        if (modalClose) this.track(modalClose, closeModal, 'click');
+        if (modalOverlay) this.track(modalOverlay, (e) => {
             if (e.target === modalOverlay) closeModal();
-        });
+        }, 'click');
 
         // ESC para cerrar modal
         this.input.keyboard.on('keydown-ESC', () => {
@@ -886,39 +821,39 @@ export default class HomeScenes extends Phaser.Scene {
         const btnCards = node.querySelector('[data-action="cards"]');
         const btnMissions = node.querySelector('[data-action="missions"]');
 
-        if (btnProfile) btnProfile.addEventListener('click', () => {
+        if (btnProfile) this.track(btnProfile, () => {
             this.scene.start('ProfileScene', { playerData: this.playerData });
-        });
+        }, 'click');
 
-        if (btnCards) btnCards.addEventListener('click', () => {
+        if (btnCards) this.track(btnCards, () => {
             this.scene.start('CardsScene', { playerData: this.playerData });
-        });
+        }, 'click');
 
-        if (btnMissions) btnMissions.addEventListener('click', () => {
+        if (btnMissions) this.track(btnMissions, () => {
             this.scene.start('MissionsScene', { playerData: this.playerData });
-        });
+        }, 'click');
 
-        if (btnConfig) btnConfig.addEventListener('click', () => {
+        if (btnConfig) this.track(btnConfig, () => {
             this.scene.start('SettingsScene', {
                 playerData: this.playerData,
                 returnScene: 'HomeScenes',
                 settings: this.settings
             });
-        });
-        if (btnAbout) btnAbout.addEventListener('click', () => {
+        }, 'click');
+        if (btnAbout) this.track(btnAbout, () => {
             this.scene.start('AboutScene', { playerData: this.playerData });
-        });
-        if (btnNotifications) btnNotifications.addEventListener('click', () => {
+        }, 'click');
+        if (btnNotifications) this.track(btnNotifications, () => {
             openModal('Notificaciones',
                 '<p>No tienes notificaciones nuevas por ahora.</p><p style="color:rgba(255,255,255,0.6);">Cuando ganes batallas, completen misiones o haya eventos, lo verás aquí.</p>');
-        });
+        }, 'click');
 
         // Conectar acciones a las tarjetas
         try {
             const cardEls = node.querySelectorAll('.card');
             cardEls.forEach((el) => {
                 el.style.cursor = 'pointer';
-                el.addEventListener('click', () => {
+                this.track(el, () => {
                     const idx = Number(el.getAttribute('data-index'));
 
                     if (idx === 0) {
@@ -937,7 +872,7 @@ export default class HomeScenes extends Phaser.Scene {
                         this.scene.start('MechanicsScene', { playerData: this.playerData });
                         return;
                     }
-                });
+                }, 'click');
             });
         } catch (e) {
             console.warn('No se pudieron asignar listeners a las tarjetas', e);
@@ -950,9 +885,6 @@ export default class HomeScenes extends Phaser.Scene {
                 xpFill.style.width = xpPercent + '%';
             }, 120);
         }
-
-        // Responsive resize handler
-        this.scale.on("resize", this.onResize, this);
     }
 
     onResize(gameSize) {
@@ -960,12 +892,6 @@ export default class HomeScenes extends Phaser.Scene {
 
         if (this.bg) this.bg.setDisplaySize(width, height);
 
-        if (this.domUI && this.domUI.node) {
-            const node = this.domUI.node;
-            if (node.style) {
-                node.style.width = width + "px";
-                node.style.height = height + "px";
-            }
-        }
+        super.onResize(gameSize);
     }
 }
