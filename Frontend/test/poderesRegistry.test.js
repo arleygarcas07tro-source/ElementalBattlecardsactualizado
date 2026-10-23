@@ -7,9 +7,20 @@ import { CARD_TYPES } from '../src/helpers/constants.js';
 
 function validCtx() {
     return {
-        player: { essences: { has: () => true }, graveyard: [], drawCard() {} },
+        player: { 
+            essences: { has: () => true }, 
+            graveyard: [], 
+            hand: [],
+            drawCard() {},
+            gems: { count: () => 3 }
+        },
         opponent: { hand: [], addCardDataToGraveyard() {}, id: 'opponent' },
-        turn: { playerEssencePowerUsed: false, opponentConvergenceBlocked: false },
+        turn: { 
+            state: 'player-turn',
+            getPowerUses: () => 0,
+            playerPowerUses: {},
+            opponentConvergenceBlocked: false 
+        },
         emitConvergenceStatus() {}
     };
 }
@@ -43,6 +54,8 @@ test('OCP: un poder nuevo se agrega como clase extendiendo Poder, sin tocar Game
     }
     const poder = new Cristalizar(CARD_TYPES.FUEGO);
     const ctx = validCtx();
+    // Cristalizar usará validación de FUEGO (1 gema) con contexto válido
+    ctx.player.gems.count = () => 1;
 
     assert.deepEqual(poder.execute(ctx), ['cristal']);
     assert.equal(ctx.turn.cristalizado, true);

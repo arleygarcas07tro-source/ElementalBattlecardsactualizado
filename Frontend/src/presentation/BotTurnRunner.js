@@ -1,4 +1,5 @@
 import { resolveCombat } from '../helpers/combat.js';
+import { GAME_CONFIG } from '../helpers/constants.js';
 
 /**
  * Ejecutor del turno del bot.
@@ -18,26 +19,57 @@ export default class BotTurnRunner {
     }
 
     /**
-     * Ejecuta el turno completo del bot: espera su retardo y aplica una acción.
+     * Ejecuta el turno completo del bot: espera su retardo y aplica acciones
+     * hasta agotar el cupo del turno (o quedarse sin opciones).
      */
     run() {
-        const { turn, bot, turnController } = this.ctx;
+        const { turn, bot } = this.ctx;
         console.log('[GameScene] IA del oponente evaluando acciones (BOT)', { turnNumber: turn.opponentTurnNumber });
 
         bot.refreshActionDelay();
         bot.refreshScoreModifier();
 
-        this.scene.time.delayedCall(bot.actionDelay, () => {
-            // Revalúa el plan mientras el plan falle (ej. fusión inválida) hasta ejecutar una acción.
-            let safety = 10;
-            let executed = false;
-            while (!executed && safety-- > 0) {
-                const plan = bot.decideAction(this.buildContext());
-                executed = this.executePlan(plan);
-            }
-            if (!executed) {
-                turnController.endOpponentTurn(false);
-            }
+        this.scene.time.delayedCall(bot.actionDelay, () => this.runNextAction());
+    }
+
+    /**
+     * Ejecuta la siguiente acción del bot. Si el plan falla, reevalúa hasta
+     * agotar el margen de seguridad; si no queda cupo de acciones, cierra turno.
+     */
+    runNextAction() {
+        const { turn, bot, turnController } = this.ctx;
+        if (turn.state !== 'opponent-turn') return;
+        if (!turn.canOpponentAct()) {
+            turnController.endOpponentTurn();
+            return;
+        }
+
+        // Revalúa el plan mientras el plan falle (ej. fusión inválida) hasta ejecutar una acción.
+        let safety = 10;
+        let executed = false;
+        while (!executed && safety-- > 0) {
+            const plan = bot.decideAction(this.buildContext());
+            executed = this.executePlan(plan);
+        }
+        if (!executed) {
+            turnController.endOpponentTurn(false);
+        }
+    }
+
+    /**
+     * Continúa el turno del bot tras una acción ejecutada: si le queda cupo
+     * decide la siguiente acción; si no, cierra el turno.
+     */
+    continueTurn() {
+        const { turn, turnController } = this.ctx;
+        if (!turn.canOpponentAct()) {
+            turnController.endOpponentTurn();
+            return;
+        }
+        // Pausa breve para que el jugador vea la animación antes de la 2ª acción.
+        this.scene.time.delayedCall(GAME_CONFIG.BOT_NEXT_ACTION_DELAY_MS, () => {
+            if (this.ctx.turn.state !== 'opponent-turn') return;
+            this.runNextAction();
         });
     }
 
@@ -111,7 +143,7 @@ export default class BotTurnRunner {
      * @returns {boolean} true si la fusión se ejecutó.
      */
     executeFusion(plan) {
-        const { opponent, renderer, turnController, debugSync } = this.ctx;
+        const { opponent, renderer, debugSync } = this.ctx;
         if (debugSync) console.log('[GameScene][debug] Oponente BOT fusionando campo', { indices: plan.indices, timestamp: Date.now() });
         const [idxA, idxB] = plan.indices;
         const origA = opponent.field.get(idxA);
@@ -145,7 +177,9 @@ export default class BotTurnRunner {
         try { fusedObj.setTexture(`card-${res.newCard.type}-${res.newCard.level}`); } catch (e) {}
         renderer.refreshOpponentHand(opponent.hand);
         renderer.updateDeckCounts(this.ctx.player.deck.getCardsCount(), opponent.deck.getCardsCount());
-        turnController.endOpponentTurn(true);
+        // Una fusión cuenta como UNA acción del turno del bot.
+        this.ctx.turn.consumeOpponentAction();
+        this.continueTurn();
         return true;
     }
 
@@ -178,7 +212,9 @@ export default class BotTurnRunner {
                     }
                 }
                 turn.opponentPerformedAttackThisTurn = true;
-                turnController.endOpponentTurn(true);
+                // El ataque consume una acción del turno del bot.
+                turn.consumeOpponentAction();
+                this.continueTurn();
             }
         });
         return true;
@@ -190,7 +226,7 @@ export default class BotTurnRunner {
      * @returns {boolean} true si el ataque directo se ejecutó.
      */
     executeDirectAttack(plan) {
-        const { opponent, renderer, interaction, turnController, debugSync } = this.ctx;
+        const { opponent, renderer, interaction, debugSync } = this.ctx;
         const attackerObj = this.findOpponentCardObject(plan.attackerIndex);
         if (!attackerObj) return false;
         if (debugSync) console.log('[GameScene][debug] Oponente BOT ataque directo', { attackerIndex: plan.attackerIndex, timestamp: Date.now() });
@@ -198,7 +234,9 @@ export default class BotTurnRunner {
         interaction.registerCardAttack(attackerObj, 'opponent');
         opponent.fillEssence(attackerObj.getData('cardData').type);
         this.scene.events.emit('essence-activated', opponent.id, attackerObj.getData('cardData').type);
-        turnController.endOpponentTurn(true);
+        // El ataque directo consume una acción del turno del bot.
+        this.ctx.turn.consumeOpponentAction();
+        this.continueTurn();
         return true;
     }
 
@@ -208,7 +246,7 @@ export default class BotTurnRunner {
      * @returns {boolean} true si la carta se colocó.
      */
     executePlayCard(plan) {
-        const { opponent, renderer, turnController, debugSync } = this.ctx;
+        const { opponent, renderer, debugSync } = this.ctx;
         const cardToPlay = opponent.hand[plan.handIndex];
         const slotIndex = plan.slotIndex;
         if (!cardToPlay || !opponent.field.isEmpty(slotIndex)) return false;
@@ -220,7 +258,9 @@ export default class BotTurnRunner {
         opponent.drawCard();
         renderer.refreshOpponentHand(opponent.hand);
         renderer.updateDeckCounts(this.ctx.player.deck.getCardsCount(), opponent.deck.getCardsCount());
-        turnController.endOpponentTurn(true);
+        // Colocar una carta consume una acción del turno del bot.
+        this.ctx.turn.consumeOpponentAction();
+        this.continueTurn();
         return true;
     }
 }

@@ -19,28 +19,30 @@ import PoderesRegistry from './powers/PoderesRegistry.js';
  * EventBus propio que la escena puentea a su UI.
  */
 export default class GameMatch {
-/**
+    /**
      * @param {object} [opts]
      * @param {object} [opts.config=GAME_CONFIG] Configuración de reglas.
      * @param {string} [opts.playerId='player']
      * @param {string} [opts.opponentId='opponent']
      * @param {object} [opts.turn=null] Flujo de turnos inyectado (DIP); si no
      *   se provee, crea un TurnManager por defecto.
+     * @param {Function} [opts.onGemGained] Aviso de dominio: (ownerId, type, progress).
      */
     constructor({
         config = GAME_CONFIG,
         playerId = 'player',
         opponentId = 'opponent',
-        turn = null
+        turn = null,
+        onGemGained = null
     } = {}) {
         this.config = config;
-        /** @type {import('../utils/eventBus.js').default */
+        /** @type {import('../utils/eventBus.js').default} */
         this.events = new EventBus();
-        /** @type {import('../game_objects/player.js').default */
-        this.player = new Player(playerId);
-        /** @type {import('../game_objects/player.js').default */
-        this.opponent = new Player(opponentId);
-        /** @type {import('./TurnManager.js').default */
+        /** @type {import('../game_objects/player.js').default} */
+        this.player = new Player(playerId, { onGemGained });
+        /** @type {import('../game_objects/player.js').default} */
+        this.opponent = new Player(opponentId, { onGemGained });
+        /** @type {import('./TurnManager.js').default} */
         this.turn = turn || new TurnManager(config);
     }
 
@@ -131,9 +133,11 @@ export default class GameMatch {
     /**
      * Ejecuta el poder de esencia del jugador (clic en un orbe propio activo).
      * Obtiene el poder del registro y delega validación (EssencePowerService)
-     * y ejecución. Uso: 1 por turno propio. Emite 'essence-power-used'.
+     * y ejecución. Los poderes NO consumen acciones del turno: consumen las
+     * gemas de su coste y respetan las condiciones propias de cada poder.
+     * Emite 'essence-power-used'.
      * @param {string} essenceType Tipo de esencia ('fuego', 'agua', ...).
-     * @returns {{ok: boolean, reason?: string, essenceType?: string, name?: string, changed?: string[]}}
+     * @returns {{ok: boolean, reason?: string, essenceType?: string, name?: string, changed?: string[], gemCost?: number}}
      */
     useEssencePower(essenceType) {
         if (this.turn.state !== 'player-turn') {
@@ -160,14 +164,28 @@ export default class GameMatch {
         const plan = poder.canUse(ctx);
         if (!plan.ok) {
             console.warn('[GameMatch] Poder de esencia no disponible:', { essenceType, reason: plan.reason });
-            return { ok: false, reason: plan.reason };
+            return { ok: false, reason: plan.reason, name: plan.name, gemCost: plan.gemCost };
         }
 
-        this.turn.playerEssencePowerUsed = true;
+        // Coste en gemas: cada poder define el suyo y lo gasta al activarse.
+        const gemCost = plan.gemCost || 0;
+        if (gemCost > 0 && !this.player.gems.consume(essenceType, gemCost)) {
+            console.warn('[GameMatch] Sin gemas suficientes para el poder:', { essenceType, gemCost });
+            return { ok: false, reason: 'sin-gemas', name: plan.name, gemCost };
+        }
+
+        this.turn.registerPowerUse(essenceType);
         const changed = poder.execute(ctx) || [];
 
-        this.events.emit('essence-power-used', { essenceType, name: plan.name });
-        return { ok: true, essenceType, name: plan.name, changed };
+        this.events.emit('essence-power-used', { essenceType, name: plan.name, gemCost });
+        if (gemCost > 0) {
+            this.events.emit('gems-spent', {
+                ownerId: this.player.id,
+                type: essenceType,
+                progress: this.player.gems.progress()
+            });
+        }
+        return { ok: true, essenceType, name: plan.name, changed, gemCost };
     }
 
     /**
@@ -193,14 +211,28 @@ export default class GameMatch {
     }
 
     /**
-     * Consume la acción de ataque del jugador: marca que ha actuado, registra
-     * el ataque y agota Ráfaga (el próximo ataque vuelve al comportamiento base).
+     * Gasta una acción del jugador (colocación de carta o fusión). Una fusión
+     * cuenta como una única acción aunque combine varias cartas.
+     * @returns {number} Acciones que quedan disponibles en el turno.
+     */
+    consumePlayerAction() {
+        return this.turn.consumePlayerAction();
+    }
+
+    /**
+     * Consume la acción de ataque del jugador: gasta una acción del cupo,
+     * registra el ataque y agota Ráfaga (el próximo ataque vuelve al
+     * comportamiento base). Atacar cumple además la obligación de atacar:
+     * el resto del cupo queda libre para colocar o fusionar.
+     * @returns {number} Acciones que quedan disponibles en el turno.
      */
     markPlayerAttackConsumed() {
-        this.turn.playerHasActed = true;
+        this.turn.consumePlayerAction();
         this.turn.playerPerformedAttackThisTurn = true;
         this.turn.playerTurnsSinceLastAttack = 0;
         this.turn.playerNextAttackBreaksTie = false;
+        this.turn.playerMustAttackThisTurn = false;
+        return this.turn.playerActionsLeft;
     }
 
     /**

@@ -23,15 +23,18 @@ export default class Poder {
      * @param {object} ctx.player Estado del jugador.
      * @param {object} ctx.opponent Estado del rival.
      * @param {object} ctx.turn Gestor de turnos.
-     * @returns {{ok: boolean, reason?: string, name?: string}}
+     * @returns {{ok: boolean, reason?: string, name?: string, gemCost?: number}}
      */
     canUse(ctx) {
         return EssencePowerService.plan(this.type, {
-            isPlayerTurn: true,
-            usedThisTurn: ctx.turn.playerEssencePowerUsed,
-            essenceActive: ctx.player.essences.has(this.type),
-            graveyard: ctx.player.graveyard,
-            opponentHand: ctx.opponent.hand
+            isPlayerTurn: ctx.turn ? ctx.turn.state === 'player-turn' : true,
+            essenceActive: ctx.player && ctx.player.essences ? ctx.player.essences.has(this.type) : false,
+            graveyard: ctx.player && ctx.player.graveyard ? ctx.player.graveyard : [],
+            opponentHand: ctx.opponent && ctx.opponent.hand ? ctx.opponent.hand : [],
+            // Coste: las gemas del mismo elemento que el poder.
+            gemCount: ctx.player && ctx.player.gems ? ctx.player.gems.count(this.type) : 0,
+            // Límite de usos definido por el propio poder.
+            usesThisTurn: ctx.turn && typeof ctx.turn.getPowerUses === 'function' ? ctx.turn.getPowerUses(this.type) : (ctx.turn && ctx.turn.playerPowerUses ? (ctx.turn.playerPowerUses[this.type] || 0) : 0)
         });
     }
 

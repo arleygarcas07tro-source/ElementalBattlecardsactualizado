@@ -2,13 +2,14 @@ import { GAME_CONFIG } from '../helpers/constants.js';
 
 /**
  * Gestiona todo el estado del flujo de turnos de una partida:
- * estado actual, número de turnos, flags de acción, contadores de
+ * estado actual, número de turnos, cupo de acciones por turno, contadores de
  * inactividad y ataques obligatorios, y bloqueos por animaciones.
  * No depende de Phaser: es lógica pura que la escena consulta.
  */
 export default class TurnManager {
     /**
-     * @param {{MANDATORY_ATTACK_TURN: number}} [config=GAME_CONFIG] Configuración de reglas.
+     * @param {{MANDATORY_ATTACK_TURN: number, ACTIONS_PER_TURN: number}} [config=GAME_CONFIG]
+     *   Configuración de reglas.
      */
     constructor(config = GAME_CONFIG) {
         this.config = config;
@@ -20,8 +21,12 @@ export default class TurnManager {
      */
     reset() {
         this.state = 'pre-start'; // 'pre-start', 'player-turn', 'opponent-turn', 'game-over'
-        this.playerHasActed = false;
-        this.opponentHasActed = false;
+        // Cupo de acciones del turno (atacar, colocar o fusionar). Se repone
+        // completo en cada turno: las acciones no usadas se pierden.
+        this.playerActionsLeft = this.config.ACTIONS_PER_TURN;
+        this.opponentActionsLeft = this.config.ACTIONS_PER_TURN;
+        this.playerActionsTaken = 0;
+        this.opponentActionsTaken = 0;
         this.playerPerformedAttackThisTurn = false;
         this.opponentPerformedAttackThisTurn = false;
         this.playerTurnsSinceLastAttack = 0;
@@ -34,9 +39,10 @@ export default class TurnManager {
         this.opponentInactiveTurns = 0;
         this.blockingAnimations = 0;
         this.pendingTurnChange = null;
-        // Poderes de esencia: un uso por turno propio.
-        this.playerEssencePowerUsed = false;
-        this.opponentEssencePowerUsed = false;
+        // Poderes de esencia: usos por poder en el turno propio (cada poder
+        // define su propio límite y su coste en gemas).
+        this.playerPowerUses = {};
+        this.opponentPowerUses = {};
         // Poder FUEGO (Ráfaga): el próximo ataque del jugador rompe el empate.
         this.playerNextAttackBreaksTie = false;
         // Convergencia (victoria por 6 tipos): el jugador armó los 6 tipos y debe
@@ -48,41 +54,137 @@ export default class TurnManager {
     }
 
     /**
-     * Inicia el turno del jugador: avanza el contador, limpia flags
-     * y calcula si esta obligado a atacar.
-     * @returns {{turnNumber: number, mustAttack: boolean, turnsSinceLastAttack: number}}
+     * Indica si el jugador ya gastó al menos una acción en su turno.
+     * @returns {boolean}
+     */
+    get playerHasActed() {
+        return this.playerActionsTaken > 0;
+    }
+
+    /**
+     * Indica si el oponente ya gastó al menos una acción en su turno.
+     * @returns {boolean}
+     */
+    get opponentHasActed() {
+        return this.opponentActionsTaken > 0;
+    }
+
+    /**
+     * Acciones restantes del jugador en su turno.
+     * @returns {number}
+     */
+    get playerActionsRemaining() {
+        return this.playerActionsLeft;
+    }
+
+    /**
+     * Acciones restantes del oponente en su turno.
+     * @returns {number}
+     */
+    get opponentActionsRemaining() {
+        return this.opponentActionsLeft;
+    }
+
+    /**
+     * Inicia el turno del jugador: avanza el contador, repone el cupo de
+     * acciones, limpia flags y calcula si está obligado a atacar.
+     * @returns {{turnNumber: number, mustAttack: boolean, turnsSinceLastAttack: number, actionsLeft: number}}
      */
     beginPlayerTurn() {
         this.state = 'player-turn';
         this.playerTurnNumber++;
-        this.playerHasActed = false;
+        // El cupo se repone completo: las acciones del turno anterior no se acumulan.
+        this.playerActionsLeft = this.config.ACTIONS_PER_TURN;
+        this.playerActionsTaken = 0;
         this.playerPerformedAttackThisTurn = false;
-        this.playerEssencePowerUsed = false;
+        this.playerPowerUses = {};
         this.playerMustAttackThisTurn = (this.playerTurnsSinceLastAttack >= this.config.MANDATORY_ATTACK_TURN - 1);
         return {
             turnNumber: this.playerTurnNumber,
             mustAttack: this.playerMustAttackThisTurn,
-            turnsSinceLastAttack: this.playerTurnsSinceLastAttack
+            turnsSinceLastAttack: this.playerTurnsSinceLastAttack,
+            actionsLeft: this.playerActionsLeft
         };
     }
 
     /**
-     * Inicia el turno del oponente: avanza el contador, limpia flags
-     * y calcula si esta obligado a atacar.
-     * @returns {{turnNumber: number, mustAttack: boolean, turnsSinceLastAttack: number}}
+     * Inicia el turno del oponente: avanza el contador, repone el cupo de
+     * acciones, limpia flags y calcula si está obligado a atacar.
+     * @returns {{turnNumber: number, mustAttack: boolean, turnsSinceLastAttack: number, actionsLeft: number}}
      */
     beginOpponentTurn() {
         this.state = 'opponent-turn';
         this.opponentTurnNumber++;
-        this.opponentHasActed = false;
+        // El cupo se repone completo: las acciones del turno anterior no se acumulan.
+        this.opponentActionsLeft = this.config.ACTIONS_PER_TURN;
+        this.opponentActionsTaken = 0;
         this.opponentPerformedAttackThisTurn = false;
-        this.opponentEssencePowerUsed = false;
+        this.opponentPowerUses = {};
         this.opponentMustAttackThisTurn = (this.opponentTurnsSinceLastAttack >= this.config.MANDATORY_ATTACK_TURN - 1);
         return {
             turnNumber: this.opponentTurnNumber,
             mustAttack: this.opponentMustAttackThisTurn,
-            turnsSinceLastAttack: this.opponentTurnsSinceLastAttack
+            turnsSinceLastAttack: this.opponentTurnsSinceLastAttack,
+            actionsLeft: this.opponentActionsLeft
         };
+    }
+
+    /**
+     * Indica si el jugador puede gastar una acción ahora mismo.
+     * @returns {boolean}
+     */
+    canPlayerAct() {
+        return this.state === 'player-turn' && this.playerActionsLeft > 0;
+    }
+
+    /**
+     * Indica si el oponente puede gastar una acción ahora mismo.
+     * @returns {boolean}
+     */
+    canOpponentAct() {
+        return this.state === 'opponent-turn' && this.opponentActionsLeft > 0;
+    }
+
+    /**
+     * Gasta una acción del jugador (ataque, colocación o fusión).
+     * Una fusión cuenta como una sola acción aunque combine varias cartas.
+     * @returns {number} Acciones que quedan disponibles en el turno.
+     */
+    consumePlayerAction() {
+        if (this.playerActionsLeft <= 0) return 0;
+        this.playerActionsLeft -= 1;
+        this.playerActionsTaken += 1;
+        return this.playerActionsLeft;
+    }
+
+    /**
+     * Gasta una acción del oponente (ataque, colocación o fusión).
+     * @returns {number} Acciones que quedan disponibles en el turno.
+     */
+    consumeOpponentAction() {
+        if (this.opponentActionsLeft <= 0) return 0;
+        this.opponentActionsLeft -= 1;
+        this.opponentActionsTaken += 1;
+        return this.opponentActionsLeft;
+    }
+
+    /**
+     * Usos de un poder de esencia en el turno del jugador.
+     * @param {string} type Tipo de esencia ('fuego', 'agua', ...).
+     * @returns {number}
+     */
+    getPowerUses(type) {
+        return this.playerPowerUses[type] || 0;
+    }
+
+    /**
+     * Registra el uso de un poder de esencia en el turno del jugador.
+     * @param {string} type Tipo de esencia ('fuego', 'agua', ...).
+     * @returns {number} Total de usos del poder en este turno.
+     */
+    registerPowerUse(type) {
+        this.playerPowerUses[type] = this.getPowerUses(type) + 1;
+        return this.playerPowerUses[type];
     }
 
     /**
@@ -111,10 +213,10 @@ export default class TurnManager {
      * Aplica la contabilidad de fin de turno para el jugador
      * (inactividad y ataques encadenados) y limpia la obligación de atacar.
      * Debe llamarse cuando el estado actual es 'player-turn' y no hay bloqueos.
-     * @returns {{inactiveTurns: number, turnsSinceLastAttack: number}}
+     * @returns {{inactiveTurns: number, turnsSinceLastAttack: number, actionsLeft: number}}
      */
     finishPlayerTurn() {
-        if (!this.playerHasActed) {
+        if (this.playerActionsTaken === 0) {
             this.playerInactiveTurns++;
         } else {
             this.playerInactiveTurns = 0;
@@ -127,17 +229,18 @@ export default class TurnManager {
         this.playerMustAttackThisTurn = false;
         return {
             inactiveTurns: this.playerInactiveTurns,
-            turnsSinceLastAttack: this.playerTurnsSinceLastAttack
+            turnsSinceLastAttack: this.playerTurnsSinceLastAttack,
+            actionsLeft: this.playerActionsLeft
         };
     }
 
     /**
      * Aplica la contabilidad de fin de turno para el oponente
      * (inactividad y ataques encadenados) y limpia la obligación de atacar.
-     * @param {boolean} opponentActed Si el oponente realizó alguna acción este turno.
-     * @returns {{inactiveTurns: number, turnsSinceLastAttack: number}}
+     * @param {boolean} [opponentActed] Si el oponente realizó alguna acción este turno.
+     * @returns {{inactiveTurns: number, turnsSinceLastAttack: number, actionsLeft: number}}
      */
-    finishOpponentTurn(opponentActed = false) {
+    finishOpponentTurn(opponentActed = this.opponentActionsTaken > 0) {
         if (!opponentActed) {
             this.opponentInactiveTurns++;
         } else {
@@ -151,7 +254,8 @@ export default class TurnManager {
         this.opponentMustAttackThisTurn = false;
         return {
             inactiveTurns: this.opponentInactiveTurns,
-            turnsSinceLastAttack: this.opponentTurnsSinceLastAttack
+            turnsSinceLastAttack: this.opponentTurnsSinceLastAttack,
+            actionsLeft: this.opponentActionsLeft
         };
     }
 
@@ -183,16 +287,20 @@ export default class TurnManager {
      * Contabilidad del turno saltado por obligación de atacar sin cartas en campo.
      * No incrementa la inactividad ni el contador de turnos sin atacar:
      * el salto es forzado, no es una acción voluntaria del jugador.
-     * @returns {{inactiveTurns: number, turnsSinceLastAttack: number}}
+     * @returns {{inactiveTurns: number, turnsSinceLastAttack: number, actionsLeft: number}}
      */
     finishForcedAttackSkip() {
-        this.playerHasActed = true;
+        this.playerActionsTaken = Math.max(this.playerActionsTaken, 1);
+        if (this.playerActionsLeft === this.config.ACTIONS_PER_TURN) {
+            this.playerActionsLeft = 0;
+        }
         this.playerInactiveTurns = 0;
         this.playerTurnsSinceLastAttack = 0;
         this.playerMustAttackThisTurn = false;
         return {
             inactiveTurns: this.playerInactiveTurns,
-            turnsSinceLastAttack: this.playerTurnsSinceLastAttack
+            turnsSinceLastAttack: this.playerTurnsSinceLastAttack,
+            actionsLeft: this.playerActionsLeft
         };
     }
 }

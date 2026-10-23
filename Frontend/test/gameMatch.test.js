@@ -12,6 +12,11 @@ function place(player, index, type, level = 1) {
     player.field.set(index, { id: `${type}-${level}`, type, level, instanceId: `${type}-${level}-${index}` });
 }
 
+function giveGems(player, type, amount) {
+    player.gems.counts[type] = amount;
+    return player;
+}
+
 test('GameMatch: expone jugadores, turno y configuración', () => {
     const match = makeMatch();
 
@@ -108,29 +113,68 @@ test('GameMatch.useEssencePower activa Ráfaga y solo permite un uso por turno',
     const match = makeMatch();
     match.startPlayerTurn();
     match.player.essences.activate(CARD_TYPES.FUEGO);
+    giveGems(match.player, CARD_TYPES.FUEGO, 1);
 
     const first = match.useEssencePower(CARD_TYPES.FUEGO);
     assert.equal(first.ok, true);
     assert.equal(first.name, 'Ráfaga');
     assert.equal(match.turn.playerNextAttackBreaksTie, true);
+    assert.equal(match.player.gems.count(CARD_TYPES.FUEGO), 0);
 
     const second = match.useEssencePower(CARD_TYPES.FUEGO);
     assert.equal(second.ok, false);
-    assert.equal(second.reason, 'poder-ya-usado');
+    assert.equal(second.reason, 'poder-agotado');
+});
+
+test('GameMatch.useEssencePower rechaza sin gemas del elemento', () => {
+    const match = makeMatch();
+    match.startPlayerTurn();
+    match.player.essences.activate(CARD_TYPES.FUEGO);
+
+    const outcome = match.useEssencePower(CARD_TYPES.FUEGO);
+
+    assert.equal(outcome.ok, false);
+    assert.equal(outcome.reason, 'sin-gemas');
 });
 
 test('GameMatch.useEssencePower emite essence-power-used', () => {
     const match = makeMatch();
     match.startPlayerTurn();
     match.player.essences.activate(CARD_TYPES.ESPIRITU);
+    giveGems(match.player, CARD_TYPES.ESPIRITU, 2);
 
     let emitted = null;
     match.events.on('essence-power-used', (info) => { emitted = info; });
 
     match.useEssencePower(CARD_TYPES.ESPIRITU);
 
-    assert.deepEqual(emitted, { essenceType: CARD_TYPES.ESPIRITU, name: 'Conducto' });
+    assert.deepEqual(emitted, { essenceType: CARD_TYPES.ESPIRITU, name: 'Conducto', gemCost: 2 });
     assert.equal(match.turn.opponentConvergenceBlocked, true);
+});
+
+test('GameMatch.useEssencePower no consume acciones del turno', () => {
+    const match = makeMatch();
+    match.startPlayerTurn();
+    match.player.essences.activate(CARD_TYPES.FUEGO);
+    giveGems(match.player, CARD_TYPES.FUEGO, 1);
+
+    match.useEssencePower(CARD_TYPES.FUEGO);
+
+    assert.equal(match.turn.playerActionsTaken, 0);
+    assert.equal(match.turn.playerActionsRemaining, GAME_CONFIG.ACTIONS_PER_TURN);
+});
+
+test('GameMatch: consumePlayerAction descuenta del cupo y bloquea al agotarlo', () => {
+    const match = makeMatch();
+    match.startPlayerTurn();
+
+    match.consumePlayerAction();
+    assert.equal(match.turn.playerActionsTaken, 1);
+    assert.equal(match.turn.canPlayerAct(), true);
+
+    match.consumePlayerAction();
+    assert.equal(match.turn.playerActionsTaken, 2);
+    assert.equal(match.turn.canPlayerAct(), false);
 });
 
 test('GameMatch.checkVictoryConditions devuelve null sin condiciones cumplidas', () => {
@@ -152,6 +196,7 @@ test('GameMatch.useEssencePower ejecuta AGUA (Rescate) vía EssencePowerService'
     const match = makeMatch();
     match.startPlayerTurn();
     match.player.essences.activate(CARD_TYPES.AGUA);
+    giveGems(match.player, CARD_TYPES.AGUA, 1);
     match.player.addCardDataToGraveyard({ type: 'agua', level: 1 });
 
     const outcome = match.useEssencePower(CARD_TYPES.AGUA);
@@ -166,6 +211,7 @@ test('GameMatch.useEssencePower ejecuta SOMBRA (Robar) vía EssencePowerService'
     const match = makeMatch();
     match.startPlayerTurn();
     match.player.essences.activate(CARD_TYPES.SOMBRA);
+    giveGems(match.player, CARD_TYPES.SOMBRA, 2);
     match.opponent.hand.push(
         { id: 'fuego-1', type: 'fuego', level: 1, instanceId: 'h1' },
         { id: 'agua-3', type: 'agua', level: 3, instanceId: 'h2' }
@@ -176,6 +222,7 @@ test('GameMatch.useEssencePower ejecuta SOMBRA (Robar) vía EssencePowerService'
     assert.equal(outcome.ok, true);
     assert.equal(match.opponent.hand.length, 1);
     assert.equal(match.opponent.graveyard.length, 4);
+    assert.equal(match.player.gems.count(CARD_TYPES.SOMBRA), 0);
 });
 
 test('GameMatch usa el TurnManager inyectado en lugar de crearlo', () => {

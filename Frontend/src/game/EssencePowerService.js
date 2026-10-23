@@ -2,11 +2,13 @@ import { CARD_TYPES } from '../helpers/constants.js';
 import CardEntity from './CardEntity.js';
 
 /**
- * Catálogo y ejecución de poderes de esencia. Cada esencia activada desbloquea
- * un poder que el jugador puede usar UNA vez por turno propio (clic en el orbe).
- * Responsabilidad: reglas puras (qué poder existe, cuándo se puede usar y cómo
- * se ejecutan los efectos AGUA/SOMBRA sobre el estado del jugador). La
- * notificación a la UI queda fuera de este servicio.
+ * Catálogo de poderes de esencia. Cada esencia activada desbloquea un poder
+ * que el jugador puede usar desde su orbe. Cada poder define sus propias
+ * condiciones (esencia activa, Cementerio, mano rival, límite de usos por
+ * turno) y su propio coste en gemas del mismo elemento.
+ * Responsabilidad: reglas puras (qué poder existe, cuándo se puede usar, cuánto
+ * cuesta y cómo se ejecutan los efectos AGUA/SOMBRA sobre el estado del
+ * jugador). La notificación a la UI queda fuera de este servicio.
  * Sin dependencias de Phaser ni de la escena.
  */
 const POWERS = {
@@ -14,37 +16,49 @@ const POWERS = {
         name: 'Ráfaga',
         description: 'Tu próximo ataque en este turno también gana si el combate termina en empate.',
         needsGraveyard: false,
-        needsOpponentHand: false
+        needsOpponentHand: false,
+        gemCost: 1,
+        usesPerTurn: 1
     },
     [CARD_TYPES.AGUA]: {
         name: 'Rescate',
         description: 'Devuelve a tu mano la carta base (nivel 1) más reciente de tu cementerio.',
         needsGraveyard: true,
-        needsOpponentHand: false
+        needsOpponentHand: false,
+        gemCost: 1,
+        usesPerTurn: 1
     },
     [CARD_TYPES.PLANTA]: {
         name: 'Brotar',
         description: 'Roba 2 cartas de tu mazo.',
         needsGraveyard: false,
-        needsOpponentHand: false
+        needsOpponentHand: false,
+        gemCost: 2,
+        usesPerTurn: 1
     },
     [CARD_TYPES.LUZ]: {
         name: 'Clarividencia',
         description: 'Revelas la mano del rival (queda visible hasta que robe o juegue).',
         needsGraveyard: false,
-        needsOpponentHand: false
+        needsOpponentHand: false,
+        gemCost: 1,
+        usesPerTurn: 1
     },
     [CARD_TYPES.SOMBRA]: {
         name: 'Robar',
         description: 'El rival descarta la carta de mayor nivel de su mano (va a su cementerio).',
         needsGraveyard: false,
-        needsOpponentHand: true
+        needsOpponentHand: true,
+        gemCost: 2,
+        usesPerTurn: 1
     },
     [CARD_TYPES.ESPIRITU]: {
         name: 'Conducto',
         description: 'Bloquea la Convergencia del rival (victoria por 6 tipos) durante su próximo turno.',
         needsGraveyard: false,
-        needsOpponentHand: false
+        needsOpponentHand: false,
+        gemCost: 2,
+        usesPerTurn: 1
     }
 };
 
@@ -56,7 +70,7 @@ export default class EssencePowerService {
     /**
      * Devuelve la información de un poder elemental.
      * @param {string} type Tipo de esencia ('fuego', 'agua', ...).
-     * @returns {{name: string, description: string}|null}
+     * @returns {{name: string, description: string, gemCost: number, usesPerTurn: number}|null}
      */
     static getInfo(type) {
         return POWERS[type] || null;
@@ -67,25 +81,32 @@ export default class EssencePowerService {
      * @param {string} type Tipo de esencia.
      * @param {object} ctx
      * @param {boolean} ctx.isPlayerTurn - ¿Es el turno del jugador actual?
-     * @param {boolean} ctx.usedThisTurn - ¿Ya usó su poder de esencia este turno?
      * @param {boolean} ctx.essenceActive - ¿Está activa esa esencia?
      * @param {object[]} ctx.graveyard - Cementerio del jugador.
      * @param {object[]} ctx.opponentHand - Mano del rival.
-     * @returns {{ok: boolean, reason?: string, name?: string}}
+     * @param {number} [ctx.gemCount=0] - Gemas del elemento que posee el jugador.
+     * @param {number} [ctx.usesThisTurn=0] - Usos del poder en el turno actual.
+     * @returns {{ok: boolean, reason?: string, name?: string, gemCost?: number}}
      */
     static plan(type, ctx = {}) {
-        const { isPlayerTurn, usedThisTurn, essenceActive, graveyard = [], opponentHand = [] } = ctx;
-        if (!POWERS[type]) return { ok: false, reason: 'tipo-desconocido' };
-        if (!isPlayerTurn) return { ok: false, reason: 'es-tu-turno' };
-        if (usedThisTurn) return { ok: false, reason: 'poder-ya-usado' };
-        if (!essenceActive) return { ok: false, reason: 'esencia-inactiva' };
-        if (POWERS[type].needsGraveyard && graveyard.length === 0) {
-            return { ok: false, reason: 'sin-cementerio' };
+        const { isPlayerTurn, essenceActive, graveyard = [], opponentHand = [], gemCount = 0, usesThisTurn = 0 } = ctx;
+        const power = POWERS[type];
+        if (!power) return { ok: false, reason: 'tipo-desconocido' };
+        if (!isPlayerTurn) return { ok: false, reason: 'es-tu-turno', name: power.name, gemCost: power.gemCost };
+        if (!essenceActive) return { ok: false, reason: 'esencia-inactiva', name: power.name, gemCost: power.gemCost };
+        if (power.needsGraveyard && graveyard.length === 0) {
+            return { ok: false, reason: 'sin-cementerio', name: power.name, gemCost: power.gemCost };
         }
-        if (POWERS[type].needsOpponentHand && opponentHand.length === 0) {
-            return { ok: false, reason: 'rival-sin-mano' };
+        if (power.needsOpponentHand && opponentHand.length === 0) {
+            return { ok: false, reason: 'rival-sin-mano', name: power.name, gemCost: power.gemCost };
         }
-        return { ok: true, name: POWERS[type].name };
+        if (usesThisTurn >= power.usesPerTurn) {
+            return { ok: false, reason: 'poder-agotado', name: power.name, gemCost: power.gemCost };
+        }
+        if (gemCount < power.gemCost) {
+            return { ok: false, reason: 'sin-gemas', name: power.name, gemCost: power.gemCost };
+        }
+        return { ok: true, name: power.name, gemCost: power.gemCost, usesPerTurn: power.usesPerTurn };
     }
 
     /**

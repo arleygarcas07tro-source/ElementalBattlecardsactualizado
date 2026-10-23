@@ -1,6 +1,6 @@
 import { assertContract } from '../../core/assertContract.js';
 
-const METHODS = ['startPlayerTurn', 'startOpponentTurn', 'checkVictoryConditions', 'useEssencePower', 'resolvePlayerAttack', 'markPlayerAttackConsumed'];
+const METHODS = ['startPlayerTurn', 'startOpponentTurn', 'checkVictoryConditions', 'useEssencePower', 'resolvePlayerAttack', 'markPlayerAttackConsumed', 'consumePlayerAction'];
 
 /**
  * Contrato del motor de partida. La escena depende de esta abstracción para

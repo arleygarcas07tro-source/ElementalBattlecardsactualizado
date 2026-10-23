@@ -70,6 +70,8 @@ export default class TurnController {
         this.scene.events.emit('update-turn-indicator', 'player');
         // Emitimos el estado del contador obligatorio para que la UI lo muestre
         this.scene.events.emit('update-attack-counter', 'player', turn.playerTurnsSinceLastAttack + 1, turn.playerMustAttackThisTurn);
+        // El cupo de acciones se repone completo: lo no usado se pierde.
+        this.emitActionsLeft('player', turn.playerActionsLeft);
 
         // Procesar cooldowns y restricciones por nivel de las cartas del jugador
         interaction.preparePlayerFieldForTurn();
@@ -108,6 +110,9 @@ export default class TurnController {
         // Limpieza de restricciones de ataque por nivel al comenzar el turno (regla central en LevelAttackRule)
         interaction.prepareOpponentFieldForTurn();
 
+        // El cupo de acciones del rival se repone completo al empezar su turno.
+        this.emitActionsLeft('opponent', turn.opponentActionsLeft);
+
         // MODO LAN: no ejecutar IA, solo esperar acciones del oponente remoto
         if (this.ctx.isLAN) {
             console.log('[GameScene] Inicio del turno del OPONENTE (LAN) - esperando acción remota', { turnNumber: turn.opponentTurnNumber });
@@ -136,14 +141,56 @@ export default class TurnController {
 
     // Helper cuando se queda sin tiempo
     _playerTimedOut() {
-        console.log('[GameScene] Tiempo agotado: el jugador no actuó en el turno', { turnNumber: this.ctx.turn.playerTurnNumber });
+        console.log('[GameScene] Tiempo agotado: el turno termina y las acciones sin usar se pierden', {
+            turnNumber: this.ctx.turn.playerTurnNumber,
+            actionsLeft: this.ctx.turn.playerActionsLeft
+        });
         // Si estaba obligado a atacar y tenía cartas, se considera que NO atacó:
         // endPlayerTurn() aumentará su contador de turnos sin atacar (no lo reiniciamos).
         this.endPlayerTurn();
     }
 
     /**
-     * Finaliza el turno del jugador, ya sea por tiempo o por acción voluntaria.
+     * Indica si el jugador puede gastar una acción ahora mismo: es su turno,
+     * le queda cupo de acciones y no hay animaciones bloqueantes en curso.
+     * @returns {boolean}
+     */
+    canPlayerActNow() {
+        const { turn } = this.ctx;
+        if (turn.state !== 'player-turn') return false;
+        if (turn.blockingAnimations > 0) return false;
+        return turn.canPlayerAct();
+    }
+
+    /**
+     * Notifica a la UI cuántas acciones quedan disponibles.
+     * @param {'player'|'opponent'} owner Dueño del turno.
+     * @param {number} remaining Acciones restantes.
+     */
+    emitActionsLeft(owner, remaining) {
+        this.scene.events.emit('update-actions-left', owner, remaining, GAME_CONFIG.ACTIONS_PER_TURN);
+    }
+
+    /**
+     * Cierre de una acción del jugador (ataque, colocación o fusión).
+     * La acción ya fue consumida en el dominio: aquí solo se informa a la UI
+     * y, si no queda cupo, se termina el turno. Si hay animaciones bloqueantes
+     * el fin de turno queda pendiente y se resuelve en animationComplete().
+     * @returns {number} Acciones que quedan disponibles en el turno.
+     */
+    afterPlayerAction() {
+        const { turn } = this.ctx;
+        const remaining = turn.playerActionsLeft;
+        this.emitActionsLeft('player', remaining);
+        if (remaining <= 0) {
+            console.log('[GameScene] Cuota de acciones agotada: el turno del JUGADOR termina');
+            this.endPlayerTurn();
+        }
+        return remaining;
+    }
+
+    /**
+     * Finaliza el turno del jugador, ya sea por tiempo o por cuota de acciones agotada.
      * @param {boolean} [forcedAttackSkip=false] Si el turno se salta por obligación de atacar sin cartas.
      */
     endPlayerTurn(forcedAttackSkip = false) {
@@ -152,7 +199,12 @@ export default class TurnController {
         // Si hay animaciones en curso, solo marcamos el cambio de turno como pendiente.
         if (!turn.requestTurnEnd('opponent')) return;
 
-        console.log('[GameScene] Fin del turno del JUGADOR', { playerHasActed: turn.playerHasActed, performedAttack: turn.playerPerformedAttackThisTurn, turnNumber: turn.playerTurnNumber });
+        console.log('[GameScene] Fin del turno del JUGADOR', {
+            actionsTaken: turn.playerActionsTaken,
+            actionsUnused: turn.playerActionsLeft,
+            performedAttack: turn.playerPerformedAttackThisTurn,
+            turnNumber: turn.playerTurnNumber
+        });
 
         if (this.turnTimer) this.turnTimer.destroy();
         // Comprobamos inactividad y actualizamos contadores de ataque
@@ -164,6 +216,8 @@ export default class TurnController {
         }
         // Notificamos el contador a la UI
         this.scene.events.emit('update-attack-counter', 'player', turn.playerTurnsSinceLastAttack + 1, turn.playerMustAttackThisTurn);
+        // Las acciones sin usar se pierden: el siguiente turno repone el cupo.
+        this.emitActionsLeft('player', 0);
 
         // Deseleccionamos cualquier carta
         interaction.deselectCard(false);
@@ -189,18 +243,21 @@ export default class TurnController {
 
     /**
      * Finaliza el turno del oponente y devuelve el control al jugador, comprobando victoria.
-     * @param {boolean} [opponentActed=false] - Si el oponente realizó alguna acción.
+     * @param {boolean|null} [opponentActed=null] - Si el oponente realizó alguna acción.
+     *   Por defecto se deduce del contador de acciones consumidas.
      */
-    endOpponentTurn(opponentActed = false) {
+    endOpponentTurn(opponentActed = null) {
         const { turn } = this.ctx;
         if (turn.state !== 'opponent-turn') return;
 
+        const acted = opponentActed === null ? turn.opponentHasActed : opponentActed;
         // Comprobamos inactividad del oponente y actualizamos contadores de ataque
-        const turnReport = turn.finishOpponentTurn(opponentActed);
-        if (!opponentActed) {
+        const turnReport = turn.finishOpponentTurn(acted);
+        if (!acted) {
             console.log('[GameScene] Oponente inactivo', { inactiveTurns: turnReport.inactiveTurns });
         }
         this.scene.events.emit('update-attack-counter', 'opponent', turn.opponentTurnsSinceLastAttack + 1, turn.opponentMustAttackThisTurn);
+        this.emitActionsLeft('opponent', 0);
 
         // Comprobamos condiciones de victoria
         const winner = this.checkVictoryConditions();
@@ -248,13 +305,22 @@ export default class TurnController {
      * Ejecuta el poder de esencia solicitado por la UIScene (clic en un orbe
      * propio activo). Validación y efectos delegados en GameMatch (dominio);
      * la escena solo refresca la vista según el resultado.
+     * Los poderes no gastan acciones del turno: gastan las gemas de su coste.
      * @param {string} essenceType Tipo de esencia ('fuego', 'agua', ...).
      */
     useEssencePower(essenceType) {
         const { match, player, opponent, renderer } = this.ctx;
         // El motor valida y aplica el efecto sobre el dominio; la escena refresca la vista.
         const outcome = match.useEssencePower(essenceType);
-        if (!outcome || !outcome.ok) return;
+        if (!outcome) return;
+        if (!outcome.ok) {
+            // La UI explica por qué no se pudo activar (gemas, esencia, límite de usos).
+            this.scene.events.emit('essence-power-failed', essenceType, outcome.reason, {
+                name: outcome.name,
+                gemCost: outcome.gemCost
+            });
+            return;
+        }
 
         const changed = outcome.changed || [];
         if (changed.includes('player-hand')) renderer.refreshPlayerHand(player.hand);
@@ -262,7 +328,7 @@ export default class TurnController {
         if (changed.includes('deck')) renderer.updateDeckCounts(player.deck.getCardsCount(), opponent.deck.getCardsCount());
         if (changed.includes('reveal-opponent-hand')) renderer.revealOpponentHandForTurn();
 
-        console.log('[GameScene] Poder de esencia usado:', outcome.name, 'de', essenceType);
+        console.log('[GameScene] Poder de esencia usado:', outcome.name, 'de', essenceType, { gemCost: outcome.gemCost });
     }
 
     /**

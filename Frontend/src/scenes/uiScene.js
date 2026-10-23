@@ -1,8 +1,19 @@
 ﻿import Phaser from 'phaser';
 import { createGemVisual, ELEMENT_ORDER } from '../helpers/gemVisual.js';
 import { drawOrnatePanel, ornateLabel } from '../helpers/battlefieldArt.js';
+import { GAME_CONFIG } from '../helpers/constants.js';
 
 const ELEMENTS = ELEMENT_ORDER;
+
+// Nombre legible de cada elemento para los avisos de la interfaz.
+const ELEMENT_LABELS = {
+    fuego: 'Fuego',
+    agua: 'Agua',
+    planta: 'Planta',
+    luz: 'Luz',
+    sombra: 'Sombra',
+    esperitu: 'Espiritu'
+};
 
 const COLORS = {
     gold: 0xcfaf6d,
@@ -28,6 +39,8 @@ export default class UIScene extends Phaser.Scene {
         this.gemShelves = {};
         this.gemTotals = {};
         this.profileTexts = { player: null, opponent: null };
+        // Contador de acciones disponibles por turno (HUD).
+        this.actionsTexts = {};
         // Estado previo de convergencia para emitir avisos solo cuando cambia.
         this.lastPlayerConvergence = false;
         this.lastOpponentConvergence = false;
@@ -86,14 +99,16 @@ export default class UIScene extends Phaser.Scene {
         this.gameScene.events.on('update-match-timer', this.updateMatchTimer, this);
         this.gameScene.events.on('update-turn-indicator', this.handleTurnIndicator, this);
         this.gameScene.events.on('essence-power-used', this.handleEssencePowerUsed, this);
+        this.gameScene.events.on('essence-power-failed', this.handleEssencePowerFailed, this);
+        this.gameScene.events.on('gems-spent', this.handleGemsSpent, this);
+        this.gameScene.events.on('update-actions-left', this.handleActionsLeft, this);
         this.gameScene.events.on('convergence-status', this.handleConvergenceStatus, this);
 
         this.scene.get('GameScene').events.on('update-attack-counter', (owner, turnIndex, mustAttack) => {
             const textObj = this.attackCounterTexts && this.attackCounterTexts[owner];
             if (!textObj) return;
-            const label = owner === 'player' ? `${this.username}` : (this.gameScene && this.gameScene.vsBot ? 'Bot' : 'Rival');
-            const obliged = mustAttack ? '  Â·  Â¡OBLIGADO!' : '';
-            textObj.setText(`${label}: turno de ataque ${turnIndex}${obliged}`);
+            const obliged = mustAttack ? '  \u00b7  \u00a1OBLIGADO!' : '';
+            textObj.setText(`ATAQUE ${turnIndex}${obliged}`);
             textObj.setColor(mustAttack ? '#ff6b6b' : '#d7e6ff');
         });
 
@@ -108,6 +123,9 @@ export default class UIScene extends Phaser.Scene {
                 this.gameScene.events.off('update-match-timer', this.updateMatchTimer, this);
                 this.gameScene.events.off('update-turn-indicator', this.handleTurnIndicator, this);
                 this.gameScene.events.off('essence-power-used', this.handleEssencePowerUsed, this);
+                this.gameScene.events.off('essence-power-failed', this.handleEssencePowerFailed, this);
+                this.gameScene.events.off('gems-spent', this.handleGemsSpent, this);
+                this.gameScene.events.off('update-actions-left', this.handleActionsLeft, this);
                 this.gameScene.events.off('convergence-status', this.handleConvergenceStatus, this);
                 // Nos aseguramos de eliminar también el listener del contador de ataque
                 // para evitar que la UI de una partida anterior reaccione a eventos de una nueva.
@@ -186,15 +204,24 @@ export default class UIScene extends Phaser.Scene {
         const hand = mkStat('MANO', baseX + colW * 1.5);
         const field = mkStat('CAMPO', baseX + colW * 2.5);
 
-        const attackText = this.add.text(x + w / 2, y + h - 12, '', {
+        const attackText = this.add.text(x + w - 20, y + h - 12, '', {
             fontFamily: 'Arial', fontSize: '12px', fontStyle: 'bold',
             color: '#d7e6ff', stroke: '#000', strokeThickness: 3
-        }).setOrigin(0.5, 1).setDepth(5);
+        }).setOrigin(1, 1).setDepth(5);
 
         if (!this.attackCounterTexts) this.attackCounterTexts = {};
         this.attackCounterTexts[owner] = attackText;
 
-        return { panel, title, role, deck, hand, field, attackText };
+        // Contador de acciones disponibles del turno (atacar, colocar, fusionar).
+        const actionsText = this.add.text(x + 20, y + h - 12, '', {
+            fontFamily: 'Arial', fontSize: '12px', fontStyle: 'bold',
+            color: '#8fd4ff', stroke: '#000', strokeThickness: 3
+        }).setOrigin(0, 1).setDepth(5);
+
+        if (!this.actionsTexts) this.actionsTexts = {};
+        this.actionsTexts[owner] = actionsText;
+
+        return { panel, title, role, deck, hand, field, attackText, actionsText };
     }
 
     /** Refresca los valores de los perfiles desde el modelo real de la partida. */
@@ -626,7 +653,27 @@ export default class UIScene extends Phaser.Scene {
         buildShelf('player', 165, height / 2);
         buildShelf('opponent', width - 165, height / 2);
 
-        this.setGemPanelsVisible(false);
+        // La estanteria del jugador siempre visible: sus gemas pagan los poderes
+        // de esencia. La del rival solo aparece en modos con objetivo de gemas.
+        this.setGemPanelVisible('player', true);
+        this.setGemPanelVisible('opponent', false);
+        this.refreshGemCounts();
+    }
+
+    /**
+     * Vuelca en la interfaz los contadores de gemas reales de ambos jugadores.
+     */
+    refreshGemCounts() {
+        const gs = this.gameScene;
+        if (!gs) return;
+        const player = gs.player;
+        const opponent = gs.opponent;
+        if (player && player.gems && typeof player.gems.progress === 'function') {
+            this.renderGems('player', player.gems.progress());
+        }
+        if (opponent && opponent.gems && typeof opponent.gems.progress === 'function') {
+            this.renderGems('opponent', opponent.gems.progress());
+        }
     }
 
     renderGems(ownerId, progress) {
@@ -645,7 +692,8 @@ export default class UIScene extends Phaser.Scene {
             const filled = p.need > 0 && p.have >= p.need;
 
             slot.gem.setFilled(filled);
-            slot.count.setText(`${p.have}/${p.need}`);
+            // Sin requisitos de objetivo solo se muestra lo que se tiene.
+            slot.count.setText(p.need > 0 ? `${p.have}/${p.need}` : `${p.have}`);
             slot.count.setColor(filled ? '#7CFC00' : '#ffffff');
 
             totalHave += p.have;
@@ -655,7 +703,7 @@ export default class UIScene extends Phaser.Scene {
         });
 
         if (this.gemTotals[ownerId]) {
-            this.gemTotals[ownerId].setText(`${totalHave} / ${totalNeed}`);
+            this.gemTotals[ownerId].setText(totalNeed > 0 ? `${totalHave} / ${totalNeed}` : `${totalHave}`);
         }
 
         const shelf = this.gemShelves[ownerId];
@@ -673,7 +721,10 @@ export default class UIScene extends Phaser.Scene {
     handleObjectivesReady(payload) {
         if (!payload) return;
         const usesGems = !!(payload.mode && payload.mode.usesGems);
-        this.setGemPanelsVisible(usesGems);
+        // Las gemas del jugador siempre son visibles: son el coste de los
+        // poderes de esencia. Las del rival, solo en modos con objetivo de gemas.
+        this.setGemPanelVisible('player', true);
+        this.setGemPanelVisible('opponent', usesGems);
         this.renderGems('player', payload.player);
         this.renderGems('opponent', payload.opponent);
         this.updateObjectiveText(payload);
@@ -703,19 +754,29 @@ export default class UIScene extends Phaser.Scene {
 
     setGemPanelsVisible(visible) {
         ['player', 'opponent'].forEach((ownerId) => {
-            const shelf = this.gemShelves[ownerId];
-            if (shelf) {
-                if (shelf.bg) shelf.bg.setVisible(visible);
-                if (shelf.title) shelf.title.setVisible(visible);
-                if (shelf.bar) shelf.bar.setAlpha(visible ? 1 : 0);
-            }
-            if (this.gemTotals[ownerId]) this.gemTotals[ownerId].setVisible(visible);            const row = this.gemIcons[ownerId] || {};
-            ELEMENTS.forEach((type) => {
-                const slot = row[type];
-                if (!slot) return;
-                if (slot.gem) slot.gem.setVisible(visible);
-                if (slot.count) slot.count.setVisible(visible);
-            });
+            this.setGemPanelVisible(ownerId, visible);
+        });
+    }
+
+    /**
+     * Muestra u oculta la estanteria de gemas de un jugador.
+     * @param {'player'|'opponent'} ownerId
+     * @param {boolean} visible
+     */
+    setGemPanelVisible(ownerId, visible) {
+        const shelf = this.gemShelves[ownerId];
+        if (shelf) {
+            if (shelf.bg) shelf.bg.setVisible(visible);
+            if (shelf.title) shelf.title.setVisible(visible);
+            if (shelf.bar) shelf.bar.setAlpha(visible ? 1 : 0);
+        }
+        if (this.gemTotals[ownerId]) this.gemTotals[ownerId].setVisible(visible);
+        const row = this.gemIcons[ownerId] || {};
+        ELEMENTS.forEach((type) => {
+            const slot = row[type];
+            if (!slot) return;
+            if (slot.gem) slot.gem.setVisible(visible);
+            if (slot.count) slot.count.setVisible(visible);
         });
     }
 
@@ -935,6 +996,72 @@ export default class UIScene extends Phaser.Scene {
             this.showToast('CONVERGENCIA: protege tus 6 tipos hasta tu prÃ³ximo turno', 4000);
         } else if (opponentArmed && opponentChanged) {
             this.showToast('Â¡El rival sellÃ³ su Convergencia! Destruye uno de sus tipos', 4000);
+        }
+    }
+
+    /**
+     * Manejador del evento 'update-actions-left'. Muestra el cupo de acciones
+     * que le queda a cada jugador en su turno.
+     * @param {'player'|'opponent'} owner Dueño del turno.
+     * @param {number} remaining Acciones disponibles.
+     * @param {number} max Cupo total del turno.
+     */
+    handleActionsLeft(owner, remaining, max) {
+        const textObj = this.actionsTexts && this.actionsTexts[owner];
+        if (!textObj) return;
+        const total = max || GAME_CONFIG.ACTIONS_PER_TURN;
+        textObj.setText(`ACCIONES ${remaining}/${total}`);
+        textObj.setColor(remaining > 0 ? '#8fd4ff' : '#ff6b6b');
+    }
+
+    /**
+     * Manejador del evento 'gems-spent'. Refresca el contador de gemas tras
+     * pagar el coste de un poder de esencia.
+     * @param {{ownerId: string, type: string, progress: object}} info
+     */
+    handleGemsSpent(info) {
+        if (!info) return;
+        this.renderGems(info.ownerId, info.progress);
+    }
+
+    /**
+     * Manejador del evento 'essence-power-failed'. Explica por que no se pudo
+     * activar el poder (gemas insuficientes, essence inactive, already used).
+     * @param {string} essenceType Tipo de esencia.
+     * @param {string} reason Codigo del rechazo.
+     * @param {{name?: string, gemCost?: number}} [info]
+     */
+    handleEssencePowerFailed(essenceType, reason, info = {}) {
+        const label = this.describePowerFailure(essenceType, reason, info);
+        console.log('[UIScene] Poder de esencia no disponible', { essenceType, reason });
+        this.showToast(label, 2400);
+    }
+
+    /**
+     * Traduce el rechazo de un poder de esencia a un mensaje para el jugador.
+     * @param {string} essenceType Tipo de esencia.
+     * @param {string} reason Codigo del rechazo.
+     * @param {{name?: string, gemCost?: number}} info
+     * @returns {string}
+     */
+    describePowerFailure(essenceType, reason, info = {}) {
+        const element = ELEMENT_LABELS[essenceType] || essenceType;
+        const powerName = info.name || 'Ese poder';
+        switch (reason) {
+            case 'sin-gemas':
+                return `Necesitas ${info.gemCost || 1} gemas de ${element} para ${powerName}`;
+            case 'poder-agotado':
+                return `${powerName} ya se uso este turno`;
+            case 'esencia-inactiva':
+                return `La esencia de ${element} no esta activa`;
+            case 'sin-cementerio':
+                return `${powerName} necesita una carta en tu cementerio`;
+            case 'rival-sin-mano':
+                return `${powerName} necesita que el rival tenga cartas en la mano`;
+            case 'es-tu-turno':
+                return 'Solo puedes usar poderes en tu turno';
+            default:
+                return `No puedes usar ${powerName} ahora`;
         }
     }
 

@@ -17,10 +17,12 @@ function card(type, level = 1) {
 
 const baseCtx = {
     isPlayerTurn: true,
-    usedThisTurn: false,
     essenceActive: true,
     graveyard: [{ id: 'fuego-1' }],
-    opponentHand: [{ id: 'agua-1' }]
+    opponentHand: [{ id: 'agua-1' }],
+    // Gemas del elemento: los poderes se pagan con gemas.
+    gemCount: 3,
+    usesThisTurn: 0
 };
 
 test('EssencePowerService: plan rechaza un tipo desconocido', () => {
@@ -37,11 +39,19 @@ test('EssencePowerService: plan rechaza fuera del turno del jugador', () => {
     assert.equal(r.reason, 'es-tu-turno');
 });
 
-test('EssencePowerService: plan rechaza si ya se usó el poder este turno', () => {
-    const r = EssencePowerService.plan(CARD_TYPES.FUEGO, { ...baseCtx, usedThisTurn: true });
+test('EssencePowerService: plan rechaza si ya se agotó el poder este turno', () => {
+    const r = EssencePowerService.plan(CARD_TYPES.FUEGO, { ...baseCtx, usesThisTurn: 1 });
 
     assert.equal(r.ok, false);
-    assert.equal(r.reason, 'poder-ya-usado');
+    assert.equal(r.reason, 'poder-agotado');
+});
+
+test('EssencePowerService: plan rechaza sin gemas suficientes', () => {
+    const r = EssencePowerService.plan(CARD_TYPES.FUEGO, { ...baseCtx, gemCount: 0 });
+
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, 'sin-gemas');
+    assert.equal(r.gemCost, 1);
 });
 
 test('EssencePowerService: plan rechaza una esencia inactiva', () => {
@@ -70,6 +80,7 @@ test('EssencePowerService: plan acepta un poder válido', () => {
 
     assert.equal(r.ok, true);
     assert.equal(r.name, 'Ráfaga');
+    assert.equal(r.gemCost, 1);
 });
 
 test('EssencePowerService: getInfo devuelve null para tipos desconocidos', () => {

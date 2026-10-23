@@ -20,10 +20,12 @@ export default class GameComposer {
      * Construye el motor de partida y valida IGameMatch.
      * @param {object} deps
      * @param {object} deps.config Configuración de partida (GAME_CONFIG).
+     * @param {Function} [deps.onGemGained] Aviso de gema obtenida:
+     *   (ownerId, type, progress).
      * @returns {GameMatch}
      */
-    static createMatch({ config }) {
-        const match = new GameMatch({ config, turn: new TurnManager(config) });
+    static createMatch({ config, onGemGained = null }) {
+        const match = new GameMatch({ config, turn: new TurnManager(config), onGemGained });
         IGameMatch.assert(match);
         return match;
     }

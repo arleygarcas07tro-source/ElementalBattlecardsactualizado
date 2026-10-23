@@ -166,7 +166,8 @@ export default class RemoteEffectApplier {
                     ease: 'Power1',
                     onComplete: () => {
                         if (effect.isOpponentAction) {
-                            turn.opponentHasActed = true;
+                            // El ataque remoto consume una acción del turno del rival.
+                            turn.consumeOpponentAction();
                             turn.opponentPerformedAttackThisTurn = true;
                         }
                     }

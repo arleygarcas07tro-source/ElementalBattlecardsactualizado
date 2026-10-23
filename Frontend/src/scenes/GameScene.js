@@ -155,7 +155,11 @@ export default class GameScene extends Phaser.Scene {
 
         // Reset / inicializaciÃ³n por si la escena se reutiliza entre partidas.
         // El motor de partida se construye en el composition root (GameComposer).
-        this.match = GameComposer.createMatch({ config: GAME_CONFIG });
+        this.match = GameComposer.createMatch({
+            config: GAME_CONFIG,
+            // Aviso de gema obtenida: la escena solo reenvÃ­a el evento a la UI.
+            onGemGained: (ownerId, type, progress) => this.events.emit('gem-collected', ownerId, type, progress)
+        });
         this.player = this.match.player;
         this.opponent = this.match.opponent;
         this.turn = this.match.turn;
@@ -203,6 +207,7 @@ export default class GameScene extends Phaser.Scene {
         this.match.events.on('essence-activated', (ownerId, essenceType) => this.events.emit('essence-activated', ownerId, essenceType));
         this.match.events.on('convergence-status', (state) => this.events.emit('convergence-status', state));
         this.match.events.on('essence-power-used', (info) => this.events.emit('essence-power-used', info.essenceType, info.name));
+        this.match.events.on('gems-spent', (info) => this.events.emit('gems-spent', info));
 
         // Poderes de esencia: la UIScene emite la solicitud al hacer clic en un
         // orbe propio. La validaciÃ³n de dominio vive en GameMatch.
@@ -255,29 +260,10 @@ export default class GameScene extends Phaser.Scene {
             if (card && card.type) recordCollectedCard(username, card.type, card.level);
         });
 
-        // Fondo centrado
-        this.board = this.add.video(width / 2, height / 2, 'campo-video')
-            .setOrigin(0.5);
-
-        // Enviamos el tablero al fondo de la lista de renderizado.
-        this.board.setDepth(-1);
-
-        // Bucle continuo: al crearse el elemento, se fuerza que repita al terminar.
-        this.board.once('created', (videoEl) => {
-            videoEl.loop = true;
-            videoEl.muted = true;
-        });
-
-        // El video necesita un momento para cargar sus metadatos (dimensiones).
-        // Usamos el evento 'play' para asegurarnos de que tenemos el tamaÃ±o correcto antes de escalar.
-        this.board.on('play', () => {
-            // Escalar para cubrir todo el canvas manteniendo la proporciÃ³n (cover).
-            const scaleX = width / this.board.width;
-            const scaleY = height / this.board.height;
-            const scale = Math.max(scaleX, scaleY);
-            this.board.setScale(scale);
-        });
-        this.board.play(true); // Reproducir en bucle
+        // Sin fondo de video - campo minimalista
+        this.add.rectangle(width / 2, height / 2, width, height, 0x05060d).setDepth(-3);
+        this.add.rectangle(width / 2, height / 2, width, height, 0x03040a, 0.08).setDepth(-2);
+        this.board = null;
 
         // DecoraciÃ³n visual del campo (emblema dorado, marcos, runas y energÃ­a).
         // Se crea bajo los slots/cartas para no interferir con la jugabilidad.
@@ -311,10 +297,12 @@ export default class GameScene extends Phaser.Scene {
         // Avisar a la UI que la escena se creÃ³ exitosamente
         this.events.emit('board-ready');
 
-        // --- LÃ³gica de Clic para Deseleccionar ---
-        // Si hacemos clic en el tablero, deseleccionamos cualquier carta.
-        this.board.setInteractive();
-        this.board.on('pointerdown', () => this.ctx.interaction.deselectCard());
+        // Ya no hay tablero de video, usar click en escena para deseleccionar
+        this.input.on('pointerdown', (pointer, gameObjects) => {
+            if (gameObjects.length === 0) {
+                this.ctx.interaction.deselectCard();
+            }
+        });
 
 
         // --- LÃ³gica de Inicio de Partida ---

@@ -15,10 +15,14 @@ export default class Player {
      * @param {string} id El identificador del jugador ('player' u 'opponent').
      * @param {object} [opts]
      * @param {object} [opts.scene] Escena opcional (solo para logs de sync).
+     * @param {Function} [opts.onGemGained] Aviso de gema obtenida:
+     *   (ownerId, type, progress).
      */
-    constructor(id, { scene = null } = {}) {
+    constructor(id, { scene = null, onGemGained = null } = {}) {
         this.id = id;
         this.scene = scene;
+        /** @type {Function|null} */
+        this.onGemGained = onGemGained;
 
         this.deck = new Deck(id);
         this.essences = new EssenceManager();
@@ -95,6 +99,8 @@ export default class Player {
             const cardToPlay = this.hand.splice(cardIndex, 1)[0]; // Saca la carta de la mano
 
             this.field.set(fieldIndex, cardToPlay); // Coloca la nueva instancia en el campo
+            // Regla de gemas: una carta base (nivel 1) no aporta gema.
+            this.registerGem(cardToPlay);
             if (this.scene && this.scene.debugSync) console.log(`[Player][debug] Carta movida al slot`, { player: this.id, instanceId: cardToPlay.instanceId, fieldIndex, resultingField: this.field.snapshot().map(f=>f&&f.instanceId) });
             console.log(`[Player] Carta con instanceId ${instanceId} movida al slot ${fieldIndex} del campo.`);
             return cardToPlay;
@@ -149,6 +155,8 @@ export default class Player {
         // El slot de la carta arrastrada se vacía.
         this.field.set(targetIndex, newCardInstance);
         this.field.clearAt(draggedIndex);
+        // Regla de gemas: la carta fusionada aporta una gema de su elemento.
+        this.registerGem(newCardInstance);
 
         if (this.scene && this.scene.debugSync) console.log('[Player][debug] fuseCards result', { newCardInstance: newCardInstance.instanceId, targetIndex, emptiedIndex: draggedIndex, fieldAfter: this.field.snapshot().map(f=>f&&f.instanceId) });
         console.log(`Modelo actualizado: Carta ${newCardInstance.id} (Nivel ${newCardInstance.level}) creada en el slot ${targetIndex}`);
@@ -187,6 +195,8 @@ export default class Player {
 
         // Reemplazamos la carta en el campo con la nueva carta fusionada
         this.field.set(targetIndex, newCardInstance);
+        // Regla de gemas: la carta fusionada aporta una gema de su elemento.
+        this.registerGem(newCardInstance);
         if (this.scene && this.scene.debugSync) console.log('[Player][debug] fuseFromHand result', { newCardInstance: newCardInstance.instanceId, targetIndex, fieldAfter: this.field.snapshot().map(f=>f&&f.instanceId) });
         return newCardInstance;
     }
@@ -209,18 +219,20 @@ export default class Player {
     }
 
     /**
-     * Registra una carta de nivel 3 en el gestor de gemas. Si la carta aún no
-     * había entregado su gema, notifica a la escena para que actualice la UI.
-     * Regla: cada carta de nivel 3 genera como máximo una gema.
+     * Registra una carta que entra en el campo en el gestor de gemas. Si la
+     * carta aún no había entregado su gema, notifica al observador para que
+     * actualice la UI.
+     * Regla: cada carta fusionada (nivel 2 o 3) genera como máximo una gema
+     * de su elemento.
      * @param {{level: number, type: string, instanceId?: string}} cardData
      * @returns {string|null} El elemento de la gema obtenida o null.
      */
     registerGem(cardData) {
-        const type = this.gems.registerLevel3Card(cardData);
+        const type = this.gems.registerFieldCard(cardData);
         if (!type) return null;
         console.log('[Player] Gema obtenida', { playerId: this.id, type, total: this.gems.count(type) });
-        if (this.scene && this.scene.events) {
-            this.scene.events.emit('gem-collected', this.id, type, this.gems.progress());
+        if (typeof this.onGemGained === 'function') {
+            this.onGemGained(this.id, type, this.gems.progress());
         }
         return type;
     }

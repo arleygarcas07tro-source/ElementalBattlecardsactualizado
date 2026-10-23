@@ -45,10 +45,10 @@ export default class BoardRenderer {
         const H = this.scene.scale.height;
         const CX = W / 2;
         const CY = H / 2;
-        const GOLD = 0xcfaf6d;
-        const GOLD_BRIGHT = 0xe8cf8f;
-        const ORANGE = 0xff9a5c;
-        const BLUE = 0x5bc0ff;
+        const GOLD = 0xd9b75b;
+        const GOLD_BRIGHT = 0xf5d98c;
+        const ORANGE = 0xff7a3d;
+        const BLUE = 0x4fb3ff;
 
         const container = this.scene.add.container(0, 0).setDepth(-0.4);
         this.scene.fieldDecor = container;
@@ -60,95 +60,84 @@ export default class BoardRenderer {
             new Phaser.Geom.Point(x - r, y)
         ];
 
-        // Viñeta oscura suave para mejorar la legibilidad sobre el video.
-        container.add(this.scene.add.rectangle(CX, CY, W, H, 0x04060f, 0.14));
+        // Viñeta oscura más limpia
+        container.add(this.scene.add.rectangle(CX, CY, W, H, 0x050510, 0.12));
 
-        // ---- Franjas de energía ----
+        // Banda central sutil
+        const centerBand = this.scene.add.graphics();
+        centerBand.fillStyle(0x151826, 0.18).fillRoundedRect(CX - W * 0.42, CY - 26, W * 0.84, 52, 26);
+        centerBand.lineStyle(2, GOLD, 0.28).strokeRoundedRect(CX - W * 0.42, CY - 26, W * 0.84, 52, 26);
+        container.add(centerBand);
+
+        // Líneas de campo minimalistas
+        const lineG = this.scene.add.graphics();
+        lineG.lineStyle(2, GOLD, 0.16).lineBetween(CX - W * 0.38, CY, CX + W * 0.38, CY);
+        lineG.lineStyle(1, GOLD, 0.12).strokeCircle(CX, CY, 52);
+        lineG.lineStyle(1, GOLD, 0.1).strokeCircle(CX, CY, 92);
+        container.add(lineG);
+
+        // Franjas de energía más sutiles
         const beam = (y, color) => {
             const g = this.scene.add.graphics();
-            g.fillStyle(color, 0.04).fillRect(0, y - 62, W, 124);
-            g.fillStyle(color, 0.07).fillRect(0, y - 30, W, 60);
-            g.lineStyle(2, color, 0.30).lineBetween(0, y, W, y);
-            g.lineStyle(2, color, 0.14).lineBetween(0, y - 24, W, y - 24);
-            g.lineStyle(2, color, 0.14).lineBetween(0, y + 24, W, y + 24);
+            g.fillStyle(color, 0.05).fillRect(0, y - 48, W, 96);
+            g.fillStyle(color, 0.08).fillRect(0, y - 22, W, 44);
+            g.lineStyle(2, color, 0.26).lineBetween(0, y, W, y);
             return g;
         };
-        const opponentFieldY = H * 0.45 - 70;
-        const playerFieldY = H * 0.55 + 70;
+        const opponentFieldY = H * 0.45 - 72;
+        const playerFieldY = H * 0.55 + 72;
         container.add(beam(opponentFieldY, ORANGE));
         container.add(beam(playerFieldY, BLUE));
 
-        // ---- Emblema central dorado ----
+        // Emblema central más compacto
         const emblem = this.scene.add.graphics();
-        emblem.lineStyle(2, GOLD, 0.26).strokeCircle(CX, CY, 118);
-        emblem.lineStyle(2, GOLD, 0.38).strokeCircle(CX, CY, 86);
+        emblem.lineStyle(1, GOLD, 0.24).strokeCircle(CX, CY, 64);
         emblem.save().translateCanvas(CX, CY).rotateCanvas(Math.PI / 4);
-        emblem.lineStyle(2, GOLD, 0.40).strokeRect(-70, -70, 140, 140);
-        emblem.lineStyle(3, GOLD_BRIGHT, 0.60).strokeRect(-44, -44, 88, 88);
-        emblem.fillStyle(GOLD, 0.10).fillRect(-44, -44, 88, 88);
+        emblem.lineStyle(2, GOLD, 0.38).strokeRect(-36, -36, 72, 72);
+        emblem.lineStyle(2, GOLD_BRIGHT, 0.5).strokeRect(-24, -24, 48, 48);
+        emblem.fillStyle(GOLD, 0.08).fillRect(-24, -24, 48, 48);
         emblem.restore();
-        for (let a = 0; a < 8; a++) {
-            const ang = a * Math.PI / 4;
-            emblem.lineStyle(2, GOLD, 0.24)
-                .lineBetween(CX + Math.cos(ang) * 88, CY + Math.sin(ang) * 88,
-                             CX + Math.cos(ang) * 100, CY + Math.sin(ang) * 100);
-        }
-        emblem.fillStyle(GOLD, 0.12).fillCircle(CX, CY, 30);
-        emblem.fillStyle(GOLD_BRIGHT, 0.9).fillCircle(CX, CY, 5);
+        emblem.fillStyle(GOLD, 0.16).fillCircle(CX, CY, 14);
+        emblem.fillStyle(GOLD_BRIGHT, 0.9).fillCircle(CX, CY, 4);
         container.add(emblem);
 
-        // ---- Marcos dorados alrededor de las filas de batalla ----
+        // Marcos más limpios
         const frameRow = (yCenter) => {
-            const positions = calculateRowPositions({ numItems: 6, itemWidth: 110, itemSpacing: 35, containerWidth: W });
-            const left = Math.min(...positions) - 82;
-            const right = Math.max(...positions) + 82;
-            const top = yCenter - 78;
-            const height = 156;
+            const positions = calculateRowPositions({ numItems: 6, itemWidth: 118, itemSpacing: 38, containerWidth: W });
+            const left = Math.min(...positions) - 86;
+            const right = Math.max(...positions) + 86;
+            const top = yCenter - 72;
+            const height = 144;
             const g = this.scene.add.graphics();
-            g.lineStyle(2, GOLD, 0.28).strokeRoundedRect(left, top, right - left, height, 20);
-            g.lineStyle(1, GOLD, 0.14).strokeRoundedRect(left + 9, top + 9, right - left - 18, height - 18, 16);
+            g.lineStyle(2, GOLD, 0.32).strokeRoundedRect(left, top, right - left, height, 18);
+            g.lineStyle(1, GOLD, 0.16).strokeRoundedRect(left + 8, top + 8, right - left - 16, height - 16, 14);
             const corners = [[left, top], [right, top], [left, top + height], [right, top + height]];
             corners.forEach(([x, y]) => {
-                g.fillStyle(GOLD_BRIGHT, 0.75);
-                g.fillPoints(diamondPts(x, y, 6), true);
+                g.fillStyle(GOLD_BRIGHT, 0.8);
+                g.fillPoints(diamondPts(x, y, 5), true);
             });
             return g;
         };
         container.add(frameRow(opponentFieldY));
         container.add(frameRow(playerFieldY));
 
-        // ---- Runas de cristal en los laterales de cada fila de batalla ----
-        const rune = (x, y, color, r = 7) => {
+        // Runas discretas
+        const rune = (x, y, color, r = 6) => {
             const g = this.scene.add.graphics();
-            g.fillStyle(color, 0.10).fillCircle(x, y, r * 3);
-            g.fillStyle(color, 0.18).fillCircle(x, y, r * 2);
-            g.fillStyle(color, 0.85);
+            g.fillStyle(color, 0.12).fillCircle(x, y, r * 2.6);
+            g.fillStyle(color, 0.9);
             g.fillPoints(diamondPts(x, y, r), true);
             return g;
         };
 
-        const battlePositions = calculateRowPositions({ numItems: 6, itemWidth: 110, itemSpacing: 35, containerWidth: W });
-        const leftEdge = Math.min(...battlePositions) - 82;
-        const rightEdge = Math.max(...battlePositions) + 82;
+        const battlePositions = calculateRowPositions({ numItems: 6, itemWidth: 118, itemSpacing: 38, containerWidth: W });
+        const leftEdge = Math.min(...battlePositions) - 86;
+        const rightEdge = Math.max(...battlePositions) + 86;
 
-        container.add(rune(leftEdge + 16, opponentFieldY, ORANGE));
-        container.add(rune(rightEdge - 16, opponentFieldY, ORANGE));
-        container.add(rune(leftEdge + 16, playerFieldY, BLUE));
-        container.add(rune(rightEdge - 16, playerFieldY, BLUE));
-
-        // ---- Brillo y runa junto a los mazos ----
-        const deckGlow = (x, y, color) => {
-            const g = this.scene.add.graphics();
-            g.fillStyle(color, 0.05).fillCircle(x, y, 88);
-            g.fillStyle(color, 0.08).fillCircle(x, y, 56);
-            g.fillStyle(color, 0.14).fillCircle(x, y, 32);
-            g.lineStyle(2, GOLD, 0.24).strokeCircle(x, y, 46);
-            return g;
-        };
-        container.add(deckGlow(120, 290, ORANGE));
-        container.add(deckGlow(W - 120, H - 290, BLUE));
-        container.add(rune(120, 246, GOLD_BRIGHT));
-        container.add(rune(W - 120, H - 334, GOLD_BRIGHT));
+        container.add(rune(leftEdge + 14, opponentFieldY, ORANGE));
+        container.add(rune(rightEdge - 14, opponentFieldY, ORANGE));
+        container.add(rune(leftEdge + 14, playerFieldY, BLUE));
+        container.add(rune(rightEdge - 14, playerFieldY, BLUE));
     }
 
     // Crear fila de slots

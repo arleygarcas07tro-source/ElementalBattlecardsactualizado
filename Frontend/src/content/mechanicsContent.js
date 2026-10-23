@@ -45,13 +45,14 @@ export const GAME_RULES_HTML = `
         </li>
 
         <li><strong>Turnos:</strong>
-            <p>El juego es por turnos, 1v1. En cada turno el jugador puede realizar 1 sola acción:</p>
+            <p>El juego es por turnos, 1v1. En cada turno el jugador puede realizar hasta <strong>2 acciones</strong>:</p>
             <ul>
                 <li>Poner una carta en el campo.</li>
                 <li>Atacar con una carta.</li>
                 <li>Fusionar (si cumple requisitos).</li>
             </ul>
-            <p>Después de realizar la acción, el turno termina.</p>
+            <p>Una fusión cuenta como <strong>una sola acción</strong>, aunque combine varias cartas. Atacar cumple la obligación de atacar, así que en ese turno la segunda acción puede ser colocar o fusionar.</p>
+            <p>Las acciones sin usar no se acumulan: al terminar el turno el cupo se repone completo. Al agotarse las 2 acciones el turno termina automáticamente; también termina si se acaban los 12 segundos.</p>
         </li>
 
         <li><strong>Regla de Ataque Obligatorio:</strong>
@@ -100,8 +101,21 @@ export const GAME_RULES_HTML = `
         </li>
 
         <li><strong>Fusiones:</strong>
-            <p><strong>Requisitos:</strong> Tener 2 cartas iguales (tipo y nivel) en el campo. Fusionar consume tu acción del turno.</p>
+            <p><strong>Requisitos:</strong> Tener 2 cartas iguales (tipo y nivel) en el campo. Fusionar consume una acción del turno.</p>
             <p><strong>Efecto:</strong> Se forma una sola carta del mismo tipo y sube un nivel. La carta fusionada se revela.</p>
+        </li>
+
+        <li><strong>Gemas y Poderes de Esencia:</strong>
+            <p>Cada carta fusionada (nivel 2 o 3) que entra en el campo entrega <strong>1 gema</strong> de su elemento. Las cartas base (nivel 1) no dan gemas.</p>
+            <p>Cada esencia activa desbloquea un poder que se activa desde su orbe. Los poderes <strong>no gastan acciones del turno</strong>: se pagan con las gemas de su elemento y tienen sus propias condiciones. Cada poder se puede usar <strong>una vez por turno</strong>.</p>
+            <ul>
+                <li><strong>Fuego · Ráfaga</strong> (1 gema): tu próximo ataque también gana si el combate acaba en empate.</li>
+                <li><strong>Agua · Rescate</strong> (1 gema): devuelve a tu mano la carta base más reciente de tu cementerio. Requiere tener cartas en el cementerio.</li>
+                <li><strong>Planta · Brotar</strong> (2 gemas): roba 2 cartas de tu mazo.</li>
+                <li><strong>Luz · Clarividencia</strong> (1 gema): revelas la mano del rival hasta que robe o juegue.</li>
+                <li><strong>Sombra · Robar</strong> (2 gemas): el rival descarta la carta de mayor nivel de su mano. Requiere que el rival tenga cartas en la mano.</li>
+                <li><strong>Espíritu · Conducto</strong> (2 gemas): bloquea la Convergencia del rival durante su próximo turno.</li>
+            </ul>
         </li>
 
         <li><strong>Restricciones de Ataques según Nivel:</strong>
@@ -126,7 +140,7 @@ export const GAME_RULES_HTML = `
         </li>
 
         <li><strong>Límites de Tiempo:</strong>
-            <p>Cada turno tiene un máximo de 12 segundos. Si el jugador no realiza acción → pierde el turno.</p>
+            <p>Cada turno tiene un máximo de 12 segundos. Si el jugador no realiza ninguna acción → pierde el turno (las acciones sin usar no se guardan para el siguiente).</p>
         </li>
 
         <li><strong>Fin del Juego:</strong>

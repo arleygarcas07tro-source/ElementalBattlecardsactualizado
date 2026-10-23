@@ -23,9 +23,10 @@ export default class AttackController {
      */
     handleAttack(attackingCardObject, defendingCardObject) {
         const { turn, match, renderer } = this.ctx;
-        if (turn.state !== 'player-turn') return;
-        if (turn.playerHasActed) {
-            console.log('[GameScene] Ya realizaste tu acción este turno.');
+        // Bloquear si no es el turno, se agotó el cupo de acciones o hay una
+        // animación bloqueante en curso.
+        if (!this.ctx.turnController.canPlayerActNow()) {
+            console.log('[GameScene] No puedes gastar una acción ahora mismo.');
             return;
         }
 
@@ -81,9 +82,10 @@ export default class AttackController {
      */
     handleDirectAttack(attackingCardObject) {
         const { turn, match, renderer } = this.ctx;
-        if (turn.state !== 'player-turn') return;
-        if (turn.playerHasActed) {
-            console.log('[GameScene] Ya realizaste tu acción este turno.');
+        // Bloquear si no es el turno, se agotó el cupo de acciones o hay una
+        // animación bloqueante en curso.
+        if (!this.ctx.turnController.canPlayerActNow()) {
+            console.log('[GameScene] No puedes gastar una acción ahora mismo.');
             return;
         }
 
@@ -210,8 +212,9 @@ export default class AttackController {
                         }
                     }
 
-                    // Tras el ataque, el turno del jugador termina automáticamente
-                    turnController.endPlayerTurn();
+                    // Tras el ataque se consume una acción: si ya no queda cupo,
+                    // el turno termina; si queda, el jugador puede seguir jugando.
+                    turnController.afterPlayerAction();
                     turnController.animationComplete();
                 };
 

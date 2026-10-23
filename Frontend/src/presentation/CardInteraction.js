@@ -163,10 +163,10 @@ export default class CardInteraction {
      */
     handlePlayCard(cardObject, dropZone) {
         const { turn, player, renderer, playerData, debugSync } = this.ctx;
-        // Bloquear jugadas si no es el turno del jugador o ya actuó, o si está obligado a atacar
-        if (turn.state !== 'player-turn') return;
-        if (turn.playerHasActed) {
-            console.log('[GameScene] Ya realizaste tu acción este turno.');
+        // Bloquear jugadas si no es el turno del jugador, ya gastó su cupo de
+        // acciones o hay una animación bloqueante en curso.
+        if (!this.ctx.turnController.canPlayerActNow()) {
+            console.log('[GameScene] No puedes gastar una acción ahora mismo.');
             return;
         }
         if (turn.playerMustAttackThisTurn) {
@@ -249,8 +249,8 @@ export default class CardInteraction {
                     renderer.refreshPlayerHand(player.hand);
                     renderer.updateDeckCounts(player.deck.getCardsCount(), this.ctx.opponent.deck.getCardsCount());
 
-                    // 4. Marcamos la acción y terminamos el turno.
-                    turn.playerHasActed = true;
+                    // 4. Marcamos la acción y cerramos el turno si el cupo se agotó.
+                    this.ctx.match.consumePlayerAction();
                     console.log('[GameScene] Jugador colocó carta en el campo', { cardId: cardPlayed.id, instanceId: cardPlayed.instanceId, type: cardPlayed.type, level: cardPlayed.level, fieldIndex });
                     // Registrar la carta como coleccionada.
                     recordCollectedCard((playerData && playerData.username) || 'Jugador', cardPlayed.type, cardPlayed.level);
@@ -260,7 +260,7 @@ export default class CardInteraction {
                         this.ctx.lan.emitGameEvent({ type: 'play_card', card: cardPlayed, fieldIndex });
                     }
 
-                    this.ctx.turnController.endPlayerTurn();
+                    this.ctx.turnController.afterPlayerAction();
                 }
             });
 
@@ -278,10 +278,10 @@ export default class CardInteraction {
      */
     attemptToFuse(selectedCardObject, targetCardObject) {
         const { turn, player, renderer, turnController, playerData, isLAN, socket } = this.ctx;
-        // Bloquear fusiones si no es turno o ya actuó
-        if (turn.state !== 'player-turn') return;
-        if (turn.playerHasActed) {
-            console.log('[GameScene] Ya realizaste tu acción este turno.');
+        // Bloquear fusiones si no es turno, se agotó el cupo de acciones o hay
+        // una animación bloqueante en curso.
+        if (!turnController.canPlayerActNow()) {
+            console.log('[GameScene] No puedes gastar una acción ahora mismo.');
             return;
         }
         if (turn.playerMustAttackThisTurn) {
@@ -314,8 +314,6 @@ export default class CardInteraction {
             this.deselectCard(); // Deseleccionamos la carta activa
             return;
         }
-
-        // TODO: Validar que el jugador tiene una acción disponible para fusionar.
 
         // --- Ejecutar Fusión ---
         // 3. Asegurar sincronía entre la vista y el modelo antes de actualizar datos.
@@ -364,8 +362,9 @@ export default class CardInteraction {
         if (originalSlot) originalSlot.setInteractive({ dropZone: true });
 
 
-        // 4. Consumir la acción.
-        turn.playerHasActed = true;
+        // 4. Consumir la acción: una fusión cuenta como UNA acción completa,
+        //    aunque combine varias cartas.
+        this.ctx.match.consumePlayerAction();
 
         // Emitir evento de fusión si estamos en LAN
         if (isLAN && socket) {
@@ -401,7 +400,7 @@ export default class CardInteraction {
                 recordFusion((playerData && playerData.username) || 'Jugador');
                 recordCollectedCard((playerData && playerData.username) || 'Jugador', fusedCardData.type, fusedCardData.level);
                 turnController.animationComplete();
-                turnController.endPlayerTurn();
+                turnController.afterPlayerAction();
             };
 
             this.scene.tweens.add({
@@ -424,10 +423,10 @@ export default class CardInteraction {
      */
     attemptToFuseFromHand(handCardObject, fieldCardObject) {
         const { turn, player, renderer, turnController, playerData, isLAN, socket } = this.ctx;
-        // Bloquear si ya actuó o debe atacar
-        if (turn.state !== 'player-turn') return;
-        if (turn.playerHasActed) {
-            console.log('[GameScene] Ya realizaste tu acción este turno.');
+        // Bloquear si se agotó el cupo de acciones, no es el turno o hay una
+        // animación bloqueante en curso.
+        if (!turnController.canPlayerActNow()) {
+            console.log('[GameScene] No puedes gastar una acción ahora mismo.');
             return;
         }
         if (turn.playerMustAttackThisTurn) {
@@ -460,7 +459,7 @@ export default class CardInteraction {
         this.deselectCard(false); // Deseleccionamos sin animación.
 
         // Consumir acción y emitir evento de fusión desde mano si estamos en LAN
-        turn.playerHasActed = true;
+        this.ctx.match.consumePlayerAction();
         if (isLAN && socket) {
             this.ctx.lan.emitGameEvent({
                 type: 'fuse_from_hand',
@@ -496,7 +495,7 @@ export default class CardInteraction {
                 recordFusion((playerData && playerData.username) || 'Jugador');
                 recordCollectedCard((playerData && playerData.username) || 'Jugador', fusionResult.type, fusionResult.level);
                 turnController.animationComplete();
-                turnController.endPlayerTurn();
+                turnController.afterPlayerAction();
             };
 
             this.scene.tweens.add({

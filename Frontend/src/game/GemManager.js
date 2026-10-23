@@ -5,7 +5,7 @@ const ELEMENTS = Object.values(CardTypes);
 /**
  * Gestiona las gemas elementales de un jugador durante la partida.
  * Lógica pura de dominio (sin Phaser, sin DOM): contabiliza gemas por
- * elemento y hace cumplir la regla "una sola gema por carta de nivel 3",
+ * elemento y hace cumplir la regla "una sola gema por carta fusionada",
  * marcando cada instancia de carta que ya generó su gema.
  */
 export default class GemManager {
@@ -16,7 +16,7 @@ export default class GemManager {
         this.requirements = requirements ? { ...requirements } : null;
         this.counts = {};
         ELEMENTS.forEach((type) => { this.counts[type] = 0; });
-        // instanceId de las cartas de nivel 3 que ya entregaron su gema.
+        // instanceId de las cartas fusionadas que ya entregaron su gema.
         this.claimed = new Set();
     }
 
@@ -29,14 +29,15 @@ export default class GemManager {
     }
 
     /**
-     * Registra una carta de nivel 3 y, si aún no había entregado gema,
-     * incrementa el contador del elemento correspondiente.
-     * Regla: cada carta de nivel 3 genera como máximo UNA gema.
+     * Registra una carta que entra en el campo y, si aún no había entregado
+     * gema, incrementa el contador del elemento correspondiente.
+     * Regla de economia: cada carta fusionada (nivel 2 o 3) genera UNA gema
+     * de su elemento; las cartas base (nivel 1) no generan gemas.
      * @param {{level: number, type: string, instanceId?: string, id?: string}} cardData
      * @returns {string|null} El elemento de la gema obtenida o null si no corresponde.
      */
-    registerLevel3Card(cardData) {
-        if (!cardData || cardData.level !== 3) return null;
+    registerFieldCard(cardData) {
+        if (!cardData || cardData.level < 2) return null;
         const type = cardData.type;
         if (!Object.prototype.hasOwnProperty.call(this.counts, type)) return null;
 
@@ -56,6 +57,31 @@ export default class GemManager {
      */
     count(type) {
         return this.counts[type] || 0;
+    }
+
+    /**
+     * Indica si hay gemas suficientes de un elemento para pagar un coste.
+     * @param {string} type Elemento.
+     * @param {number} amount Coste en gemas.
+     * @returns {boolean}
+     */
+    canAfford(type, amount) {
+        if (!amount || amount <= 0) return true;
+        return this.count(type) >= amount;
+    }
+
+    /**
+     * Gasta gemas de un elemento (coste de un poder de esencia). No permite
+     * dejar el contador en negativo: si no hay gemas suficientes no se gasta nada.
+     * @param {string} type Elemento.
+     * @param {number} amount Coste en gemas.
+     * @returns {boolean} `true` si el coste se pudo pagar.
+     */
+    consume(type, amount) {
+        if (!amount || amount <= 0) return true;
+        if (!this.canAfford(type, amount)) return false;
+        this.counts[type] = this.count(type) - amount;
+        return true;
     }
 
     /**

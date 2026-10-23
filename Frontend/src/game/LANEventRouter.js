@@ -82,7 +82,7 @@ export default class LANEventRouter {
         } catch (e) {
             console.warn('No se pudo actualizar el modelo remoto:', e);
         }
-        if (isOpponentAction) this.match.turn.opponentHasActed = true;
+        if (isOpponentAction) this.match.turn.consumeOpponentAction();
         return { kind: 'play-card', isRemotePlayer, fieldIndex, card, actor: payload.actor, playerRole: payload.playerRole };
     }
 
@@ -92,7 +92,7 @@ export default class LANEventRouter {
         model.field.clearAt(sourceIndex);
         model.field.set(targetIndex, resultCard);
         if (this.debug) console.log('[LANEventRouter][debug] fuse_cards: modelo actualizado', { sourceIndex, targetIndex, instanceId: resultCard && resultCard.instanceId });
-        if (isOpponentAction) this.match.turn.opponentHasActed = true;
+        if (isOpponentAction) this.match.turn.consumeOpponentAction();
         return { kind: 'fuse-cards', isRemotePlayer, sourceIndex, targetIndex, resultCard };
     }
 
@@ -100,14 +100,14 @@ export default class LANEventRouter {
         const { targetIndex, resultCard } = payload;
         this._targetModel(isRemotePlayer).field.set(targetIndex, resultCard);
         if (this.debug) console.log('[LANEventRouter][debug] fuse_from_hand: modelo actualizado', { targetIndex, instanceId: resultCard && resultCard.instanceId });
-        if (isOpponentAction) this.match.turn.opponentHasActed = true;
+        if (isOpponentAction) this.match.turn.consumeOpponentAction();
         return { kind: 'fuse-from-hand', isRemotePlayer, targetIndex, resultCard };
     }
 
     _routeAttack(payload, isOpponentAction) {
         const { attackerIndex, defenderIndex, result } = payload;
         if (isOpponentAction) {
-            this.match.turn.opponentHasActed = true;
+            this.match.turn.consumeOpponentAction();
             this.match.turn.opponentPerformedAttackThisTurn = true;
         }
         return { kind: 'attack', attackerIndex, defenderIndex, result };

@@ -12,7 +12,7 @@ export default class LoginScene extends Phaser.Scene {
     }
 
     preload() {
-        this.load.video('inicio-video', '/assets/images/LOGIN/Login_fixed.mp4', { muted: true, noAudio: true });
+        this.load.image('login-bg', '/assets/images/LOGIN/login 345.png');
         this.load.image('logo', '/assets/images/Logotipoletras.png');
 
         this.load.on('loaderror', (file) => console.error('Error al cargar:', file.key, file.url));
@@ -21,29 +21,12 @@ export default class LoginScene extends Phaser.Scene {
 
     create() {
         const { width, height } = this.scale;
-        this.add.rectangle(width / 2, height / 2, width, height, 0x0f0a1a).setDepth(-2);
+        this.add.rectangle(width / 2, height / 2, width, height, 0x000000).setDepth(-2);
 
-        // BACKGROUND VIDEO
-        this.bg = this.add.video(width / 2, height / 2, 'inicio-video').setOrigin(0.5);
-        this.bg.setDepth(-1); // Poner el video al fondo
-
-        this.bg.on('play', () => {
-            const scaleX = width / this.bg.width;
-            const scaleY = height / this.bg.height;
-            const scale = Math.max(scaleX, scaleY);
-            this.bg.setScale(scale);
-        });
-
-        this.bg.once('created', () => {
-            const videoEl = this.bg.video;
-            if (!videoEl) return;
-            videoEl.muted = true;
-            videoEl.defaultMuted = true;
-            videoEl.loop = true;
-            videoEl.play().catch(() => {});
-        });
-
-        this.bg.play(true); // Reproducir en bucle
+        // BACKGROUND IMAGE
+        this.bg = this.add.image(width / 2, height / 2, 'login-bg').setOrigin(0.5);
+        this.bg.setDepth(-1);
+        this.scaleBackground();
 
         const formHTML = `
             <style>
@@ -166,7 +149,8 @@ export default class LoginScene extends Phaser.Scene {
         `;
 
 
-        this.formElement = this.add.dom(width / 2, height / 2).createFromHTML(formHTML);
+        this.formElement = this.add.dom(width / 2, height / 2 + Math.round(height * 0.16)).createFromHTML(formHTML);
+        this.formElement.setDepth(10);
 
         // Inicializar animaciones en botones del formulario
         try {
@@ -247,8 +231,8 @@ export default class LoginScene extends Phaser.Scene {
         }
 
         // Logo arriba
-        this.logoImage = this.add.image(this.scale.width / 2, this.scale.height * 0.08, 'logo').setOrigin(0.5).setDepth(1);
-        this.logoImage.setScale(Math.min(0.7, (this.scale.width / 800)));
+        this.logoImage = this.add.image(this.scale.width / 2, this.scale.height * 0.16, 'logo').setOrigin(0.5).setDepth(6);
+        this.logoImage.setScale(Math.min(0.6, (this.scale.width / 900)));
 
         // Copyright
         this.copyText = this.add.text(this.scale.width / 2, this.scale.height - 18, 'Todos los derechos reservados', {
@@ -257,21 +241,16 @@ export default class LoginScene extends Phaser.Scene {
             color: '#ffd77a'
         }).setOrigin(0.5, 0.5).setDepth(1);
 
-        // Reposicionar el logo y formulario al redimensionar la ventana
         this.scale.on('resize', this.resize, this);
+        this.scaleBackground();
     }
 
-    resize(gameSize) {
-        const { width, height } = gameSize;
-        if (this.bg && this.bg.width > 0) {
-            const scaleX = width / this.bg.width;
-            const scaleY = height / this.bg.height;
-            const scale = Math.max(scaleX, scaleY);
-            this.bg.setScale(scale);
-        }
-        if (this.formElement) this.formElement.setPosition(width / 2, height / 2 - 40);
-        if (this.leftButtonsElement) this.leftButtonsElement.setPosition(90, height - 120);
-        if (this.logoImage) this.logoImage.setPosition(width / 2, height * 0.18);
-        if (this.copyText) this.copyText.setPosition(width / 2, height - 18);
+    scaleBackground() {
+        if (!this.bg || !this.bg.width || !this.bg.height) return;
+        const { width, height } = this.scale;
+        const scaleX = width / this.bg.width;
+        const scaleY = height / this.bg.height;
+        const scale = Math.max(scaleX, scaleY);
+        this.bg.setScale(scale);
     }
 }

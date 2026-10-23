@@ -40,7 +40,7 @@ test('TurnManager: un ataque resetea turnsSinceLastAttack', () => {
     const t = new TurnManager();
     t.beginPlayerTurn();
     t.playerPerformedAttackThisTurn = true;
-    t.playerHasActed = true;
+    t.consumePlayerAction();
 
     const r = t.finishPlayerTurn();
 
@@ -55,7 +55,7 @@ test('TurnManager: la inactividad acumula y se resetea al actuar', () => {
     assert.equal(t.playerInactiveTurns, 1);
 
     t.beginPlayerTurn();
-    t.playerHasActed = true;
+    t.consumePlayerAction();
     t.finishPlayerTurn();
 
     assert.equal(t.playerInactiveTurns, 0);
