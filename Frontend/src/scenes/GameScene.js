@@ -308,6 +308,32 @@ export default class GameScene extends Phaser.Scene {
 
         // Bombardeo ambiental puramente decorativo sobre el campo.
         this.bombs = new BattlefieldBombs(this, this.layout).start();
+        this.triggerLevel2BombBarrage = (info = {}) => {
+            if (this.bombs) {
+                this.bombs.barrage({ count: 30, interval: 70 });
+            }
+            // Notificación visual simple
+            try {
+                const { width, height } = this.scale;
+                const txt = this.add.text(width / 2, height / 2, '¡RAFAGA DE BOMBAS!', {
+                    fontFamily: 'Georgia, "Times New Roman", serif',
+                    fontSize: '48px',
+                    fontStyle: 'bold',
+                    color: '#ff6b35',
+                    stroke: '#000000',
+                    strokeThickness: 6,
+                    align: 'center'
+                }).setOrigin(0.5).setDepth(2000);
+                this.tweens.add({
+                    targets: txt,
+                    alpha: { from: 1, to: 0 },
+                    scale: { from: 1, to: 1.4 },
+                    duration: 1600,
+                    ease: 'Cubic.easeOut',
+                    onComplete: () => txt.destroy()
+                });
+            } catch { /* ignore */ }
+        };
 
         // ---------- ZONA DE MANO DEL OPONENTE (4 espacios) ----------
         renderer.createSlotsRow(renderer.layout.opponentHandY, 'opponent-slots');

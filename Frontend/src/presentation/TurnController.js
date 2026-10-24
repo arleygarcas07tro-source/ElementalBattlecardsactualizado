@@ -27,6 +27,7 @@ export default class TurnController {
         this.matchTimeRemaining = 0;
         this.turnDeadline = null;
         this.matchDeadline = null;
+        this.lastDisplayedTurnTime = null;
         this._pendingDestroys = new Set(); // Destrucciones en curso (idempotencia)
     }
 
@@ -297,12 +298,18 @@ export default class TurnController {
      */
     update() {
         const { turn } = this.ctx;
+        let displayTime = null;
         if (this.turnDeadline && (turn.state === 'player-turn' || turn.state === 'opponent-turn')) {
             const remainingTime = Math.max(0, Math.ceil((this.turnDeadline - Date.now()) / 1000));
-            this.scene.events.emit('update-timer', turn.state === 'player-turn' ? remainingTime : 0);
+            displayTime = turn.state === 'player-turn' ? remainingTime : 0;
         } else if (turn.state !== 'game-over') {
             // Si no es el turno del jugador, nos aseguramos que el timer esté en 0
-            this.scene.events.emit('update-timer', 0);
+            displayTime = 0;
+        }
+
+        if (displayTime !== null && displayTime !== this.lastDisplayedTurnTime) {
+            this.scene.events.emit('update-timer', displayTime);
+            this.lastDisplayedTurnTime = displayTime;
         }
     }
 

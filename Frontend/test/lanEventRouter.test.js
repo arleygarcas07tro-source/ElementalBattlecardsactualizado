@@ -70,12 +70,29 @@ test('LANEventRouter: una fusión remota de nivel 3 suma una gema', () => {
 
 test('LANEventRouter: attack remoto marca el ataque del oponente', () => {
     const { match, router } = makeRouter('host');
+    match.player.field.set(0, { instanceId: 'target', type: 'fuego', level: 1, health: 100 });
 
     const result = router.route({ type: 'attack', playerRole: 'guest', attackerIndex: 0, defenderIndex: 0, result: { winner: 'attacker' } });
 
     assert.equal(result.effects[0].kind, 'attack');
     assert.equal(match.turn.opponentPerformedAttackThisTurn, true);
     assert.equal(match.turn.opponentHasActed, true);
+});
+
+test('LANEventRouter: aplica el daño recibido a la vida del defensor local', () => {
+    const { match, router } = makeRouter('host');
+    match.player.field.set(0, { instanceId: 'target', type: 'fuego', level: 1, health: 100 });
+
+    const result = router.route({
+        type: 'attack',
+        playerRole: 'guest',
+        attackerIndex: 1,
+        defenderIndex: 0,
+        result: { damage: 35, defenderHealth: 65, winner: 'none', loser: 'none' }
+    });
+
+    assert.equal(match.player.field.get(0).health, 65);
+    assert.equal(result.effects[0].result.defenderHealth, 65);
 });
 
 test('LANEventRouter: direct_attack remoto devuelve el efecto sin mutar el turno', () => {

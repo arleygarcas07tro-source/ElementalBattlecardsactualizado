@@ -1,5 +1,6 @@
 import { CardDefinitions } from '../game_objects/card-definitions.js';
 import { newId } from '../utils/idGenerator.js';
+import CardHealthService from './CardHealthService.js';
 
 /**
  * Entidad de carta del dominio: representa una instancia concreta de carta
@@ -22,7 +23,7 @@ export default class CardEntity {
     static create(definition, { owner = null, forceNewId = false } = {}) {
         if (!definition) return null;
         const instanceId = (!forceNewId && definition.instanceId) ? definition.instanceId : newId();
-        const entity = { ...definition, instanceId };
+        const entity = { ...definition, instanceId, health: CardHealthService.current(definition) };
         if (owner) entity.owner = owner;
         return entity;
     }
@@ -35,6 +36,7 @@ export default class CardEntity {
     static ensureInstance(cardData) {
         if (!cardData) return cardData;
         if (!cardData.instanceId) cardData.instanceId = newId();
+        CardHealthService.ensure(cardData);
         return cardData;
     }
 
@@ -43,7 +45,7 @@ export default class CardEntity {
      * @param {{type: string, level: number}} baseCard Carta de nivel base.
      * @returns {object|null} La nueva instancia fusionada o null si no existe.
      */
-    static fused(baseCard) {
+    static fused(baseCard, secondCard = null) {
         if (!baseCard) return null;
         const newLevel = baseCard.level + 1;
         const definition = CardDefinitions[`${baseCard.type}-${newLevel}`];
@@ -51,7 +53,11 @@ export default class CardEntity {
             console.error(`[CardEntity] No se encontró la definición para la carta fusionada: ${baseCard.type}-${newLevel}`);
             return null;
         }
-        return CardEntity.create(definition);
+        const fusedCard = CardEntity.create(definition);
+        fusedCard.health = secondCard
+            ? CardHealthService.fusionHealth(baseCard, secondCard)
+            : CardHealthService.current(baseCard);
+        return fusedCard;
     }
 
     /**

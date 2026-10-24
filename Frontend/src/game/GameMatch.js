@@ -199,8 +199,8 @@ export default class GameMatch {
     }
 
     /**
-     * Resuelve (sin mutar) el combate entre una carta del jugador y una del
-     * oponente. Aplica Ráfaga (empate -> victoria del atacante) si está activa.
+     * Resuelve el ataque y aplica daño a la carta defensora. Ráfaga añade
+     * daño al siguiente ataque si está activa.
      * @param {object} params
      * @param {number} params.attackerIndex Índice de la carta atacante en el campo.
      * @param {number} params.defenderIndex Índice de la carta defensora en el campo.
@@ -212,11 +212,8 @@ export default class GameMatch {
         const defenderData = this.opponent.field.get(defenderIndex);
         if (!attackerData || !defenderData) return null;
 
-        let result = resolveCombat(attackerData, defenderData);
-        if (this.turn.playerNextAttackBreaksTie && result.winner === 'none') {
-            console.log('[GameMatch] Ráfaga: el empate se convierte en victoria.');
-            result = { winner: 'attacker', loser: 'defender' };
-        }
+        const bonusDamage = this.turn.playerNextAttackBreaksTie ? 15 : 0;
+        const result = resolveCombat(attackerData, defenderData, { bonusDamage });
         return { result, attackerData, defenderData, attackerIndex, defenderIndex };
     }
 
@@ -231,8 +228,8 @@ export default class GameMatch {
 
     /**
      * Consume la acción de ataque del jugador: gasta una acción del cupo,
-     * registra el ataque y agota Ráfaga (el próximo ataque vuelve al
-     * comportamiento base). Atacar cumple además la obligación de atacar:
+     * registra el ataque y agota Ráfaga (el próximo ataque vuelve al daño
+     * normal). Atacar cumple además la obligación de atacar:
      * el resto del cupo queda libre para colocar o fusionar.
      * @returns {number} Acciones que quedan disponibles en el turno.
      */

@@ -43,7 +43,7 @@ export default class TurnManager {
         // define su propio límite y su coste en gemas).
         this.playerPowerUses = {};
         this.opponentPowerUses = {};
-        // Poder FUEGO (Ráfaga): el próximo ataque del jugador rompe el empate.
+        // Poder FUEGO (Ráfaga): el próximo ataque del jugador causa daño extra.
         this.playerNextAttackBreaksTie = false;
         // Convergencia (victoria por 6 tipos): el jugador armó los 6 tipos y debe
         // conservarlos durante el turno rival para ganar.
@@ -97,6 +97,7 @@ export default class TurnManager {
         this.playerActionsLeft = this.config.ACTIONS_PER_TURN;
         this.playerActionsTaken = 0;
         this.playerPerformedAttackThisTurn = false;
+        this.playerNextAttackBreaksTie = false;
         this.playerPowerUses = {};
         this.playerMustAttackThisTurn = (this.playerTurnsSinceLastAttack >= this.config.MANDATORY_ATTACK_TURN - 1);
         return {

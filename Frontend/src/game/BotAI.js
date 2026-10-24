@@ -1,4 +1,5 @@
-import { resolveCombat } from '../helpers/combat.js';
+import { calculateAttackDamage } from '../helpers/combat.js';
+import CardHealthService from './CardHealthService.js';
 import { getBaseCardTypes } from '../game_objects/card-definitions.js';
 
 const between = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
@@ -161,16 +162,11 @@ export default class BotAI {
         let bestAttack = { score: -100 };
         for (const attacker of opponentAttackers) {
             for (const defender of revealedDefenders) {
-                let currentScore = 0;
-                const result = resolveCombat(attacker.card, defender.card);
-
-                if (result.winner === 'attacker') {
-                    currentScore += 10 + defender.card.level * 2;
-                } else {
-                    currentScore -= 10;
-                    if (result.loser === 'attacker') currentScore -= attacker.card.level * 3;
+                const damage = calculateAttackDamage(attacker.card, defender.card);
+                let currentScore = damage;
+                if (damage >= CardHealthService.current(defender.card)) {
+                    currentScore += 20 + defender.card.level * 2;
                 }
-
                 currentScore += this.scoreModifier;
 
                 if (currentScore > bestAttack.score) {

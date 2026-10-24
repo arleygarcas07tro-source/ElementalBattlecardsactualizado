@@ -54,6 +54,26 @@ export default class BattlefieldBombs {
         return this;
     }
 
+    /**
+     * Lanza una ráfaga rápida de bombas sobre el campo (solo visual).
+     * @param {{count?: number, interval?: number}} [opts]
+     */
+    barrage({ count = 30, interval = 70 } = {}) {
+        if (!this.scene) return this;
+        this._running = true;
+        ensureFxTextures(this.scene);
+        ensureBombTexture(this.scene);
+        let i = 0;
+        const drop = () => {
+            if (!this._running || i >= count) return;
+            this._dropBomb();
+            i += 1;
+            this.scene.time.delayedCall(interval, drop);
+        };
+        drop();
+        return this;
+    }
+
     /** Detiene el bombardeo y libera los objetos en vuelo. */
     stop() {
         this._running = false;

@@ -53,7 +53,7 @@ test('GameMatch.startOpponentTurn inicia el turno del oponente', () => {
     assert.equal(info.turnNumber, 1);
 });
 
-test('GameMatch.resolvePlayerAttack resuelve combate con ventaja de tipo', () => {
+test('GameMatch.resolvePlayerAttack aplica daño por ventaja elemental', () => {
     const match = makeMatch();
     match.startPlayerTurn();
     place(match.player, 0, CARD_TYPES.FUEGO);
@@ -62,7 +62,10 @@ test('GameMatch.resolvePlayerAttack resuelve combate con ventaja de tipo', () =>
     const resolution = match.resolvePlayerAttack({ attackerIndex: 0, defenderIndex: 0 });
 
     assert.ok(resolution);
-    assert.equal(resolution.result.winner, 'attacker');
+    assert.equal(resolution.result.damage, 40);
+    assert.equal(resolution.result.defenderHealth, 60);
+    assert.equal(resolution.result.winner, 'none');
+    assert.equal(match.opponent.field.get(0).health, 60);
     assert.equal(resolution.attackerIndex, 0);
     assert.equal(resolution.defenderIndex, 0);
 });

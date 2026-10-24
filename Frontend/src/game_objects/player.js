@@ -4,6 +4,7 @@ import GemManager from '../game/GemManager.js';
 import CardDestructionService from '../game/CardDestructionService.js';
 import CardEntity from '../game/CardEntity.js';
 import Battlefield from '../game/Battlefield.js';
+import CardHealthService from '../game/CardHealthService.js';
 
 /**
  * Gestiona el estado completo de un jugador, incluyendo su mazo, mano, campo,
@@ -101,6 +102,11 @@ export default class Player {
             this.field.set(fieldIndex, cardToPlay); // Coloca la nueva instancia en el campo
             // Regla de gemas: una carta base (nivel 1) no aporta gema.
             this.registerGem(cardToPlay);
+            try {
+                this._checkLevel2BombBarrage();
+            } catch (e) {
+                console.warn('[Player] Error en _checkLevel2BombBarrage:', e);
+            }
             if (this.scene && this.scene.debugSync) console.log(`[Player][debug] Carta movida al slot`, { player: this.id, instanceId: cardToPlay.instanceId, fieldIndex, resultingField: this.field.snapshot().map(f=>f&&f.instanceId) });
             console.log(`[Player] Carta con instanceId ${instanceId} movida al slot ${fieldIndex} del campo.`);
             return cardToPlay;
@@ -148,15 +154,19 @@ export default class Player {
         }
 
         // Creamos una nueva instancia de la carta fusionada (definición + instanceId).
-        const newCardInstance = CardEntity.fused(card1);
+        const newCardInstance = CardEntity.fused(card1, card2);
         if (!newCardInstance) return null;
 
         // Actualizamos el campo: la nueva carta ocupa el lugar de la carta objetivo.
         // El slot de la carta arrastrada se vacía.
         this.field.set(targetIndex, newCardInstance);
-        this.field.clearAt(draggedIndex);
         // Regla de gemas: la carta fusionada aporta una gema de su elemento.
         this.registerGem(newCardInstance);
+        try {
+            this._checkLevel2BombBarrage();
+        } catch (e) {
+            console.warn('[Player] Error en _checkLevel2BombBarrage:', e);
+        }
 
         if (this.scene && this.scene.debugSync) console.log('[Player][debug] fuseCards result', { newCardInstance: newCardInstance.instanceId, targetIndex, emptiedIndex: draggedIndex, fieldAfter: this.field.snapshot().map(f=>f&&f.instanceId) });
         console.log(`Modelo actualizado: Carta ${newCardInstance.id} (Nivel ${newCardInstance.level}) creada en el slot ${targetIndex}`);
@@ -190,13 +200,18 @@ export default class Player {
         // consumen en la fusionada y NADA va al cementerio. Cuando la carta
         // fusionada muera, CardDestructionService devolverá su material en cartas base.
 
-        const newCardInstance = CardEntity.fused(cardOnField);
+        const newCardInstance = CardEntity.fused(cardOnField, cardFromHand);
         if (!newCardInstance) return null;
 
         // Reemplazamos la carta en el campo con la nueva carta fusionada
         this.field.set(targetIndex, newCardInstance);
         // Regla de gemas: la carta fusionada aporta una gema de su elemento.
         this.registerGem(newCardInstance);
+        try {
+            this._checkLevel2BombBarrage();
+        } catch (e) {
+            console.warn('[Player] Error en _checkLevel2BombBarrage:', e);
+        }
         if (this.scene && this.scene.debugSync) console.log('[Player][debug] fuseFromHand result', { newCardInstance: newCardInstance.instanceId, targetIndex, fieldAfter: this.field.snapshot().map(f=>f&&f.instanceId) });
         return newCardInstance;
     }
@@ -246,5 +261,50 @@ export default class Player {
         const baseCards = CardDestructionService.graveyardEntries(cardData);
         this.graveyard.push(...baseCards);
         console.log(`Añadiendo ${baseCards.length} carta(s) base de tipo ${cardData.type} al cementerio.`);
+    }
+
+    /**
+     * Comprueba si hay al menos 3 cartas de nivel 2 en el campo y dispara una
+     * ráfaga de bombas (solo mecánica + presentación) que daña todas las cartas.
+     * Se ejecuta una vez por activación (bandera) para evitar ráfagas repetidas.
+     */
+    _checkLevel2BombBarrage() {
+        if (this._level2BarrageTriggered) return;
+        const cards = typeof this.field.cards === 'function' ? this.field.cards() : (this.field.snapshot ? this.field.snapshot().filter(Boolean) : []);
+        let count = 0;
+        for (let i = 0; i < cards.length; i++) {
+            if (cards[i] && cards[i].level === 2) count += 1;
+        }
+        if (count < 3) return;
+        this._level2BarrageTriggered = true;
+
+        // Aplicar daño a todas las cartas del campo
+        const damage = 25;
+        const toDestroy = [];
+        cards.forEach((card) => {
+            if (!card) return;
+            if (typeof card.health === 'undefined') CardHealthService.ensure(card);
+            const res = CardHealthService.applyDamage(card, damage);
+            if (res.destroyed) toDestroy.push(card);
+        });
+
+        // Notificar a la escena para efectos visuales/mejor gestión
+        if (this.scene && typeof this.scene.triggerLevel2BombBarrage === 'function') {
+            try {
+                this.scene.triggerLevel2BombBarrage({ owner: this, destroyed: toDestroy, damage });
+                return;
+            } catch (e) {
+                console.warn('[Player] Error en triggerLevel2BombBarrage:', e);
+            }
+        }
+
+        // Fallback: añadir al cementerio las destruidas
+        toDestroy.forEach((card) => {
+            try {
+                this.addCardDataToGraveyard(card);
+                const idx = typeof this.field.findIndexByCard === 'function' ? this.field.findIndexByCard(card.instanceId) : -1;
+                if (idx >= 0 && typeof this.field.clearAt === 'function') this.field.clearAt(idx);
+            } catch { /* ignorar */ }
+        });
     }
 }

@@ -1,3 +1,5 @@
+import CardHealthService from './CardHealthService.js';
+
 /**
  * Traductor de eventos remotos LAN a comandos de dominio (GameMatch).
  *
@@ -59,7 +61,7 @@ export default class LANEventRouter {
             case 'play_card': return this._routePlayCard(payload, isRemotePlayer, isOpponentAction);
             case 'fuse_cards': return this._routeFuseCards(payload, isRemotePlayer, isOpponentAction);
             case 'fuse_from_hand': return this._routeFuseFromHand(payload, isRemotePlayer, isOpponentAction);
-            case 'attack': return this._routeAttack(payload, isOpponentAction);
+            case 'attack': return this._routeAttack(payload, isRemotePlayer, isOpponentAction);
             case 'direct_attack': return this._routeDirectAttack(payload, isRemotePlayer, isOpponentAction);
             default: return null;
         }
@@ -108,13 +110,20 @@ export default class LANEventRouter {
         return { kind: 'fuse-from-hand', isRemotePlayer, targetIndex, resultCard };
     }
 
-    _routeAttack(payload, isOpponentAction) {
+    _routeAttack(payload, isRemotePlayer, isOpponentAction) {
         const { attackerIndex, defenderIndex, result } = payload;
+        const defender = (isRemotePlayer ? this.match.player : this.match.opponent).field.get(defenderIndex);
+        const health = CardHealthService.applyDamage(defender, result && result.damage);
         if (isOpponentAction) {
             this.match.turn.consumeOpponentAction();
             this.match.turn.opponentPerformedAttackThisTurn = true;
         }
-        return { kind: 'attack', attackerIndex, defenderIndex, result };
+        return {
+            kind: 'attack',
+            attackerIndex,
+            defenderIndex,
+            result: result ? { ...result, defenderHealth: health.health, destroyed: health.destroyed } : result
+        };
     }
 
     _routeDirectAttack(payload, isRemotePlayer, isOpponentAction) {

@@ -14,7 +14,7 @@ import CardEntity from './CardEntity.js';
 const POWERS = {
     [CARD_TYPES.FUEGO]: {
         name: 'Ráfaga',
-        description: 'Tu próximo ataque en este turno también gana si el combate termina en empate.',
+        description: 'Tu próximo ataque en este turno causa 15% de daño adicional.',
         needsGraveyard: false,
         needsOpponentHand: false,
         gemCost: 1,

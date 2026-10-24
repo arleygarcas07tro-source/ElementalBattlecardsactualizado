@@ -76,14 +76,19 @@ test('Player: playCardFromHand rechaza id inexistente o slot ocupado', () => {
 
 test('Player: fuseCards fusiona dos cartas iguales en el campo', () => {
     const p = makePlayer();
-    p.field.set(0, card('fuego', 1));
-    p.field.set(1, card('fuego', 1));
+    const firstCard = card('fuego', 1);
+    const secondCard = card('fuego', 1);
+    firstCard.health = 45;
+    secondCard.health = 35;
+    p.field.set(0, firstCard);
+    p.field.set(1, secondCard);
 
     const result = p.fuseCards(0, 1);
 
     assert.ok(result);
     assert.equal(result.newCard.level, 2);
     assert.equal(result.newCard.type, 'fuego');
+    assert.equal(result.newCard.health, 80);
     assert.equal(result.emptiedIndex, 0);
     assert.equal(p.field.get(0), null);
     assert.equal(p.field.get(1).level, 2);
@@ -106,6 +111,8 @@ test('Player: fuseFromHand fusiona una carta de la mano con el campo', () => {
     const p = makePlayer();
     const onField = card('agua', 1);
     const inHand = card('agua', 1);
+    onField.health = 65;
+    inHand.health = 55;
     p.field.set(3, onField);
     p.hand.push(inHand);
 
@@ -113,6 +120,7 @@ test('Player: fuseFromHand fusiona una carta de la mano con el campo', () => {
 
     assert.ok(result);
     assert.equal(result.level, 2);
+    assert.equal(result.health, 100);
     assert.equal(p.hand.length, 0);
     assert.equal(p.field.get(3).level, 2);
 });

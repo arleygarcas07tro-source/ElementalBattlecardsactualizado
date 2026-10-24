@@ -86,8 +86,22 @@ export default class BoardRenderer {
             itemSpacing: slotSpacing,
             containerWidth: this.scene.scale.width
         });
+        const divisionColor = isOpponent ? 0xff7657 : 0x65c8ff;
 
         for (let i = 0; i < numSlots; i++) {
+            if (isField) {
+                const division = this.scene.add.graphics();
+                division.lineStyle(1.5, divisionColor, 0.42);
+                division.strokeRoundedRect(
+                    positionsX[i] - cardSize.width / 2,
+                    y - cardSize.height / 2,
+                    cardSize.width,
+                    cardSize.height,
+                    8
+                );
+                division.setDepth(-0.25).setName(`${name}-${i}-division`);
+            }
+
             const slot = this.scene.add.image(positionsX[i], y, 'slot')
                 .setDisplaySize(cardSize.width, cardSize.height)
                 .setAlpha(0.001) // Solo zona de interacción: sin marco visible

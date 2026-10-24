@@ -9,6 +9,7 @@ import {
     CARD_PLATE_TEXTURES,
     LEVEL_ROMANS
 } from '../helpers/battlefieldArt.js';
+import CardHealthService from '../game/CardHealthService.js';
 
 /**
  * Representación visual de una carta (sprite de Phaser). Extiende de
@@ -37,6 +38,8 @@ export default class Card extends Phaser.GameObjects.Sprite {
         this.cardData = cardData; // Guardamos todos los datos
         this.type = cardData.type;
         this.level = cardData.level;
+        this.elementColor = themeFor(this.type).color;
+        this.health = CardHealthService.ensure(cardData);
         this.isFaceDown = isFaceDown;
         this.gemBadge = null; // Distintivo de gema (nivel 3), si procede
         this.aura = null; // Aura elemental (presentación), si procede
@@ -49,6 +52,9 @@ export default class Card extends Phaser.GameObjects.Sprite {
         this.selectedGlow = null; // Resplandor de carta seleccionada
         this.selectedTween = null;
         this.isSelected = false;
+        this.healthBar = null;
+        this.healthText = null;
+        this.renderedHealth = null;
 
         // Asignamos un nombre al GameObject para facilitar la depuración
         // y añadimos el `instanceId` también como metadata para búsquedas.
@@ -105,9 +111,11 @@ export default class Card extends Phaser.GameObjects.Sprite {
      */
     refreshPresentation() {
         if (!this.scene || !this.scene.add) return;
+        this.createHealthIndicator();
         if (this.isFaceDown) {
             // Las cartas boca abajo (reverso del mazo) no llevan adornos.
             this.destroyPresentation();
+            this.syncHealthIndicator();
             return;
         }
         ensureFxTextures(this.scene);
@@ -238,6 +246,11 @@ export default class Card extends Phaser.GameObjects.Sprite {
             this.selectedGlow.setDepth(this.depth - 0.5);
             this.selectedGlow.setVisible(this.visible);
         }
+        this.syncHealthIndicator();
+        if (this.cardFrame && this.cardFrame.scene && this.isSelected) {
+            this.cardFrame.setTint(0xff69d4);
+            this.cardFrame.setBlendMode(Phaser.BlendModes.ADD);
+        }
     }
 
     /**
@@ -251,21 +264,83 @@ export default class Card extends Phaser.GameObjects.Sprite {
         if (!this.selectedGlow || !this.selectedGlow.scene) return;
         this.scene.tweens.killTweensOf(this.selectedGlow);
         if (active) {
+            this.selectedGlow.setTint(0xff1493);
+            if (this.cardFrame && this.cardFrame.scene) {
+                this.cardFrame.setTint(0xff69d4);
+                this.cardFrame.setBlendMode(Phaser.BlendModes.ADD);
+            }
             this.scene.tweens.add({
                 targets: this.selectedGlow,
-                alpha: { from: 0.30, to: 0.60 },
-                duration: 640,
+                alpha: { from: 0.55, to: 1 },
+                duration: 420,
                 yoyo: true,
                 repeat: -1,
                 ease: 'Sine.easeInOut'
             });
         } else {
+            this.selectedGlow.setTint(this.elementColor);
+            if (this.cardFrame && this.cardFrame.scene) {
+                this.cardFrame.clearTint();
+                this.cardFrame.setBlendMode(Phaser.BlendModes.NORMAL);
+            }
             this.scene.tweens.add({
                 targets: this.selectedGlow,
                 alpha: 0,
                 duration: 160,
                 ease: 'Power1'
             });
+        }
+    }
+
+    createHealthIndicator() {
+        if (!this.healthBar || !this.healthBar.scene) {
+            this.healthBar = this.scene.add.graphics();
+        }
+        if (!this.healthText || !this.healthText.scene) {
+            this.healthText = this.scene.add.text(0, 0, '', {
+                fontFamily: 'Georgia, serif',
+                fontSize: '10px',
+                fontStyle: 'bold',
+                color: '#ffffff',
+                backgroundColor: 'rgba(3, 8, 16, 0.88)',
+                padding: { x: 3, y: 1 },
+                stroke: '#000000',
+                strokeThickness: 2
+            }).setOrigin(0.5, 0);
+        }
+        this.syncHealthIndicator();
+    }
+
+    syncHealthIndicator() {
+        if (!this.healthBar || !this.healthBar.scene || !this.healthText || !this.healthText.scene) return;
+
+        const health = CardHealthService.ensure(this.cardData);
+        const cx = this.x;
+        const cy = this.y;
+        const u = Math.min(this.displayWidth / 132, this.displayHeight / 180);
+        const left = cx - this.displayWidth / 2 + 7 * u;
+        const top = cy - this.displayHeight / 2 + 6 * u;
+
+        this.healthText.setText(`${health}%`);
+        this.healthText.setPosition(left + 25 * u, top);
+        this.healthText.setScale(u);
+        this.healthText.setDepth(this.depth + 1.4);
+        this.healthText.setVisible(this.visible);
+        this.healthText.setAlpha(this.alpha);
+
+        this.healthBar.setPosition(left, top + 17 * u);
+        this.healthBar.setScale(u);
+        this.healthBar.setDepth(this.depth + 1.3);
+        this.healthBar.setVisible(this.visible);
+        this.healthBar.setAlpha(this.alpha);
+
+        if (this.renderedHealth !== health) {
+            const fillWidth = 46 * health / 100;
+            const fillColor = health > 60 ? 0x38e59a : health > 30 ? 0xffc857 : 0xff4f72;
+            this.healthBar.clear();
+            this.healthBar.fillStyle(0x05070e, 0.9).fillRoundedRect(0, 0, 46, 4, 2);
+            this.healthBar.fillStyle(fillColor, 1).fillRoundedRect(0, 0, fillWidth, 4, 2);
+            this.renderedHealth = health;
         }
     }
 
@@ -355,6 +430,10 @@ export default class Card extends Phaser.GameObjects.Sprite {
             if (aura.scene) aura.destroy();
         }
         this.destroyPresentation();
+        if (this.healthBar && this.healthBar.scene) this.healthBar.destroy();
+        if (this.healthText && this.healthText.scene) this.healthText.destroy();
+        this.healthBar = null;
+        this.healthText = null;
         super.destroy(fromScene);
     }
 

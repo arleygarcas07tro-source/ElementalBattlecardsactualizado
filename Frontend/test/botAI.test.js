@@ -44,7 +44,7 @@ test('BotAI: findBestAttack elige el ataque ganador', () => {
     assert.ok(best.score > 0);
 });
 
-test('BotAI: findBestAttack devuelve null sin ventaja', () => {
+test('BotAI: findBestAttack puede dañar cartas neutrales sin mutar su vida', () => {
     const bot = new BotAI(3);
 
     const best = bot.findBestAttack(
@@ -52,7 +52,10 @@ test('BotAI: findBestAttack devuelve null sin ventaja', () => {
         [{ card: { type: CARD_TYPES.FUEGO, level: 1 }, index: 0 }]
     );
 
-    assert.equal(best, null);
+    assert.equal(best.attacker.index, 0);
+    assert.equal(best.defender.index, 0);
+    assert.equal(best.score, 25);
+    assert.equal(best.defender.card.health, undefined);
 });
 
 test('BotAI: decideAction hace pass sin acciones posibles', () => {

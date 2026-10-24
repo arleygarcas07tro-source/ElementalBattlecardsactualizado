@@ -1,56 +1,33 @@
-import { ADVANTAGES } from "./constants.js";
+import { ADVANTAGES } from './constants.js';
+import CardHealthService from '../game/CardHealthService.js';
 
 /**
- * Determina el resultado de un combate entre dos cartas.
- * @param {object} attacker - La carta atacante.
- * @param {string} attacker.type - El tipo de la carta atacante (ej. 'fuego').
- * @param {number} attacker.level - El nivel de la carta atacante (1, 2, o 3).
- * @param {object} defender - La carta defensora.
- * @param {string} defender.type - El tipo de la carta defensora.
- * @param {number} defender.level - El nivel de la carta defensora.
- * @returns {object} Un objeto con el resultado. ej. { winner: 'attacker', loser: 'defender' }
+ * Calcula daño según el elemento y el nivel de la carta atacante.
+ * El daño neutral empieza en 25%; cada nivel del atacante añade 5%.
+ * La ventaja elemental añade 15% y la desventaja resta 15%.
+ * @param {object} attacker Carta atacante.
+ * @param {object} defender Carta defensora; su vida se actualiza.
+ * @param {{bonusDamage?: number}} [options]
+ * @returns {{winner: string, loser: string, damage: number, defenderHealth: number, destroyed: boolean}}
  */
-export function resolveCombat(attacker, defender) {
-    const levelDiff = attacker.level - defender.level;
+export function calculateAttackDamage(attacker, defender, { bonusDamage = 0 } = {}) {
+    const attackerLevel = Math.max(1, Number(attacker.level) || 1);
+    const attackerAdvantage = ADVANTAGES[attacker.type] === defender.type;
+    const defenderAdvantage = ADVANTAGES[defender.type] === attacker.type;
+    const elementModifier = attackerAdvantage ? 15 : defenderAdvantage ? -15 : 0;
+    const rawDamage = 25 + (attackerLevel - 1) * 5 + elementModifier + bonusDamage;
+    return Math.max(5, Math.min(100, Math.round(rawDamage)));
+}
 
-    // Regla 3: Diferencia de 2 niveles o más es victoria automática.
-    if (levelDiff >= 2) {
-        return { winner: 'attacker', loser: 'defender' };
-    }
-    if (levelDiff <= -2) {
-        return { winner: 'defender', loser: 'attacker' };
-    }
+export function resolveCombat(attacker, defender, options = {}) {
+    const damage = calculateAttackDamage(attacker, defender, options);
+    const { health: defenderHealth, destroyed } = CardHealthService.applyDamage(defender, damage);
 
-    const attackerAdvantage = ADVANTAGES[attacker.type];
-    const defenderAdvantage = ADVANTAGES[defender.type];
-
-    // Regla 3: Diferencia de 1 nivel.
-    if (levelDiff === 1) {
-        // El atacante es neutral contra su desventaja y gana a los neutrales.
-        if (defenderAdvantage === attacker.type) { // El defensor tenía ventaja de tipo
-            return { winner: 'none', loser: 'none' }; // Se vuelve neutral
-        }
-        // Si el defensor no tiene ventaja, el atacante gana.
-        return { winner: 'attacker', loser: 'defender' };
-    }
-
-    if (levelDiff === -1) {
-        // El defensor es neutral contra su desventaja y gana a los neutrales.
-        if (attackerAdvantage === defender.type) { // El atacante tenía ventaja de tipo
-            return { winner: 'none', loser: 'none' }; // Se vuelve neutral
-        }
-        // Si el atacante no tiene ventaja, el defensor gana.
-        return { winner: 'defender', loser: 'attacker' };
-    }
-
-    // Regla 3: Mismo nivel. Se aplica la ventaja de tipo normal.
-    if (attackerAdvantage === defender.type) {
-        return { winner: 'attacker', loser: 'defender' };
-    }
-    if (defenderAdvantage === attacker.type) {
-        return { winner: 'defender', loser: 'attacker' };
-    }
-
-    // Si no hay ventaja de tipo, es neutral.
-    return { winner: 'none', loser: 'none' };
+    return {
+        winner: destroyed ? 'attacker' : 'none',
+        loser: destroyed ? 'defender' : 'none',
+        damage,
+        defenderHealth,
+        destroyed
+    };
 }
