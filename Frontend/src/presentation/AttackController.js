@@ -142,9 +142,10 @@ export default class AttackController {
 
         const targetX = target.x;
         const targetY = target.y;
-        const startX = attackingCardObject.x;
-        const startY = attackingCardObject.y;
-        const baseScale = attackingCardObject.scale;
+        const homePosition = attackingCardObject.getData('startPosition')
+            || { x: attackingCardObject.x, y: attackingCardObject.y };
+        const baseScaleX = attackingCardObject.scaleX;
+        const baseScaleY = attackingCardObject.scaleY;
         const defenderCard = (target && typeof target.getData === 'function') ? target : null;
 
         // Fase 1 — lanzamiento: el atacante se estira y vuela al objetivo.
@@ -152,8 +153,8 @@ export default class AttackController {
             targets: attackingCardObject,
             x: targetX,
             y: targetY,
-            scaleX: baseScale * 1.18,
-            scaleY: baseScale * 0.9,
+            scaleX: baseScaleX * 1.18,
+            scaleY: baseScaleY * 0.9,
             duration: 180,
             ease: 'Sine.easeIn',
             onComplete: () => {
@@ -220,10 +221,10 @@ export default class AttackController {
 
                 this.scene.tweens.add({
                     targets: attackingCardObject,
-                    x: startX,
-                    y: startY,
-                    scaleX: baseScale,
-                    scaleY: baseScale,
+                    x: homePosition.x,
+                    y: homePosition.y,
+                    scaleX: baseScaleX,
+                    scaleY: baseScaleY,
                     duration: 200,
                     ease: 'Power2',
                     onComplete: finalizeAttack

@@ -2,6 +2,8 @@
 import { createGemVisual, ELEMENT_ORDER } from '../helpers/gemVisual.js';
 import { drawOrnatePanel, ornateLabel } from '../helpers/battlefieldArt.js';
 import { GAME_CONFIG } from '../helpers/constants.js';
+import { createBattleLayout } from '../helpers/battleLayout.js';
+import { getGameMode } from '../game/gameModes.js';
 
 const ELEMENTS = ELEMENT_ORDER;
 
@@ -12,7 +14,7 @@ const ELEMENT_LABELS = {
     planta: 'Planta',
     luz: 'Luz',
     sombra: 'Sombra',
-    esperitu: 'Espiritu'
+    espiritu: 'Espíritu'
 };
 
 const COLORS = {
@@ -60,14 +62,15 @@ export default class UIScene extends Phaser.Scene {
         this.playerData = data.playerData || { username: 'Jugador' };
         this.username = this.playerData.username || 'Jugador';
         this.gameScene = this.scene.get('GameScene');
+        this.gameMode = getGameMode(this.gameScene?.gameMode?.id || data.gameMode?.id);
 
         const { width, height } = this.scale;
         this.W = width;
         this.H = height;
+        this.layout = this.gameScene?.layout || createBattleLayout(width, height, { usesGems: this.gameMode.usesGems });
 
-        // Reloj de turno: sobre la bandeja de la mano, a la izquierda de las
-        // cartas (que ahora llegan hasta xâ‰ˆ1110).
-        this.turnTimerPos = { x: 300, y: this.H - 125 };
+        // Reloj de turno: centrado sobre el área de juego.
+        this.turnTimerPos = this.layout.turnTimer;
 
         // --- Construccion del HUD ---
         this.createProfiles();
@@ -79,14 +82,15 @@ export default class UIScene extends Phaser.Scene {
         this.createGemPanels();
 
         // --- TOAST CENTRAL (feedback de poderes de esencia y convergencia) ---
-        this.powerToastText = this.add.text(width / 2, 100, '', {
-            fontSize: '18px',
-            fontFamily: 'Arial',
+        this.powerToastText = this.add.text(width / 2, this.H * 0.50, '', {
+            fontSize: '20px',
+            fontFamily: 'Georgia, serif',
             color: '#ffd700',
             fontStyle: 'bold',
             align: 'center',
+            wordWrap: { width: 900 },
             backgroundColor: 'rgba(20,0,40,0.78)',
-            padding: { x: 14, y: 8 },
+            padding: { x: 16, y: 9 },
             shadow: { offsetX: 2, offsetY: 2, color: '#000', blur: 3, fill: true }
         }).setOrigin(0.5).setDepth(1001).setVisible(false);
 
@@ -103,6 +107,9 @@ export default class UIScene extends Phaser.Scene {
         this.gameScene.events.on('gems-spent', this.handleGemsSpent, this);
         this.gameScene.events.on('update-actions-left', this.handleActionsLeft, this);
         this.gameScene.events.on('convergence-status', this.handleConvergenceStatus, this);
+
+        const objectives = this.gameScene.getObjectivesPayload?.();
+        if (objectives) this.handleObjectivesReady(objectives);
 
         this.scene.get('GameScene').events.on('update-attack-counter', (owner, turnIndex, mustAttack) => {
             const textObj = this.attackCounterTexts && this.attackCounterTexts[owner];
@@ -160,13 +167,11 @@ export default class UIScene extends Phaser.Scene {
      */
     buildProfile(owner) {
         const isPlayer = owner === 'player';
-        const w = 330;
-        const h = 124;
-        // Rival arriba-izquierda (sobre su bandeja de mano, a la derecha del
-        // botÃ³n de pausa), jugador abajo-derecha. El rival se baja a y=88 para
-        // no asomar por encima de la bandeja (como sÃ­ hace el del jugador).
-        const x = isPlayer ? this.W - w - 30 : 100;
-        const y = isPlayer ? this.H - h - 24 : 88;
+        const w = this.layout?.opponentProfile?.w || 348;
+        const h = this.layout?.opponentProfile?.h || 128;
+        const pos = isPlayer ? (this.layout?.playerProfile || { x: 20, y: this.H - 142 }) : (this.layout?.opponentProfile || { x: 20, y: 86 });
+        const x = pos.x;
+        const y = pos.y;
         const accent = isPlayer ? COLORS.blue : COLORS.red;
 
         const panel = drawOrnatePanel(this, { x, y, w, h, accent, fill: COLORS.panel });
@@ -174,38 +179,38 @@ export default class UIScene extends Phaser.Scene {
         const name = isPlayer
             ? this.username
             : (this.gameScene && this.gameScene.vsBot
-                ? 'BOT Â· NIVEL ' + ((this.gameScene.bot && this.gameScene.bot.difficulty) || 3)
-                : (this.gameScene && this.gameScene.isLAN ? 'RIVAL Â· LAN' : 'RIVAL Â· EN LÃNEA'));
+                ? 'BOT · NIVEL ' + ((this.gameScene.bot && this.gameScene.bot.difficulty) || 3)
+                : (this.gameScene && this.gameScene.isLAN ? 'RIVAL · LAN' : 'RIVAL · EN LÍNEA'));
 
-        const title = ornateLabel(this, x + 20, y + 22, name.toUpperCase(), {
-            fontSize: '16px', color: isPlayer ? '#bfe1ff' : '#ffc2ad', originX: 0, originY: 0.5
+        const title = ornateLabel(this, x + 18, y + 21, name.toUpperCase(), {
+            fontSize: '15px', color: isPlayer ? '#bfe1ff' : '#ffc2ad', originX: 0, originY: 0.5
         });
         title.setDepth(5);
 
-        const role = this.add.text(x + w - 20, y + 22, isPlayer ? 'TÃš' : 'RIVAL', {
-            fontFamily: 'Georgia, serif', fontSize: '13px', fontStyle: 'bold',
+        const role = this.add.text(x + w - 18, y + 21, isPlayer ? 'TÚ' : 'RIVAL', {
+            fontFamily: 'Georgia, serif', fontSize: '11px', fontStyle: 'bold',
             color: isPlayer ? '#8fd4ff' : '#ffb08f', stroke: '#000', strokeThickness: 3
         }).setOrigin(1, 0.5).setDepth(5);
 
         const mkStat = (labelText, statsX) => {
-            const label = this.add.text(statsX, y + 58, labelText, {
-                fontFamily: 'Georgia, serif', fontSize: '12px', color: '#9fb0c8'
+            const label = this.add.text(statsX, y + 54, labelText, {
+                fontFamily: 'Georgia, serif', fontSize: '11px', color: '#9fb0c8'
             }).setOrigin(0.5, 0.5).setDepth(5);
-            const value = this.add.text(statsX, y + 82, '0', {
-                fontFamily: 'Georgia, serif', fontSize: '22px', fontStyle: 'bold',
+            const value = this.add.text(statsX, y + 77, '0', {
+                fontFamily: 'Georgia, serif', fontSize: '21px', fontStyle: 'bold',
                 color: '#ffffff', stroke: '#000', strokeThickness: 4
             }).setOrigin(0.5, 0.5).setDepth(5);
             return { label, value };
         };
 
-        const colW = (w - 40) / 3;
-        const baseX = x + 20;
+        const colW = (w - 36) / 3;
+        const baseX = x + 18;
         const deck = mkStat('MAZO', baseX + colW * 0.5);
         const hand = mkStat('MANO', baseX + colW * 1.5);
         const field = mkStat('CAMPO', baseX + colW * 2.5);
 
-        const attackText = this.add.text(x + w - 20, y + h - 12, '', {
-            fontFamily: 'Arial', fontSize: '12px', fontStyle: 'bold',
+        const attackText = this.add.text(x + w - 18, y + h - 10, '', {
+            fontFamily: 'Arial', fontSize: '11px', fontStyle: 'bold',
             color: '#d7e6ff', stroke: '#000', strokeThickness: 3
         }).setOrigin(1, 1).setDepth(5);
 
@@ -213,8 +218,8 @@ export default class UIScene extends Phaser.Scene {
         this.attackCounterTexts[owner] = attackText;
 
         // Contador de acciones disponibles del turno (atacar, colocar, fusionar).
-        const actionsText = this.add.text(x + 20, y + h - 12, '', {
-            fontFamily: 'Arial', fontSize: '12px', fontStyle: 'bold',
+        const actionsText = this.add.text(x + 18, y + h - 10, '', {
+            fontFamily: 'Arial', fontSize: '11px', fontStyle: 'bold',
             color: '#8fd4ff', stroke: '#000', strokeThickness: 3
         }).setOrigin(0, 1).setDepth(5);
 
@@ -238,7 +243,7 @@ export default class UIScene extends Phaser.Scene {
                     ? player.field.count()
                     : (player.field || []).filter(Boolean).length;
                 profile.field.value.setText(String(fieldCount));
-            } catch (e) { /* modelo aún no listo */ }
+            } catch { /* modelo aún no listo */ }
         };
 
         fill(this.playerProfile, gs.player);
@@ -246,83 +251,107 @@ export default class UIScene extends Phaser.Scene {
     }
 
     createPhaseBanner() {
-        const w = 400;
-        const h = 54;
-        const x = this.W / 2 - w / 2;
-        const y = 22;
+        const p = this.layout?.phasePanel || { x: this.W / 2 - 250, y: 8, w: 500, h: 64 };
+        const w = p.w;
+        const h = p.h;
+        const x = p.x;
+        const y = p.y;
         drawOrnatePanel(this, { x, y, w, h, accent: COLORS.gold, fill: COLORS.panelDeep });
 
-        this.phaseText = this.add.text(this.W / 2, y + h / 2, 'PREPARADO', {
-            fontFamily: 'Georgia, serif', fontSize: '22px', fontStyle: 'bold',
+        this.phaseText = this.add.text(this.W / 2, y + Math.round(h / 2 - 6), 'PREPARADO', {
+            fontFamily: 'Georgia, serif', fontSize: '23px', fontStyle: 'bold',
             color: '#e8cf8f', stroke: '#000', strokeThickness: 5, letterSpacing: 2
         }).setOrigin(0.5).setDepth(5);
 
         // Contador de turnos en la esquina del estandarte (se actualiza por evento).
-        this.turnCounterText = this.add.text(x + w - 14, y + h / 2, '', {
+        this.turnCounterText = this.add.text(x + w - 16, y + Math.round(h / 2 - 6), '', {
             fontFamily: 'Georgia, serif', fontSize: '14px', fontStyle: 'bold',
             color: '#bfe1ff', stroke: '#000', strokeThickness: 3
         }).setOrigin(1, 0.5).setDepth(5);
+        this.turnCounterText.setVisible(!!this.gameMode.maxTurns);
         this.events.off('update-turn-counter');
         this.gameScene.events.off('update-turn-counter');
-        this.gameScene.events.on('update-turn-counter', (current, max) => {
+        this.gameScene.events.on('update-turn-counter', (playerTurn, opponentTurn, max) => {
             if (!this.turnCounterText) return;
-            this.turnCounterText.setText(max ? `T${current}/${max}` : `T${current}`);
+            this.turnCounterText.setText(max
+                ? `TÚ ${playerTurn}/${max} · RIVAL ${opponentTurn}/${max}`
+                : `T${playerTurn}`);
         });
 
-        this.phaseSub = this.add.text(this.W / 2, y + h + 16, '', {
-            fontFamily: 'Arial', fontSize: '13px', color: '#9fb0c8', stroke: '#000', strokeThickness: 3
+        this.phaseSub = this.add.text(this.W / 2, y + h - 12, '', {
+            fontFamily: 'Georgia, serif', fontSize: '11px', color: '#9fb0c8',
+            stroke: '#000', strokeThickness: 3, letterSpacing: 1
         }).setOrigin(0.5).setDepth(5);
 
-        this.objectiveSub = this.add.text(this.W / 2, y + h + 38, '', {
-            fontFamily: 'Georgia, serif', fontSize: '13px', fontStyle: 'bold',
-            color: '#e8cf8f', stroke: '#000', strokeThickness: 3, letterSpacing: 1
-        }).setOrigin(0.5).setDepth(5);
+        // Ciclo elemental compacto, siempre visible y dentro del muelle derecho.
+        const ds = this.layout?.dockSections?.status;
+        if (ds) {
+            this.objectiveSub = this.add.text(ds.x + ds.w / 2, ds.y + ds.h / 2, '', {
+                fontFamily: 'Georgia, serif', fontSize: '11px', fontStyle: 'bold',
+                color: '#c9b47a', stroke: '#000', strokeThickness: 3, letterSpacing: 0.5,
+                align: 'center',
+                wordWrap: { width: ds.w - 12 }
+            }).setOrigin(0.5).setDepth(5);
+        } else {
+            this.objectiveSub = this.add.text(this.W / 2, this.H - 24, '', {
+                fontFamily: 'Georgia, serif', fontSize: '12px', fontStyle: 'bold',
+                color: '#c9b47a', stroke: '#000', strokeThickness: 3, letterSpacing: 1
+            }).setOrigin(0.5).setDepth(5);
+        }
     }
 
     createButtons() {
-        // --- BOTÃ“N DE PAUSA ---
-        const px = 62;
-        const py = 54;
+        // --- BOTÓN DE PAUSA ---
+        const pb = this.layout?.pauseButton || { x: 48, y: 42, radius: 26 };
+        const px = pb.x;
+        const py = pb.y;
+        const pr = pb.radius;
         const ring = this.add.graphics().setDepth(1000);
-        ring.fillStyle(0x0a0e1c, 0.92).fillCircle(px, py, 28);
-        ring.lineStyle(3, COLORS.gold, 0.9).strokeCircle(px, py, 28);
-        ring.lineStyle(1, COLORS.goldBright, 0.4).strokeCircle(px, py, 22);
+        ring.fillStyle(0x0a0e1c, 0.94).fillCircle(px, py, pr);
+        ring.lineStyle(2, COLORS.gold, 0.9).strokeCircle(px, py, pr);
+        ring.lineStyle(1, COLORS.goldBright, 0.35).strokeCircle(px, py, pr - 6);
 
-        const pauseBtn = this.add.text(px, py, 'â¸', {
-            fontSize: '32px', color: '#e8cf8f', fontStyle: 'bold'
-        }).setOrigin(0.5).setDepth(1001);
+        const pauseBars = [
+            this.add.rectangle(px - 6, py, 5, 20, COLORS.goldBright).setDepth(1001),
+            this.add.rectangle(px + 6, py, 5, 20, COLORS.goldBright).setDepth(1001)
+        ];
 
-        const pauseZone = this.add.zone(px, py, 64, 64).setOrigin(0.5)
+        const pauseZone = this.add.zone(px, py, pr * 2 + 10, pr * 2 + 10).setOrigin(0.5)
             .setInteractive({ useHandCursor: true }).setDepth(1002);
-        pauseZone.on('pointerover', () => pauseBtn.setColor('#ffffff'));
-        pauseZone.on('pointerout', () => pauseBtn.setColor('#e8cf8f'));
+        pauseZone.on('pointerover', () => pauseBars.forEach(bar => bar.setFillStyle(0xffffff)));
+        pauseZone.on('pointerout', () => pauseBars.forEach(bar => bar.setFillStyle(COLORS.goldBright)));
         pauseZone.on('pointerdown', () => {
             this.scene.pause('GameScene');
             this.scene.pause('UIScene');
             this.scene.launch('PauseScene');
         });
 
-        // --- BOTÃ“N INICIAR PARTIDA ---
-        const bw = 210;
-        const bh = 48;
-        const bx = this.W - bw / 2 - 24;
-        const by = 48;
+        // --- BOTÓN INICIAR PARTIDA ---
+        const sb = this.layout?.startButton || { x: this.W - 210 - 24, y: 14, w: 210, h: 44 };
+        const bw = sb.w;
+        const bh = sb.h;
+        const bx = sb.x + bw / 2;
+        const by = sb.y + bh / 2;
 
         const startContainer = this.add.container(bx, by).setDepth(5);
         const startBg = this.add.graphics();
-        startBg.fillStyle(0x0c2a12, 0.92);
+        startBg.fillStyle(0x0c2a12, 0.94);
         startBg.fillRoundedRect(-bw / 2, -bh / 2, bw, bh, 12);
         startBg.lineStyle(2, 0x49d17a, 0.95);
         startBg.strokeRoundedRect(-bw / 2, -bh / 2, bw, bh, 12);
         startBg.lineStyle(1, 0x9effc0, 0.35);
         startBg.strokeRoundedRect(-bw / 2 + 5, -bh / 2 + 5, bw - 10, bh - 10, 8);
 
-        const startText = this.add.text(0, 0, 'INICIAR PARTIDA', {
-            fontFamily: 'Georgia, serif', fontSize: '18px', fontStyle: 'bold',
+        const playIcon = this.add.graphics();
+        playIcon.fillStyle(0x9effc0, 0.95);
+        playIcon.fillTriangle(-bw / 2 + 22, -8, -bw / 2 + 22, 8, -bw / 2 + 34, 0);
+
+        const startText = this.add.text(8, 0, 'INICIAR PARTIDA', {
+            fontFamily: 'Georgia, serif', fontSize: '19px', fontStyle: 'bold',
             color: '#d8ffe6', stroke: '#000', strokeThickness: 4
         }).setOrigin(0.5);
 
-        startContainer.add([startBg, startText]);
+        startContainer.add([startBg, playIcon, startText]);
         startContainer.setSize(bw, bh).setInteractive({ useHandCursor: true });
         startContainer.on('pointerover', () => startContainer.setScale(1.04));
         startContainer.on('pointerout', () => startContainer.setScale(1));
@@ -333,25 +362,27 @@ export default class UIScene extends Phaser.Scene {
     }
 
     createTurnTimer() {
-        const cx = this.turnTimerPos.x;
-        const cy = this.turnTimerPos.y;
+        const pos = this.turnTimerPos || { x: this.W / 2 + 330, y: 40, radius: 34 };
+        const cx = pos.x;
+        const cy = pos.y;
+        const r = pos.radius || 34;
 
         const base = this.add.graphics().setDepth(6);
-        base.fillStyle(0x000000, 0.4).fillCircle(cx, cy + 3, 48);
-        base.fillStyle(0x0a0e1c, 0.94).fillCircle(cx, cy, 48);
-        base.lineStyle(3, COLORS.gold, 0.55).strokeCircle(cx, cy, 48);
-        base.lineStyle(1, 0xffffff, 0.12).strokeCircle(cx, cy, 40);
+        base.fillStyle(0x000000, 0.4).fillCircle(cx, cy + 2, r + 4);
+        base.fillStyle(0x0a0e1c, 0.94).fillCircle(cx, cy, r + 4);
+        base.lineStyle(2, COLORS.gold, 0.55).strokeCircle(cx, cy, r + 4);
+        base.lineStyle(1, 0xffffff, 0.12).strokeCircle(cx, cy, r - 2);
 
         // Arco de progreso (se redibuja en cada tick).
         this.timerArc = this.add.graphics().setDepth(7);
 
         this.timerText = this.add.text(cx, cy, '', {
-            fontFamily: 'Georgia, serif', fontSize: '34px', fontStyle: 'bold',
-            color: '#ffffff', stroke: '#000', strokeThickness: 6
+            fontFamily: 'Georgia, serif', fontSize: Math.round(r * 1.0) + 'px', fontStyle: 'bold',
+            color: '#ffffff', stroke: '#000', strokeThickness: 4
         }).setOrigin(0.5).setDepth(8);
 
-        this.timerLabel = this.add.text(cx, cy - 70, 'TIEMPO DE TURNO', {
-            fontFamily: 'Georgia, serif', fontSize: '12px', color: '#9fb0c8',
+        this.timerLabel = this.add.text(cx, cy - (r + 16), 'TURNO', {
+            fontFamily: 'Georgia, serif', fontSize: '11px', color: '#9fb0c8',
             stroke: '#000', strokeThickness: 3, letterSpacing: 1
         }).setOrigin(0.5).setDepth(8);
 
@@ -363,20 +394,22 @@ export default class UIScene extends Phaser.Scene {
     /** Redibuja el arco de progreso del temporizador. */
     drawTimerArc() {
         if (!this.timerArc) return;
-        const cx = this.turnTimerPos.x;
-        const cy = this.turnTimerPos.y;
+        const pos = this.turnTimerPos || { x: this.W / 2 + 330, y: 40, radius: 34 };
+        const cx = pos.x;
+        const cy = pos.y;
+        const r = pos.radius || 34;
         const frac = Phaser.Math.Clamp(this._timerFrac, 0, 1);
         this.timerArc.clear();
-        this.timerArc.lineStyle(6, 0x12233d, 1).strokeCircle(cx, cy, 42);
+        this.timerArc.lineStyle(4, 0x12233d, 1).strokeCircle(cx, cy, r + 2);
         if (frac > 0) {
             const start = -Math.PI / 2;
             const end = start + frac * Math.PI * 2;
-            this.timerArc.lineStyle(6, this._timerColor, 0.98);
+            this.timerArc.lineStyle(4, this._timerColor, 0.98);
             this.timerArc.beginPath();
-            this.timerArc.arc(cx, cy, 42, start, end, false);
+            this.timerArc.arc(cx, cy, r + 2, start, end, false);
             this.timerArc.strokePath();
         }
-        this.timerArc.lineStyle(1, 0xffffff, 0.15).strokeCircle(cx, cy, 34);
+        this.timerArc.lineStyle(1, 0xffffff, 0.12).strokeCircle(cx, cy, r - 4);
     }
 
     /** Redibuja el anillo del temporizador con el color de la fase activa. */
@@ -386,18 +419,17 @@ export default class UIScene extends Phaser.Scene {
     }
 
     createMatchTimer() {
-        const w = 210;
-        const h = 56;
-        // Entre el estandarte de fase y el botÃ³n de inicio, en la franja
-        // superior. Arriba-derecha chocaba con el orbe superior del rival.
-        const x = this.W - w - 340;
-        const y = 24;
+        const mp = this.layout?.matchTimerPanel || { x: this.W - 210 - 24, y: 64, w: 210, h: 38 };
+        const w = mp.w;
+        const h = mp.h;
+        const x = mp.x;
+        const y = mp.y;
         this.matchPanel = drawOrnatePanel(this, { x, y, w, h, accent: COLORS.gold, fill: COLORS.panelDeep });
         this.matchPanel.setVisible(false);
 
         this.matchTimerText = this.add.text(x + w / 2, y + h / 2, '', {
-            fontFamily: 'Georgia, serif', fontSize: '22px', fontStyle: 'bold',
-            color: '#ffff88', stroke: '#000', strokeThickness: 5
+            fontFamily: 'Georgia, serif', fontSize: '16px', fontStyle: 'bold',
+            color: '#ffff88', stroke: '#000', strokeThickness: 4
         }).setOrigin(0.5).setDepth(6).setVisible(false);
     }
 
@@ -406,66 +438,67 @@ export default class UIScene extends Phaser.Scene {
      * ------------------------------------------------------------------ */
 
     createEssenceOrbs() {
-        const { width, height } = this.scale;
-        const orbSize = 40;
-        const radius = 54;
-
-        const playerCenterX = 132;
-        const playerTopY = height - 380;
-        const playerBottomY = height - 180;
-
-        const opponentCenterX = width - 132;
-        const opponentTopY = 392;
-        const opponentBottomY = 192;
-
         if (this.essenceGraphics && this.essenceGraphics.length) {
             this.essenceGraphics.forEach(g => g.destroy?.());
         }
         this.essenceGraphics = [];
 
-        this.createEssenceTriangle(playerCenterX, playerTopY, radius, ['fuego', 'planta', 'agua'], 'player', COLORS.blue, orbSize);
-        this.createEssenceTriangle(playerCenterX, playerBottomY, radius, ['luz', 'sombra', 'espiritu'], 'player', COLORS.blue, orbSize);
-        this.createEssenceTriangle(opponentCenterX, opponentTopY, radius, ['fuego', 'planta', 'agua'], 'opponent', COLORS.red, orbSize);
-        this.createEssenceTriangle(opponentCenterX, opponentBottomY, radius, ['luz', 'sombra', 'espiritu'], 'opponent', COLORS.red, orbSize);
+        const ds = this.layout?.dockSections?.essence;
+        if (ds) {
+            this.createEssencePanelDock('player', ds, COLORS.blue);
+        } else {
+            const sideX = 150;
+            this.createEssencePanel('player', sideX, this.H * 0.622, COLORS.blue);
+        }
     }
 
-    /**
-     * Crea un triÃ¡ngulo de 3 orbes con flechas (lÃ­nea + punta).
-     */
-    createEssenceTriangle(cx, cy, r, typesArray, ownerId, arrowColor = 0xff3333, orbSize = 40) {
-        const anglesDeg = [-90, 30, 150];
-        const elements = [];
+    createEssencePanelDock(ownerId, ds, accent) {
+        const isPlayer = ownerId === 'player';
+        const panel = drawOrnatePanel(this, {
+            x: ds.x, y: ds.y, w: ds.w, h: ds.h, accent, fill: COLORS.panelDeep
+        }).setDepth(4);
+        this.essenceGraphics.push(panel);
 
-        const arrowsGraphics = this.add.graphics({ x: 0, y: 0 }).setDepth(5);
-        const orbsContainer = this.add.container(0, 0).setDepth(10);
-        const scaleValue = 0.085;
+        const title = ornateLabel(this, ds.x + ds.w / 2, ds.y + 14, isPlayer ? 'TUS ESENCIAS' : 'ESENCIAS', {
+            fontSize: '11px',
+            color: isPlayer ? '#bfe1ff' : '#ffc2ad'
+        }).setDepth(6);
+        this.essenceGraphics.push(title);
 
-        for (let i = 0; i < 3; i++) {
-            const angle = Phaser.Math.DegToRad(anglesDeg[i]);
-            const x = Math.round(cx + r * Math.cos(angle));
-            const y = Math.round(cy + r * Math.sin(angle));
+        const columns = [ds.x + ds.w * 0.28, ds.x + ds.w * 0.72];
+        const rows = [ds.y + ds.h * 0.32, ds.y + ds.h * 0.56, ds.y + ds.h * 0.80];
+        const orbR = Math.min(20, Math.round(ds.w * 0.13));
+        const inactiveTint = 0x596477;
 
-            // Marco circular del orbe (integra las esencias con el HUD).
-            const ring = this.add.graphics().setDepth(9);
-            ring.fillStyle(0x05070e, 0.85).fillCircle(x, y, 31);
-            ring.lineStyle(2, arrowColor, 0.7).strokeCircle(x, y, 31);
-            ring.lineStyle(1, 0xcfaf6d, 0.5).strokeCircle(x, y, 27);
+        ELEMENTS.forEach((type, i) => {
+            const x = columns[i % 2];
+            const y = rows[Math.floor(i / 2)];
 
-            const assetKey = `orb-${typesArray[i]}`;
-            const sprite = this.add.image(x, y, assetKey)
-                .setInteractive()
-                .setOrigin(0.5)
-                .setScale(scaleValue)
-                .setTint(0x555555);
-            sprite.setData('type', typesArray[i]);
+            const ring = this.add.graphics().setDepth(5);
+            ring.fillStyle(0x05070e, 0.92).fillCircle(x, y, orbR + 2);
+            ring.lineStyle(2, accent, 0.58).strokeCircle(x, y, orbR + 2);
+            ring.lineStyle(1, COLORS.gold, 0.35).strokeCircle(x, y, orbR);
+            this.essenceGraphics.push(ring);
+
+            const sprite = this.add.image(x, y, `orb-${type}`)
+                .setDisplaySize(orbR * 1.6, orbR * 1.6)
+                .setTint(inactiveTint)
+                .setDepth(6)
+                .setInteractive({ useHandCursor: isPlayer });
+            sprite.setData('type', type);
             sprite.setData('owner', ownerId);
             sprite.setData('active', false);
             sprite.setData('ring', ring);
+            this.essenceGraphics.push(sprite);
 
-            // Poderes de esencia: el orbe propio activo se puede pulsar para
-            // disparar el poder de esa esencia (una vez por turno propio).
-            if (ownerId === 'player') {
-                const orbType = typesArray[i];
+            if (isPlayer) {
+                sprite.on('pointerover', () => {
+                    if (!sprite.getData('active')) sprite.setTint(0x9aa8bd);
+                });
+                sprite.on('pointerout', () => {
+                    if (!sprite.getData('active')) sprite.setTint(inactiveTint);
+                });
+                const orbType = type;
                 sprite.on('pointerdown', () => {
                     if (this.gameScene && this.gameScene.events) {
                         this.gameScene.events.emit('request-essence-power', orbType);
@@ -473,54 +506,81 @@ export default class UIScene extends Phaser.Scene {
                 });
             }
 
-            elements.push(sprite);
-            orbsContainer.add(sprite);
-
-            if (ownerId === 'player') this.playerOrbs[typesArray[i]] = sprite;
-            else this.opponentOrbs[typesArray[i]] = sprite;
-        }
-
-        for (let i = 0; i < 3; i++) {
-            const a = elements[i];
-            const b = elements[(i + 1) % 3];
-            const startOffset = (a.displayWidth || orbSize) / 2 + 6;
-            const endOffset = (b.displayWidth || orbSize) / 2 + 6;
-            this.drawArrowLine(arrowsGraphics, a.x, a.y, b.x, b.y, arrowColor, 4, 12, startOffset, endOffset);
-        }
-
-        this.essenceGraphics.push(arrowsGraphics);
-        this.essenceGraphics.push(orbsContainer);
+            if (isPlayer) this.playerOrbs[type] = sprite;
+            else this.opponentOrbs[type] = sprite;
+        });
     }
 
-    drawArrowLine(g, fromX, fromY, toX, toY, color = 0xff3333, thickness = 3, headLen = 12, startOffset = 0, endOffset = 0) {
-        const angle = Math.atan2(toY - fromY, toX - fromX);
-        const dx = Math.cos(angle), dy = Math.sin(angle);
+    /**
+     * Panel compacto de esencias: seis orbes en rejilla 2×3, sin flechas ni
+     * diagramas flotantes. Responsabilidad agregada: reunir el estado de las
+     * esencias y sus poderes en un único bloque lateral legible.
+     * @param {'player'|'opponent'} ownerId
+     * @param {number} cx
+     * @param {number} cy
+     * @param {number} accent
+     */
+    createEssencePanel(ownerId, cx, cy, accent) {
+        const w = 214;
+        const h = 194;
+        const isPlayer = ownerId === 'player';
 
-        const sx = fromX + dx * startOffset;
-        const sy = fromY + dy * startOffset;
-        const tx = toX - dx * endOffset;
-        const ty = toY - dy * endOffset;
+        const panel = drawOrnatePanel(this, {
+            x: cx - w / 2, y: cy - h / 2, w, h, accent, fill: COLORS.panelDeep
+        }).setDepth(4);
+        this.essenceGraphics.push(panel);
 
-        g.lineStyle(thickness, color, 1);
-        g.beginPath();
-        g.moveTo(sx, sy);
-        const baseX = tx - dx * headLen;
-        const baseY = ty - dy * headLen;
-        g.lineTo(baseX, baseY);
-        g.strokePath();
+        const title = ornateLabel(this, cx, cy - h / 2 + 18, isPlayer ? 'TUS ESENCIAS' : 'ESENCIAS RIVAL', {
+            fontSize: '12px',
+            color: isPlayer ? '#bfe1ff' : '#ffc2ad'
+        }).setDepth(6);
+        this.essenceGraphics.push(title);
 
-        const leftX = tx - headLen * Math.cos(angle - Math.PI / 6);
-        const leftY = ty - headLen * Math.sin(angle - Math.PI / 6);
-        const rightX = tx - headLen * Math.cos(angle + Math.PI / 6);
-        const rightY = ty - headLen * Math.sin(angle + Math.PI / 6);
+        const columns = [cx - 46, cx + 46];
+        const rows = [cy - 36, cy + 12, cy + 60];
+        const inactiveTint = 0x596477;
 
-        g.fillStyle(color, 1);
-        g.beginPath();
-        g.moveTo(tx, ty);
-        g.lineTo(leftX, leftY);
-        g.lineTo(rightX, rightY);
-        g.closePath();
-        g.fillPath();
+        ELEMENTS.forEach((type, i) => {
+            const x = columns[i % 2];
+            const y = rows[Math.floor(i / 2)];
+
+            const ring = this.add.graphics().setDepth(5);
+            ring.fillStyle(0x05070e, 0.92).fillCircle(x, y, 22);
+            ring.lineStyle(2, accent, 0.58).strokeCircle(x, y, 22);
+            ring.lineStyle(1, COLORS.gold, 0.35).strokeCircle(x, y, 18);
+            this.essenceGraphics.push(ring);
+
+            const sprite = this.add.image(x, y, `orb-${type}`)
+                .setDisplaySize(34, 34)
+                .setTint(inactiveTint)
+                .setDepth(6)
+                .setInteractive({ useHandCursor: isPlayer });
+            sprite.setData('type', type);
+            sprite.setData('owner', ownerId);
+            sprite.setData('active', false);
+            sprite.setData('ring', ring);
+            this.essenceGraphics.push(sprite);
+
+            // Poderes de esencia: el orbe propio activo se puede pulsar para
+            // disparar el poder de esa esencia (una vez por turno propio).
+            if (isPlayer) {
+                sprite.on('pointerover', () => {
+                    if (!sprite.getData('active')) sprite.setTint(0x9aa8bd);
+                });
+                sprite.on('pointerout', () => {
+                    if (!sprite.getData('active')) sprite.setTint(inactiveTint);
+                });
+                const orbType = type;
+                sprite.on('pointerdown', () => {
+                    if (this.gameScene && this.gameScene.events) {
+                        this.gameScene.events.emit('request-essence-power', orbType);
+                    }
+                });
+            }
+
+            if (isPlayer) this.playerOrbs[type] = sprite;
+            else this.opponentOrbs[type] = sprite;
+        });
     }
 
     /* ------------------------------------------------------------------ *
@@ -567,7 +627,7 @@ export default class UIScene extends Phaser.Scene {
             this.phaseText.setColor(mine ? '#bfe1ff' : '#ffc2ad');
         }
         if (this.phaseSub) {
-            this.phaseSub.setText(mine ? 'Coloca, fusiona o ataca' : 'El oponente estÃ¡ actuando...');
+            this.phaseSub.setText(mine ? 'Coloca, fusiona o ataca' : 'El oponente está actuando...');
         }
         this.drawTurnRing(mine ? COLORS.blue : COLORS.red);
     }
@@ -577,85 +637,80 @@ export default class UIScene extends Phaser.Scene {
      * ------------------------------------------------------------------ */
 
     createGemPanels() {
-        const { width, height } = this.scale;
+        if (!this.gameMode.usesGems) return;
 
-        const shelfW = 290;
-        const shelfH = 130;
-        const gap = 48;
-        const gemSize = 24;
+        const ds = this.layout?.dockSections?.gems;
+        const gap = this.layout?.px ? this.layout.px(14) : 14;
+        const gemSize = this.layout?.px ? Math.max(16, this.layout.px(18)) : 18;
+        const shelfW = ds ? ds.w : 270;
+        const shelfH = ds ? ds.h : 146;
+        const cx = ds ? ds.x + ds.w / 2 : 150;
+        const cy = ds ? ds.y + ds.h / 2 : 430;
         const startXOffset = (gap * (ELEMENTS.length - 1)) / 2;
 
         const titleStyle = {
-            fontFamily: 'Georgia, serif', fontSize: '13px', fontStyle: 'bold',
+            fontFamily: 'Georgia, serif', fontSize: '11px', fontStyle: 'bold',
             color: '#e8cf8f', stroke: '#000000', strokeThickness: 3, letterSpacing: 1
         };
         const countStyle = {
-            fontFamily: 'Arial', fontSize: '15px', fontStyle: 'bold',
+            fontFamily: 'Georgia, serif', fontSize: '11px', fontStyle: 'bold',
             color: '#ffffff', stroke: '#000000', strokeThickness: 3
         };
 
-        const paintShelf = (g, cx, cy, highlight) => {
-            const x = cx - shelfW / 2;
-            const y = cy - shelfH / 2;
+        const paintShelf = (g, x, y, highlight) => {
             g.clear();
-            g.fillStyle(0x000000, 0.35).fillRoundedRect(x, y + 4, shelfW, shelfH, 16);
+            g.fillStyle(0x000000, 0.35).fillRoundedRect(x, y + 4, shelfW, shelfH, 14);
             g.fillStyle(highlight ? 0x2a1f04 : COLORS.panel, highlight ? 0.86 : 0.82)
-                .fillRoundedRect(x, y, shelfW, shelfH, 16);
+                .fillRoundedRect(x, y, shelfW, shelfH, 14);
             const stroke = highlight ? 0xffd75a : COLORS.gold;
-            g.lineStyle(2, stroke, highlight ? 0.95 : 0.7).strokeRoundedRect(x, y, shelfW, shelfH, 16);
-            g.lineStyle(1, stroke, 0.3).strokeRoundedRect(x + 6, y + 6, shelfW - 12, shelfH - 12, 12);
-            g.fillStyle(highlight ? 0xffd75a : COLORS.goldBright, 0.9);
-            [[x, y], [x + shelfW, y], [x, y + shelfH], [x + shelfW, y + shelfH]]
-                .forEach(([px, py]) => g.fillPoints([
-                    new Phaser.Geom.Point(px, py - 6), new Phaser.Geom.Point(px + 6, py),
-                    new Phaser.Geom.Point(px, py + 6), new Phaser.Geom.Point(px - 6, py)
-                ], true));
+            g.lineStyle(2, stroke, highlight ? 0.95 : 0.7).strokeRoundedRect(x, y, shelfW, shelfH, 14);
+            g.lineStyle(1, stroke, 0.3).strokeRoundedRect(x + 6, y + 6, shelfW - 12, shelfH - 12, 10);
         };
 
-        const buildShelf = (ownerId, cx, cy) => {
+        const buildShelf = (ownerId, sx, sy) => {
             const bg = this.add.graphics().setDepth(8);
-            paintShelf(bg, cx, cy, false);
+            const x = sx - shelfW / 2;
+            const y = sy - shelfH / 2;
+            paintShelf(bg, x, y, false);
 
-            const title = this.add.text(cx - shelfW / 2 + 16, cy - 44, ownerId === 'player' ? 'TUS GEMAS' : 'GEMAS RIVAL', titleStyle)
+            const title = this.add.text(x + 12, y + 12, ownerId === 'player' ? 'TUS GEMAS' : 'GEMAS RIVAL', titleStyle)
                 .setOrigin(0, 0.5).setDepth(9);
-            const total = this.add.text(cx + shelfW / 2 - 16, cy - 44, '0 / 0', {
-                ...titleStyle, fontSize: '14px', color: '#f1c86a'
+            const total = this.add.text(x + shelfW - 12, y + 12, '0 / 0', {
+                ...titleStyle, fontSize: '13px', color: '#f1c86a'
             }).setOrigin(1, 0.5).setDepth(9);
 
-            // Barra de progreso bajo el panel: transparente hasta que hay requisitos.
             const bar = this.add.graphics().setDepth(8).setAlpha(0);
             const drawBar = (frac, complete) => {
-                const bw = shelfW - 40;
-                const bx = cx - bw / 2;
-                const by = cy + shelfH / 2 + 8;
+                const bw = shelfW - 28;
+                const bx = x + 14;
+                const by = y + shelfH - 14;
                 bar.clear();
-                bar.fillStyle(0x05070e, 0.9).fillRoundedRect(bx, by, bw, 8, 4);
-                bar.lineStyle(1, COLORS.gold, 0.5).strokeRoundedRect(bx, by, bw, 8, 4);
+                bar.fillStyle(0x05070e, 0.9).fillRoundedRect(bx, by, bw, 6, 3);
+                bar.lineStyle(1, COLORS.gold, 0.5).strokeRoundedRect(bx, by, bw, 6, 3);
                 const fillW = Math.max(0, Math.min(1, frac)) * (bw - 4);
                 if (fillW > 0) {
                     bar.fillStyle(complete ? 0x49d17a : COLORS.goldBright, 0.95)
-                        .fillRoundedRect(bx + 2, by + 2, fillW, 4, 2);
+                        .fillRoundedRect(bx + 2, by + 2, fillW, 2, 2);
                 }
             };
             drawBar(0, false);
 
-            this.gemShelves[ownerId] = { bg, title, bar, cx, cy, w: shelfW, h: shelfH, drawShelf: (h) => paintShelf(bg, cx, cy, h), drawBar };
+            this.gemShelves[ownerId] = { bg, title, bar, cx: sx, cy: sy, w: shelfW, h: shelfH, drawShelf: (h) => paintShelf(bg, x, y, h), drawBar };
             this.gemTotals[ownerId] = total;
 
             ELEMENTS.forEach((type, i) => {
-                const x = cx - startXOffset + i * gap;
-                const gem = createGemVisual(this, x, cy - 2, type, gemSize, { depth: 9, filled: false });
-                const count = this.add.text(x, cy + 38, '0/0', countStyle).setOrigin(0.5).setDepth(9);
+                const gx = sx - startXOffset + i * gap;
+                const gy = sy + 6;
+                const gem = createGemVisual(this, gx, gy, type, gemSize, { depth: 9, filled: false });
+                const count = this.add.text(gx, gy + shelfH * 0.28, '0/0', countStyle).setOrigin(0.5).setDepth(9);
                 this.gemIcons[ownerId][type] = { gem, count, type };
             });
         };
 
-        buildShelf('player', 165, height / 2);
-        buildShelf('opponent', width - 165, height / 2);
+        buildShelf('player', cx, cy);
 
-        // La estanteria del jugador siempre visible: sus gemas pagan los poderes
-        // de esencia. La del rival solo aparece en modos con objetivo de gemas.
-        this.setGemPanelVisible('player', true);
+        // El rival solo aparece en modos con objetivo de gemas.
+        this.setGemPanelVisible('player', this.gameMode.usesGems);
         this.setGemPanelVisible('opponent', false);
         this.refreshGemCounts();
     }
@@ -721,9 +776,7 @@ export default class UIScene extends Phaser.Scene {
     handleObjectivesReady(payload) {
         if (!payload) return;
         const usesGems = !!(payload.mode && payload.mode.usesGems);
-        // Las gemas del jugador siempre son visibles: son el coste de los
-        // poderes de esencia. Las del rival, solo en modos con objetivo de gemas.
-        this.setGemPanelVisible('player', true);
+        this.setGemPanelVisible('player', usesGems);
         this.setGemPanelVisible('opponent', usesGems);
         this.renderGems('player', payload.player);
         this.renderGems('opponent', payload.opponent);
@@ -737,19 +790,18 @@ export default class UIScene extends Phaser.Scene {
      */
     updateObjectiveText(payload) {
         if (!this.objectiveSub) return;
-        const mode = payload.mode || {};
-        const parts = [];
+        const mode = payload.mode || this.gameMode;
         if (mode.usesGems && payload.requirements) {
             const reqs = Object.values(payload.requirements).filter((v) => v > 0);
             const total = reqs.reduce((a, b) => a + b, 0);
-            const distinct = reqs.length;
-            parts.push(`OBJETIVO Â· 6 elementos en campo Â· ${total} GEMAS (${distinct} TIPOS)`);
+            this.objectiveSub.setText(`${total} GEMAS · 6 ELEMENTOS EN CAMPO`);
+        } else if (mode.matchTimeMs) {
+            this.objectiveSub.setText(`CONTRARRELOJ · ${Math.round(mode.matchTimeMs / 60000)} MINUTOS`);
+        } else if (mode.maxTurns) {
+            this.objectiveSub.setText(`LÍMITE · ${mode.maxTurns} TURNOS`);
         } else {
-            parts.push('OBJETIVO Â· 6 elementos en campo');
+            this.objectiveSub.setText('CLÁSICO · 6 ESENCIAS O CONTROL DEL CAMPO');
         }
-        if (mode.maxTurns) parts.push(`${mode.maxTurns} TURNOS`);
-        if (mode.matchTimeMs) parts.push(`${Math.round(mode.matchTimeMs / 60000)} MIN`);
-        this.objectiveSub.setText(parts.join('   Â·   '));
     }
 
     setGemPanelsVisible(visible) {
@@ -820,20 +872,21 @@ export default class UIScene extends Phaser.Scene {
         const track = (obj) => { modalObjects.push(obj); return obj; };
 
         const REASON_LABELS = {
-            timeExpired: 'Se agotÃ³ el tiempo: ambos pierden',
+            timeExpired: 'Se agotó el tiempo: ambos pierden',
+            bothTurnLimits: 'Ambos jugadores agotaron sus 30 turnos',
             playerInactive: 'Victoria por inactividad del rival',
             opponentInactive: 'El rival estuvo inactivo',
             playerObjectives: 'Gemas + control de campo cumplidos',
-            opponentObjectives: 'El rival cumpliÃ³ gemas y control de campo',
+            opponentObjectives: 'El rival cumplió gemas y control de campo',
             playerFieldControl: 'Control de campo: 6 elementos',
-            opponentFieldControl: 'El rival logrÃ³ 6 elementos en campo',
+            opponentFieldControl: 'El rival logró 6 elementos en campo',
             playerEssences: 'Las 6 esencias han sido activadas',
-            opponentEssences: 'El rival activÃ³ las 6 esencias',
+            opponentEssences: 'El rival activó las 6 esencias',
             playerTurnLimit: 'Se agotaron tus turnos sin cumplir el objetivo',
-            opponentTurnLimit: 'El rival agotÃ³ sus turnos'
+            opponentTurnLimit: 'El rival agotó sus turnos'
         };
 
-        const overlay = track(this.add.rectangle(0, 0, width, height, 0x000000, 0.75).setOrigin(0).setDepth(100));
+        const _overlay = track(this.add.rectangle(0, 0, width, height, 0x000000, 0.75).setOrigin(0).setDepth(100));
 
         const panelWidth = 560;
         const panelHeight = 330;
@@ -852,13 +905,13 @@ export default class UIScene extends Phaser.Scene {
         let resultText;
         let resultColor;
         if (winner === 'player') {
-            resultText = 'Â¡Has Ganado!';
+            resultText = '¡Has Ganado!';
             resultColor = '#49d17a';
         } else if (winner === 'opponent') {
-            resultText = 'Â¡Has Perdido!';
+            resultText = '¡Has Perdido!';
             resultColor = '#ff5a3c';
         } else if (reason === 'timeExpired') {
-            resultText = 'Â¡Tiempo Agotado!';
+            resultText = '¡Tiempo Agotado!';
             resultColor = '#ffb300';
         } else {
             resultText = 'Empate';
@@ -872,7 +925,7 @@ export default class UIScene extends Phaser.Scene {
         const reasonLabel = (reason && REASON_LABELS[reason]) || '';
         if (reasonLabel) {
             track(this.add.text(width / 2, height / 2 + 22, reasonLabel, {
-                fontSize: '17px', color: '#ffd75a', fontStyle: 'italic',
+                fontSize: '18px', color: '#ffd75a', fontStyle: 'italic',
                 fontFamily: 'Arial', stroke: '#000000', strokeThickness: 3
             }).setOrigin(0.5).setDepth(102));
         }
@@ -880,7 +933,7 @@ export default class UIScene extends Phaser.Scene {
         const detailText = this.buildGameOverDetail();
         if (detailText) {
             track(this.add.text(width / 2, height / 2 + 54, detailText, {
-                fontSize: '17px', color: '#bfe1ff', fontStyle: 'bold',
+                fontSize: '18px', color: '#bfe1ff', fontStyle: 'bold',
                 fontFamily: 'Arial', stroke: '#000000', strokeThickness: 3
             }).setOrigin(0.5).setDepth(102));
         }
@@ -926,10 +979,10 @@ export default class UIScene extends Phaser.Scene {
                     have += payload.player[type].have;
                     need += payload.player[type].need;
                 });
-                text += ` Â· Gemas ${have}/${need}`;
+                text += ` · Gemas ${have}/${need}`;
             }
             return text;
-        } catch (e) {
+        } catch {
             return '';
         }
     }
@@ -944,6 +997,7 @@ export default class UIScene extends Phaser.Scene {
 
         if (targetOrb) {
             targetOrb.clearTint();
+            targetOrb.setData('active', true);
             const baseScale = targetOrb.scaleX || 0.085;
             const pulseScale = baseScale * 1.25;
             this.tweens.add({
@@ -952,7 +1006,8 @@ export default class UIScene extends Phaser.Scene {
                 scaleY: pulseScale,
                 duration: 180,
                 yoyo: true,
-                ease: 'Power1'
+                ease: 'Power1',
+                onComplete: () => targetOrb.setScale(baseScale)
             });
         }
     }
@@ -993,9 +1048,9 @@ export default class UIScene extends Phaser.Scene {
         this.lastOpponentConvergence = opponentArmed;
 
         if (playerArmed && playerChanged) {
-            this.showToast('CONVERGENCIA: protege tus 6 tipos hasta tu prÃ³ximo turno', 4000);
+            this.showToast('CONVERGENCIA: protege tus 6 tipos hasta tu próximo turno', 4000);
         } else if (opponentArmed && opponentChanged) {
-            this.showToast('Â¡El rival sellÃ³ su Convergencia! Destruye uno de sus tipos', 4000);
+            this.showToast('¡El rival selló su Convergencia! Destruye uno de sus tipos', 4000);
         }
     }
 

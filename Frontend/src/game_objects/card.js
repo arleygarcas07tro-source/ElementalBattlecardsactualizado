@@ -124,7 +124,7 @@ export default class Card extends Phaser.GameObjects.Sprite {
         }
         // El marco ya viene coloreado por elemento: no se tiñe para no
         // oscurecer su paleta propia.
-        try { this.cardFrame.clearTint(); } catch (e) { /* ignore */ }
+        try { this.cardFrame.clearTint(); } catch { /* ignore */ }
 
         if (!this.shadow) {
             this.shadow = this.scene.add.image(this.x, this.y, 'fx-glow')

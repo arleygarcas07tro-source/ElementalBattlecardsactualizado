@@ -27,23 +27,31 @@ export default class GameMatch {
      * @param {object} [opts.turn=null] Flujo de turnos inyectado (DIP); si no
      *   se provee, crea un TurnManager por defecto.
      * @param {Function} [opts.onGemGained] Aviso de dominio: (ownerId, type, progress).
+     * @param {object|null} [opts.mode] Modo de juego activo.
+     * @param {object|null} [opts.gemRequirements] Requisitos de gemas del modo.
      */
     constructor({
         config = GAME_CONFIG,
         playerId = 'player',
         opponentId = 'opponent',
         turn = null,
-        onGemGained = null
+        onGemGained = null,
+        mode = null,
+        gemRequirements = null
     } = {}) {
         this.config = config;
+        this.mode = mode;
         /** @type {import('../utils/eventBus.js').default} */
         this.events = new EventBus();
         /** @type {import('../game_objects/player.js').default} */
         this.player = new Player(playerId, { onGemGained });
         /** @type {import('../game_objects/player.js').default} */
         this.opponent = new Player(opponentId, { onGemGained });
+        this.player.gems.setRequirements(gemRequirements);
+        this.opponent.gems.setRequirements(gemRequirements);
         /** @type {import('./TurnManager.js').default} */
         this.turn = turn || new TurnManager(config);
+        this.lastVictoryResult = { winner: null, reason: null, log: null };
     }
 
     /**
@@ -120,14 +128,16 @@ export default class GameMatch {
      */
     checkVictoryConditions() {
         this.syncConvergence();
-        const result = VictoryEvaluator.evaluate({
+        this.lastVictoryResult = VictoryEvaluator.evaluate({
             player: this.player,
             opponent: this.opponent,
             turn: this.turn,
-            config: this.config
+            config: this.config,
+            gems: { player: this.player.gems, opponent: this.opponent.gems },
+            mode: this.mode
         });
-        if (result.log) console.log(result.log);
-        return result.winner;
+        if (this.lastVictoryResult.log) console.log(this.lastVictoryResult.log);
+        return this.lastVictoryResult.winner;
     }
 
     /**

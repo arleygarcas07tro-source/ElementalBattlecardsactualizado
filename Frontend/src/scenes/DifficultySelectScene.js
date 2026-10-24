@@ -23,8 +23,6 @@ export default class DifficultySelectScene extends DomSceneBase {
     }
 
     create() {
-        const { width, height } = this.scale;
-
         // Fondo de video inmediato con rectángulo de respaldo unificado.
         this.bg = createVideoBackground(this, 'levels-bg-video');
 

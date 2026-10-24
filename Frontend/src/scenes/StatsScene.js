@@ -1,4 +1,3 @@
-import Phaser from 'phaser';
 import DomSceneBase from './ui/DomSceneBase.js';
 
 export default class StatsScene extends DomSceneBase {
@@ -38,8 +37,6 @@ export default class StatsScene extends DomSceneBase {
     }
 
     create() {
-        const { width, height } = this.scale;
-
         const gamesPlayed = Number(this.stats.gamesPlayed) || 0;
         const gamesWon = Number(this.stats.gamesWon) || 0;
         const gamesLost = Math.max(0, gamesPlayed - gamesWon);

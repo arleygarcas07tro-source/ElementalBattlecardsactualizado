@@ -21,7 +21,7 @@ const BASE_URL = resolveBaseUrl();
 function getToken() {
     try {
         return localStorage.getItem('token');
-    } catch (e) {
+    } catch {
         return null;
     }
 }

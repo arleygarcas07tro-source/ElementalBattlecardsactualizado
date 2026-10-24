@@ -1,5 +1,5 @@
-import Phaser from 'phaser';
-import { play as playSfx } from '../helpers/audioManager.js';
+import _Phaser from 'phaser';
+import { play as _playSfx } from '../helpers/audioManager.js';
 import DomSceneBase from './ui/DomSceneBase.js';
 import { ELEMENTS, elementsNavHTML, energyParticlesHTML } from './ui/elementCatalog.js';
 import { ABOUT_SECTIONS as SECTIONS } from '../content/aboutContent.js';
@@ -16,8 +16,6 @@ export default class AboutScene extends DomSceneBase {
     }
 
     create() {
-        const { width, height } = this.scale;
-
         const particles = energyParticlesHTML();
 
         const emblemOrbs = ELEMENTS.map((el, i) => {

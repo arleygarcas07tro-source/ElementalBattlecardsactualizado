@@ -62,6 +62,15 @@ export default class BotTurnRunner {
      */
     continueTurn() {
         const { turn, turnController } = this.ctx;
+        const winner = turnController.checkVictoryConditions();
+        if (winner) {
+            turnController.endGame(winner, this.ctx.match.lastVictoryResult.reason);
+            return;
+        }
+        if (this.ctx.match.lastVictoryResult.reason === 'bothTurnLimits') {
+            turnController.endGame(null, 'bothTurnLimits');
+            return;
+        }
         if (!turn.canOpponentAct()) {
             turnController.endOpponentTurn();
             return;
@@ -174,7 +183,7 @@ export default class BotTurnRunner {
         if (existing && existing.getData('isOpponentCard')) existing.destroy();
         const slotObj = this.scene['opponent_battle_slots'][targetIndex];
         const fusedObj = renderer.createFieldCard(slotObj, res.newCard, { isOpponent: true, revealed: true, fieldIndex: targetIndex });
-        try { fusedObj.setTexture(`card-${res.newCard.type}-${res.newCard.level}`); } catch (e) {}
+        try { fusedObj.setTexture(`card-${res.newCard.type}-${res.newCard.level}`); } catch {}
         renderer.refreshOpponentHand(opponent.hand);
         renderer.updateDeckCounts(this.ctx.player.deck.getCardsCount(), opponent.deck.getCardsCount());
         // Una fusión cuenta como UNA acción del turno del bot.

@@ -69,7 +69,7 @@ export default class LoadingScene extends Phaser.Scene {
 
         elementIcons.forEach((icon, index) => {
             const x = iconXStart + index * 100;
-            const circle = this.add.circle(x, iconY, 42, 0x1b1308, 0.7).setStrokeStyle(2, 0xd7b276, 0.7).setDepth(5);
+            this.add.circle(x, iconY, 42, 0x1b1308, 0.7).setStrokeStyle(2, 0xd7b276, 0.7).setDepth(5);
 
             if (this.textures.exists(icon.key)) {
                 this.add.image(x, iconY, icon.key)

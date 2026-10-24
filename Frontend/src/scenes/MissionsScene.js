@@ -1,4 +1,3 @@
-import Phaser from 'phaser';
 import { play as playSfx } from '../helpers/audioManager.js';
 import { getMissionProgress } from '../helpers/playerProgress.js';
 import DomSceneBase from './ui/DomSceneBase.js';
@@ -17,8 +16,6 @@ export default class MissionsScene extends DomSceneBase {
     }
 
     create() {
-        const { width, height } = this.scale;
-
         // Progreso real de las misiones, derivado de las partidas jugadas.
         const username = (this.playerData && this.playerData.username) || 'Jugador';
         const missionProgress = getMissionProgress(username);

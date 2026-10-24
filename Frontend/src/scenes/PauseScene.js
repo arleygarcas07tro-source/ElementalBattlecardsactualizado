@@ -15,11 +15,11 @@ export default class PauseScene extends Phaser.Scene {
         this.playerData = data.playerData || {};
     }
 
-    create(data) {
+    create(_data) {
         const { width, height } = this.scale;
         
         // Trasfondo oscuro semi-transparente (efecto blur)
-        const overlay = this.add.rectangle(0, 0, width, height, 0x000000, 0.7)
+        const _overlay = this.add.rectangle(0, 0, width, height, 0x000000, 0.7)
             .setOrigin(0)
             .setDepth(100)
             .setInteractive(); // Evita clicks detrás del menú
@@ -36,7 +36,7 @@ export default class PauseScene extends Phaser.Scene {
         iconBg.setPosition(width / 2, titleY);
         iconBg.setDepth(101);
         
-        const pauseIcon = this.add.text(width / 2, titleY, '⏸', { 
+        const _pauseIcon = this.add.text(width / 2, titleY, '⏸', {
             fontSize: '60px', 
             color: '#ffd700' 
         }).setOrigin(0.5).setDepth(102);
@@ -164,10 +164,12 @@ export default class PauseScene extends Phaser.Scene {
         );
         
         exitBtn.on('pointerdown', () => {
-            this.scene.stop('PauseScene');
+            const gameScene = this.scene.get('GameScene');
+            const playerData = gameScene?.playerData || this.playerData;
+
             this.scene.stop('UIScene');
             this.scene.stop('GameScene');
-            this.scene.start('HomeScenes');
+            this.scene.start('HomeScenes', { playerData });
         });
         
         // =============== TECLA ESC PARA CERRAR ===============

@@ -17,7 +17,7 @@ export function newId() {
     if (crypto && typeof crypto.randomUUID === 'function') {
         try {
             return crypto.randomUUID();
-        } catch (e) {
+        } catch {
             // Fallback si randomUUID falla en entornos restringidos.
         }
     }

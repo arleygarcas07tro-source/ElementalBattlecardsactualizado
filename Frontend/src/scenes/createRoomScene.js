@@ -1,5 +1,4 @@
 // createRoomScene.js
-import Phaser from "phaser";
 import { io } from 'socket.io-client';
 import DomSceneBase from './ui/DomSceneBase.js';
 import { loadVideoIfNeeded, createVideoBackground } from './ui/videoBackground.js';
@@ -21,8 +20,6 @@ export default class CreateRoomScene extends DomSceneBase {
     }
 
     create() {
-        const { width, height } = this.scale;
-
         // BACKGROUND
         // Fondo de video inmediato con rectángulo de respaldo para que nunca se vea
         // un hueco negro mientras el video termina de preparar su primer frame.
@@ -569,7 +566,7 @@ export default class CreateRoomScene extends DomSceneBase {
         // Añadir clases de animación y manejadores de interacción a los botones
         try {
             const animatedBtns = node.querySelectorAll('.btn-primary, .btn-exit, .btn-ghost');
-            animatedBtns.forEach((b, i) => {
+            animatedBtns.forEach((b, _i) => {
                 if (b.id === 'btn-start') b.classList.add('pulse');
                 this.track(b, () => { b.style.transform = 'translateY(0) scale(0.98)'; }, 'pointerdown');
                 this.track(b, () => { b.style.transform = ''; }, 'pointerup');
@@ -773,7 +770,7 @@ export default class CreateRoomScene extends DomSceneBase {
                     await navigator.clipboard.writeText(text);
                     copyBtn.textContent = 'Copiado';
                     setTimeout(() => { copyBtn.textContent = 'Copiar código'; }, 1500);
-                } catch (e) {
+                } catch {
                     // fallback
                     const input = document.createElement('input');
                     input.value = text;
@@ -793,7 +790,7 @@ export default class CreateRoomScene extends DomSceneBase {
         if (this.socket && !this.keepSocket) {
             try {
                 this.socket.disconnect();
-            } catch (e) {
+            } catch {
                 // ignore
             }
         }

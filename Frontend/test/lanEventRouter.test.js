@@ -48,6 +48,26 @@ test('LANEventRouter: fuse_cards limpia el origen y coloca el resultado', () => 
     assert.equal(match.opponent.field.get(1).instanceId, 'fused');
 });
 
+test('LANEventRouter: una fusión remota de nivel 3 suma una gema', () => {
+    const match = new GameMatch({
+        config: GAME_CONFIG,
+        mode: { usesGems: true },
+        gemRequirements: { fuego: 1 }
+    });
+    match.startOpponentTurn();
+    const router = new LANEventRouter({ match, playerRole: 'host' });
+
+    router.route({
+        type: 'fuse_cards',
+        playerRole: 'guest',
+        sourceIndex: 0,
+        targetIndex: 1,
+        resultCard: { instanceId: 'fuego-3', type: 'fuego', level: 3 }
+    });
+
+    assert.equal(match.opponent.gems.count('fuego'), 1);
+});
+
 test('LANEventRouter: attack remoto marca el ataque del oponente', () => {
     const { match, router } = makeRouter('host');
 

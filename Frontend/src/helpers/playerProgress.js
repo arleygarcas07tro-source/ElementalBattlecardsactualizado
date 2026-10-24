@@ -51,7 +51,7 @@ function load(username) {
     let stored = null;
     try {
         stored = JSON.parse(localStorage.getItem(storageKeyFor(username)) || 'null');
-    } catch (e) {
+    } catch {
         stored = null;
     }
     const progress = { ...baseProgress(), ...(stored || {}) };

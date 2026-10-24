@@ -44,6 +44,7 @@ class GameplayController {
     this.io.to(code).emit('turn_changed', {
       currentTurn: turn.currentTurn,
       turnNumber: turn.turnNumber,
+      turnStartedAt: Date.now(),
     });
     this.logger.info(`Turno cambiado en sala ${code}: ahora es turno de ${turn.currentTurn}`);
   }

@@ -30,7 +30,7 @@ export const GAME_MODES = {
     contrarreloj: {
         id: 'contrarreloj',
         name: 'Contrarreloj',
-        desc: '3 minutos para reunir las gemas y dominar el campo. Si el tiempo termina, ambos pierden.',
+        desc: 'Completa el objetivo de gemas y domina el campo antes de que se agoten los 3 minutos.',
         usesGems: true,
         requiresField: true,
         matchTimeMs: 180000,
@@ -39,7 +39,7 @@ export const GAME_MODES = {
     turnos30: {
         id: 'turnos30',
         name: '30 Turnos',
-        desc: 'Dispones de 30 turnos propios para reunir las gemas y dominar el campo.',
+        desc: 'Completa el objetivo de gemas y domina el campo en un máximo de 30 turnos de 10 segundos.',
         usesGems: true,
         requiresField: true,
         matchTimeMs: null,

@@ -3,7 +3,7 @@
 const { AppError } = require('../../../core/errors');
 
 function buildErrorHandler(logger) {
-  return (error, req, res, next) => {
+  return (error, req, res, _next) => {
     if (error instanceof AppError) {
       return res.status(error.statusCode).json({ message: error.message });
     }

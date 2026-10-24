@@ -241,7 +241,14 @@ export default class LoginScene extends Phaser.Scene {
             color: '#ffd77a'
         }).setOrigin(0.5, 0.5).setDepth(1);
 
+        this.scale.off('resize', this.resize, this);
         this.scale.on('resize', this.resize, this);
+        this.events.once('shutdown', () => this.scale.off('resize', this.resize, this));
+        this.scaleBackground();
+    }
+
+    /** Reajusta el fondo cuando cambia el tamaño de la escena. */
+    resize() {
         this.scaleBackground();
     }
 

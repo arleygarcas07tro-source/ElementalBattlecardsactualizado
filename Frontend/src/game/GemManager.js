@@ -31,13 +31,13 @@ export default class GemManager {
     /**
      * Registra una carta que entra en el campo y, si aún no había entregado
      * gema, incrementa el contador del elemento correspondiente.
-     * Regla de economia: cada carta fusionada (nivel 2 o 3) genera UNA gema
-     * de su elemento; las cartas base (nivel 1) no generan gemas.
+     * Regla de economía: solo una carta de nivel 3 genera UNA gema de su
+     * elemento, una sola vez por instancia.
      * @param {{level: number, type: string, instanceId?: string, id?: string}} cardData
      * @returns {string|null} El elemento de la gema obtenida o null si no corresponde.
      */
     registerFieldCard(cardData) {
-        if (!cardData || cardData.level < 2) return null;
+        if (!cardData || cardData.level < 3) return null;
         const type = cardData.type;
         if (!Object.prototype.hasOwnProperty.call(this.counts, type)) return null;
 

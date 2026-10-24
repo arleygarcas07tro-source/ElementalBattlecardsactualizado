@@ -7,8 +7,9 @@ const REASON_LOGS = {
     opponentEssences: '[GameScene] VICTORIA: OPONENTE (llenó las 6 esencias)',
     playerObjectives: '[GameScene] VICTORIA: JUGADOR (gemas + control de campo)',
     opponentObjectives: '[GameScene] VICTORIA: OPONENTE (gemas + control de campo)',
-    playerTurnLimit: '[GameScene] DERROTA: JUGADOR (agotó sus turnos sin cumplir el objetivo)',
-    opponentTurnLimit: '[GameScene] VICTORIA: JUGADOR (el oponente agotó sus turnos)',
+    playerTurnLimit: '[GameScene] LÍMITE: el jugador agotó sus turnos',
+    opponentTurnLimit: '[GameScene] LÍMITE: el oponente agotó sus turnos',
+    bothTurnLimits: '[GameScene] EMPATE: ambos jugadores agotaron sus turnos',
     timeExpired: '[GameScene] EMPATE: tiempo agotado sin ganador (ambos pierden)'
 };
 
@@ -80,11 +81,14 @@ export default class VictoryEvaluator {
 
         // 3) Límite de turnos propios (modo 30 turnos).
         if (mode && mode.maxTurns) {
+            if (turn.playerTurnNumber >= mode.maxTurns && turn.opponentTurnNumber >= mode.maxTurns) {
+                return { winner: null, reason: 'bothTurnLimits', log: REASON_LOGS.bothTurnLimits };
+            }
             if (turn.playerTurnNumber >= mode.maxTurns) {
-                return { winner: 'opponent', reason: 'playerTurnLimit', log: REASON_LOGS.playerTurnLimit };
+                return { winner: null, reason: 'playerTurnLimit', log: REASON_LOGS.playerTurnLimit };
             }
             if (turn.opponentTurnNumber >= mode.maxTurns) {
-                return { winner: 'player', reason: 'opponentTurnLimit', log: REASON_LOGS.opponentTurnLimit };
+                return { winner: null, reason: 'opponentTurnLimit', log: REASON_LOGS.opponentTurnLimit };
             }
         }
 

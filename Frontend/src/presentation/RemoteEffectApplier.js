@@ -58,7 +58,7 @@ export default class RemoteEffectApplier {
                 const slot = this.scene[targetSlotsName][targetIndex];
                 if (slot) {
                     const fusedObj = renderer.createFieldCard(slot, resultCard, { isOpponent: true, revealed: true, fieldIndex: targetIndex });
-                    try { fusedObj.setTexture(`card-${resultCard.type}-${resultCard.level}`); } catch (e) {}
+                    try { fusedObj.setTexture(`card-${resultCard.type}-${resultCard.level}`); } catch {}
                     console.log('[GameScene] Fusión remota en campo', { sourceIndex, targetIndex, resultCard });
                     if (debugSync) console.log('[GameScene][debug] slot visual after remote fuse_cards', { created: fusedObj && fusedObj.getData && fusedObj.getData('instanceId'), slotIndex: targetIndex, timestamp: Date.now() });
                 }
@@ -78,7 +78,7 @@ export default class RemoteEffectApplier {
                 const slot = this.scene[targetSlotsName][targetIndex];
                 if (slot) {
                     const fusedObj = renderer.createFieldCard(slot, resultCard, { isOpponent: true, revealed: true, fieldIndex: targetIndex });
-                    try { fusedObj.setTexture(`card-${resultCard.type}-${resultCard.level}`); } catch (e) {}
+                    try { fusedObj.setTexture(`card-${resultCard.type}-${resultCard.level}`); } catch {}
                     console.log('[GameScene] Fusión remota desde mano', { targetIndex, resultCard });
                     if (debugSync) console.log('[GameScene][debug] slot visual after remote fuse_from_hand', { created: fusedObj && fusedObj.getData && fusedObj.getData('instanceId'), slotIndex: targetIndex, timestamp: Date.now() });
                 }

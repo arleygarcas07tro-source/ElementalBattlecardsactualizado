@@ -1,4 +1,3 @@
-import Phaser from 'phaser';
 import { play as playSfx } from '../helpers/audioManager.js';
 import { getProfileStats } from '../helpers/playerProgress.js';
 import DomSceneBase from './ui/DomSceneBase.js';
@@ -25,7 +24,6 @@ export default class ProfileScene extends DomSceneBase {
     }
 
     create() {
-        const { width, height } = this.scale;
         const stats = getProfileStats(this.playerData.username || 'Jugador');
 
         const player = {

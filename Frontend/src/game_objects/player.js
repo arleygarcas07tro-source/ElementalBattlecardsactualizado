@@ -222,8 +222,7 @@ export default class Player {
      * Registra una carta que entra en el campo en el gestor de gemas. Si la
      * carta aún no había entregado su gema, notifica al observador para que
      * actualice la UI.
-     * Regla: cada carta fusionada (nivel 2 o 3) genera como máximo una gema
-     * de su elemento.
+     * Regla: cada carta de nivel 3 genera como máximo una gema de su elemento.
      * @param {{level: number, type: string, instanceId?: string}} cardData
      * @returns {string|null} El elemento de la gema obtenida o null.
      */

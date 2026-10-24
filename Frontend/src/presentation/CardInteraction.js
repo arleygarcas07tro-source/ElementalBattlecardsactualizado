@@ -100,7 +100,7 @@ export default class CardInteraction {
      * Gestiona el clic en un slot del campo de batalla del oponente.
      * @param {object} clickedSlot El slot que ha sido clicado.
      */
-    onOpponentSlotClicked(clickedSlot) {
+    onOpponentSlotClicked(_clickedSlot) {
         // Si tenemos una carta de nuestro campo seleccionada...
         if (this.selectedCard && this.selectedCard.getData('isCardOnField')) {
             // Y el oponente no tiene cartas en el campo...
@@ -120,8 +120,8 @@ export default class CardInteraction {
         const fieldIndex = cardObject.getData('fieldIndex');
         console.log('Carta seleccionada:', { ...cardObject.cardData, fieldIndex: fieldIndex !== undefined ? fieldIndex : null });
 
-        // La animación de "levantar" la carta ahora solo la mueve verticalmente.
-        // No cambiaremos su tamaño para mantener la consistencia.
+        this.scene.tweens.killTweensOf(cardObject);
+        cardObject.setSelectedVisual?.(true);
         const isOnField = !!cardObject.getData('isCardOnField');
         const yShift = isOnField ? -25 : -50; // Se levanta más si está en la mano
         this.scene.tweens.add({
@@ -142,17 +142,21 @@ export default class CardInteraction {
         const cardToDeselect = this.selectedCard; // Guardamos la referencia
         this.selectedCard = null;
         console.log('Carta deseleccionada.');
+        cardToDeselect.setSelectedVisual?.(false);
 
-        // Si se debe animar, la carta (esté en la mano o en el campo) vuelve
-        // a su posición original guardada en 'startPosition'.
+        const startPosition = cardToDeselect.getData('startPosition');
+        if (!startPosition) return;
+        this.scene.tweens.killTweensOf(cardToDeselect);
         if (animate) {
             this.scene.tweens.add({
                 targets: cardToDeselect,
-                x: cardToDeselect.getData('startPosition').x,
-                y: cardToDeselect.getData('startPosition').y,
+                x: startPosition.x,
+                y: startPosition.y,
                 duration: 200,
                 ease: 'Power1'
             });
+        } else {
+            cardToDeselect.setPosition(startPosition.x, startPosition.y);
         }
     }
 
@@ -202,8 +206,8 @@ export default class CardInteraction {
             this.selectedCard.cardData = cardPlayed;
             // Asegurar que el sprite y su metadata usan el instanceId definitivo
             if (cardPlayed && cardPlayed.instanceId) {
-                try { this.selectedCard.setName(cardPlayed.instanceId); } catch (e) {}
-                try { this.selectedCard.setData('instanceId', cardPlayed.instanceId); } catch (e) {}
+                try { this.selectedCard.setName(cardPlayed.instanceId); } catch {}
+                try { this.selectedCard.setData('instanceId', cardPlayed.instanceId); } catch {}
             }
 
             // Detenemos cualquier animación activa en la carta seleccionada
@@ -231,8 +235,8 @@ export default class CardInteraction {
                     this.selectedCard.setData('isCardOnField', true);
                     this.selectedCard.setData('cardData', cardPlayed);
                     if (cardPlayed && cardPlayed.instanceId) {
-                        try { this.selectedCard.setName(cardPlayed.instanceId); } catch (e) {}
-                        try { this.selectedCard.setData('instanceId', cardPlayed.instanceId); } catch (e) {}
+                        try { this.selectedCard.setName(cardPlayed.instanceId); } catch {}
+                        try { this.selectedCard.setData('instanceId', cardPlayed.instanceId); } catch {}
                     }
                     this.selectedCard.setData('fieldIndex', fieldIndex);
                     this.selectedCard.setData('isRevealed', false);

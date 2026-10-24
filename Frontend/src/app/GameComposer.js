@@ -24,8 +24,19 @@ export default class GameComposer {
      *   (ownerId, type, progress).
      * @returns {GameMatch}
      */
-    static createMatch({ config, onGemGained = null }) {
-        const match = new GameMatch({ config, turn: new TurnManager(config), onGemGained });
+    static createMatch({ config, onGemGained = null, mode = null, gemRequirements = null }) {
+        const modeConfig = {
+            ...config,
+            ACTIONS_PER_TURN: mode?.id === 'contrarreloj' ? 1 : config.ACTIONS_PER_TURN,
+            TURN_TIME_LIMIT_MS: mode?.id === 'turnos30' ? 10000 : config.TURN_TIME_LIMIT_MS
+        };
+        const match = new GameMatch({
+            config: modeConfig,
+            turn: new TurnManager(modeConfig),
+            onGemGained,
+            mode,
+            gemRequirements
+        });
         IGameMatch.assert(match);
         return match;
     }

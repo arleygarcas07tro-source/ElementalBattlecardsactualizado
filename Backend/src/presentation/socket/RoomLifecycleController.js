@@ -71,6 +71,7 @@ class RoomLifecycleController {
         hostId: this.roomService.hostId(result.room),
         guestId: this.roomService.guestId(result.room),
         gameMode: result.room.gameMode,
+        startedAt: Date.now(),
       });
     }
   }

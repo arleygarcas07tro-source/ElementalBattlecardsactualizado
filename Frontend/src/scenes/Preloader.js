@@ -55,7 +55,7 @@ export default class PreloaderScene extends Phaser.Scene {
         const progressBar = this.add.graphics();
 
         // Texto de carga
-        const loadingText = this.make.text({
+        const _loadingText = this.make.text({
             x: width / 2,
             y: height / 2 - 50,
             text: 'Cargando...',

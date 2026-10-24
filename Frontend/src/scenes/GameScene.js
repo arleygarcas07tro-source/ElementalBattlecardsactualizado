@@ -8,8 +8,10 @@ import AttackController from '../presentation/AttackController.js';
 import BotTurnRunner from '../presentation/BotTurnRunner.js';
 import RemoteEffectApplier from '../presentation/RemoteEffectApplier.js';
 import TurnController from '../presentation/TurnController.js';
-import { OWNER_THEME } from '../helpers/battlefieldArt.js';
-import { createTurnGlow } from '../helpers/battlePresentation.js';
+import { createArena } from '../helpers/battlefieldArt.js';
+import { createBattleLayout } from '../helpers/battleLayout.js';
+import { getGemRequirements } from '../game/objectivesCatalog.js';
+import { getGameMode } from '../game/gameModes.js';
 
 /**
  * Escena principal del juego de cartas.
@@ -35,13 +37,13 @@ export default class GameScene extends Phaser.Scene {
         this.debugSync = true;
         this.gameStartData = null; // Datos de inicio del juego en modo LAN
         this.vsBot = false;
+        this.gameMode = getGameMode('clasico');
+        this.gemRequirements = null;
         // TamaÃ±os visuales fijos para normalizar tamaÃ±o real de todas las texturas
         this.cardHandSize = { width: 148, height: 198 }; // tamaÃ±o visual en mano propia
         this.cardOpponentHandSize = { width: 132, height: 176 }; // mano rival (no tapa el perfil)
         this.cardFieldSize = { width: 128, height: 172 }; // tamaÃ±o visual en campo / fusiones
         this.selectionFeedback = []; // Highlights/marcadores temporales de la selecciÃ³n
-        this.playerTurnGlow = null;
-        this.opponentTurnGlow = null;
 
         // Motor de partida (dominio). Se construye en create() y posee a los
         // jugadores y el flujo de turnos; la escena solo los referencia.
@@ -54,6 +56,7 @@ export default class GameScene extends Phaser.Scene {
      * @param {object} data - Datos pasados desde la escena anterior.
      */
     init(data) {
+        data = data || {};
         // data puede contener: playerData, socket, isLAN, roomCode, vsBot, playerRole, gameStartData, botDifficulty
         this.playerData = data.playerData || data;
         this.socket = data.socket || null;
@@ -63,16 +66,20 @@ export default class GameScene extends Phaser.Scene {
         this.gameStartData = data.gameStartData || null;
         this.vsBot = !!data.vsBot;
         this.bot = GameComposer.createBot({ difficulty: data.botDifficulty || 3 }); // 1-10, default: Normal (3)
+        this.gameMode = getGameMode(data.gameMode);
+        this.gemRequirements = this.gameMode.usesGems
+            ? getGemRequirements(data.botDifficulty || 3)
+            : null;
         console.log('GameScene iniciada con los datos del jugador:', this.playerData);
         console.log('Modo LAN:', this.isLAN, 'Rol:', this.playerRole);
         console.log('Dificultad del bot:', this.bot.difficulty, '(1=Muy FÃ¡cil, 10=Mito)');
     }
 
     preload() {
-        // Fondo general
-        this.load.video('campo-video', '/assets/images/campo juego/battlefield_fixed.mp4', { muted: true, noAudio: true });
+        // Fondo real de la zona de juego (foto de la arena).
+        this.load.image('arena-photo', '/assets/images/campo%20juego/image258.png');
 
-        // Slots
+        // Slots (se usan como zonas invisibles de interacción)
         this.load.image('slot', '/assets/images/cartas/Espacio vacio.png');
 
         // Cartas nivel 1
@@ -106,11 +113,6 @@ export default class GameScene extends Phaser.Scene {
 
     create() {
         // Limpieza de objetos visuales de partidas previas (si la escena se reutiliza)
-        // DecoraciÃ³n del campo (emblema, marcos, runas, energÃ­a).
-        if (this.fieldDecor) {
-            try { this.fieldDecor.destroy(); } catch (e) { /* ignore */ }
-            this.fieldDecor = null;
-        }
         try {
             // Tomamos una copia porque destroy modifica children.list
             const childrenCopy = this.children ? this.children.list.slice() : [];
@@ -118,7 +120,7 @@ export default class GameScene extends Phaser.Scene {
                 if (!child) return;
                 // Detectar objetos tipo 'Card' por su metadata 'cardData'
                 let hasCardData = false;
-                try { hasCardData = !!(child.getData && child.getData('cardData')); } catch(e) { hasCardData = false; }
+                try { hasCardData = !!(child.getData && child.getData('cardData')); } catch { hasCardData = false; }
 
                 // Detectar slots por nombre (creados con setName(`${name}-${i}`))
                 const name = child.name || '';
@@ -138,25 +140,35 @@ export default class GameScene extends Phaser.Scene {
                     const isElementFrame = typeof tex === 'string' && tex.startsWith('art-card-');
                     const isFeedbackDecor = typeof tex === 'string' && tex === 'art-slot-highlight';
                     if (boardKeys.includes(tex) || isElementFrame || isFeedbackDecor) isBoardOrDeck = true;
-                } catch(e) { isBoardOrDeck = false; }
+                } catch { isBoardOrDeck = false; }
 
                 // Feedback efÃ­mero de la selecciÃ³n / brillo de turno.
                 const isFeedbackObj = typeof name === 'string' && (
                     name.startsWith('selection-feedback') || name === 'turn-glow'
                 );
+                const isBoardDecor = typeof name === 'string' && name.startsWith('board-decor');
 
-                if (hasCardData || isSlot || isBoardOrDeck || isFeedbackObj) {
-                    try { if (child.destroy) child.destroy(); } catch (e) { /* ignore */ }
+                if (hasCardData || isSlot || isBoardOrDeck || isFeedbackObj || isBoardDecor) {
+                    try { if (child.destroy) child.destroy(); } catch { /* ignore */ }
                 }
             });
         } catch (e) {
             console.warn('[GameScene] Error durante limpieza inicial:', e);
         }
 
+        // Geometría compartida por todos los colaboradores visuales.
+        const { width, height } = this.scale;
+        this.layout = createBattleLayout(width, height, { usesGems: this.gameMode.usesGems });
+        this.cardHandSize = this.layout.cardHand;
+        this.cardOpponentHandSize = this.layout.cardOpponentHand;
+        this.cardFieldSize = this.layout.cardField;
+
         // Reset / inicializaciÃ³n por si la escena se reutiliza entre partidas.
         // El motor de partida se construye en el composition root (GameComposer).
         this.match = GameComposer.createMatch({
             config: GAME_CONFIG,
+            mode: this.gameMode,
+            gemRequirements: this.gemRequirements,
             // Aviso de gema obtenida: la escena solo reenvÃ­a el evento a la UI.
             onGemGained: (ownerId, type, progress) => this.events.emit('gem-collected', ownerId, type, progress)
         });
@@ -179,6 +191,8 @@ export default class GameScene extends Phaser.Scene {
             socket: this.socket,
             debugSync: this.debugSync,
             playerData: this.playerData,
+            gameStartData: this.gameStartData,
+            gameMode: this.gameMode,
             lan: null,
             lanRouter: null,
             renderer: null,
@@ -189,7 +203,12 @@ export default class GameScene extends Phaser.Scene {
             turnController: null
         };
 
-        const renderer = new BoardRenderer(this.ctx, { hand: this.cardHandSize, field: this.cardFieldSize });
+        const renderer = new BoardRenderer(this.ctx, {
+            hand: this.cardHandSize,
+            field: this.cardFieldSize,
+            opponentHand: this.cardOpponentHandSize,
+            layout: this.layout
+        });
         const interaction = new CardInteraction(this.ctx);
         const attackController = new AttackController(this.ctx);
         const botRunner = new BotTurnRunner(this.ctx);
@@ -232,6 +251,12 @@ export default class GameScene extends Phaser.Scene {
             this.lan.onGameEvent((payload) => {
                 try {
                     this.ctx.remoteApplier.handle(payload);
+                    const winner = this.ctx.turnController.checkVictoryConditions();
+                    if (winner) {
+                        this.ctx.turnController.endGame(winner, this.match.lastVictoryResult.reason);
+                    } else if (this.match.lastVictoryResult.reason === 'bothTurnLimits') {
+                        this.ctx.turnController.endGame(null, 'bothTurnLimits');
+                    }
                 } catch (e) {
                     console.error('Error manejando evento remoto:', e);
                 }
@@ -240,14 +265,12 @@ export default class GameScene extends Phaser.Scene {
             // Listener para cambios de turno
             this.lan.onTurnChanged((data) => this.ctx.turnController.handleTurnChanged(data));
         }
-        const { width, height } = this.scale;
-        const battleRowYOffset = 70; // Distancia de las filas de batalla al centro
         // Lanza la escena de UI en paralelo para que se muestre por encima.
         // Si ya existe una instancia previa, detenerla primero para evitar duplicados.
         if (this.scene.isActive('UIScene') || this.scene.isSleeping('UIScene')) {
             this.scene.stop('UIScene');
         }
-        this.scene.launch('UIScene', { playerData: this.playerData });
+        this.scene.launch('UIScene', { playerData: this.playerData, gameMode: this.gameMode });
 
         // ---------- LÃ“GICA DE JUGADORES ----------
         // Los jugadores ya vienen creados y poseÃ­dos por GameMatch.
@@ -260,39 +283,33 @@ export default class GameScene extends Phaser.Scene {
             if (card && card.type) recordCollectedCard(username, card.type, card.level);
         });
 
-        // Sin fondo de video - campo minimalista
-        this.add.rectangle(width / 2, height / 2, width, height, 0x05060d).setDepth(-3);
-        this.add.rectangle(width / 2, height / 2, width, height, 0x03040a, 0.08).setDepth(-2);
-        this.board = null;
+        // Arena cinematográfica: foto de fondo, piedra, emblema, sigilos y viñeta.
+        if (this.arena && this.arena.scene) {
+            try { this.arena.destroy(); } catch { /* ignore */ }
+        }
+        this.arena = createArena(this, {
+            width,
+            height,
+            depth: -0.4,
+            layout: this.layout,
+            photoKey: 'arena-photo'
+        });
+        this.board = this.arena;
 
-        // DecoraciÃ³n visual del campo (emblema dorado, marcos, runas y energÃ­a).
-        // Se crea bajo los slots/cartas para no interferir con la jugabilidad.
-        renderer.createFieldDecor();
+        // Bandejas ornamentales de ambas manos.
+        renderer.createBoardDecor();
 
         // ---------- ZONA DE MANO DEL OPONENTE (4 espacios) ----------
-        renderer.createSlotsRow(height * 0.18, 'opponent-slots');
-        renderer.createCardsRow(height * 0.18, 'opponent-cards', this.opponent.hand);
+        renderer.createSlotsRow(renderer.layout.opponentHandY, 'opponent-slots');
+        renderer.createCardsRow(renderer.layout.opponentHandY, 'opponent-cards', this.opponent.hand);
 
         // ---------- CENTRO (campo de batalla con 6 espacios) ----------
-        renderer.createSlotsRow(height * 0.45 - battleRowYOffset, 'opponent_battle_slots', 6); // Fila del oponente
-        renderer.createSlotsRow(height * 0.55 + battleRowYOffset, 'player_battle_slots', 6);   // Fila del jugador
+        renderer.createSlotsRow(renderer.layout.opponentFieldY, 'opponent_battle_slots', 6); // Fila del oponente
+        renderer.createSlotsRow(renderer.layout.playerFieldY, 'player_battle_slots', 6);   // Fila del jugador
 
         // ---------- ZONA DE MANO DEL JUGADOR (4 espacios) ----------
-        renderer.createSlotsRow(height * 0.825, 'player-slots');
-        renderer.createCardsRow(height * 0.825, 'player-cards', this.player.hand);
-
-        // ---------- MAZOS ----------
-        renderer.createDecks(this.player.deck.getCardsCount(), this.opponent.deck.getCardsCount());
-
-        // ---------- BANDEJAS DE MANO (integración con la arena) ----------
-        renderer.createHandTrays();
-
-        // ---------- BRILLO DE TURNO ----------
-        // Franja luminosa sobre la fila del bando activo (solo presentaciÃ³n).
-        this.opponentTurnGlow = createTurnGlow(this, height * 0.45 - battleRowYOffset, OWNER_THEME.opponent.glow, width * 0.88)
-            .setName('turn-glow');
-        this.playerTurnGlow = createTurnGlow(this, height * 0.55 + battleRowYOffset, OWNER_THEME.player.glow, width * 0.88)
-            .setName('turn-glow');
+        renderer.createSlotsRow(renderer.layout.playerHandY, 'player-slots');
+        renderer.createCardsRow(renderer.layout.playerHandY, 'player-cards', this.player.hand);
 
         // Avisar a la UI que la escena se creÃ³ exitosamente
         this.events.emit('board-ready');
@@ -333,5 +350,14 @@ export default class GameScene extends Phaser.Scene {
      */
     update() {
         this.ctx.turnController.update();
+    }
+
+    getObjectivesPayload() {
+        return {
+            mode: this.gameMode,
+            requirements: this.gemRequirements,
+            player: this.player?.gems.progress(),
+            opponent: this.opponent?.gems.progress()
+        };
     }
 }

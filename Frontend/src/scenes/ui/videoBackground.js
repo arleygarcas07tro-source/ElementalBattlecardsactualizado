@@ -1,5 +1,3 @@
-import Phaser from 'phaser';
-
 /**
  * Helpers de presentación para fondos de video en las escenas de menú.
  * Unifican el bloque idéntico que repetían homeScene, DifficultySelectScene y

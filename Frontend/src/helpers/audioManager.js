@@ -212,7 +212,7 @@ const musicEngine = {
                 try {
                     if (this.master) this.master.disconnect();
                     if (this.bus) this.bus.disconnect();
-                } catch (e) { /* ignorar */ }
+                } catch { /* ignorar */ }
                 this.master = null;
                 this.bus = null;
                 this.filter = null;

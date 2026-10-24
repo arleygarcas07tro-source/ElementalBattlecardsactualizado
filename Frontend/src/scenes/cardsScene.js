@@ -1,5 +1,3 @@
-import Phaser from 'phaser';
-
 import { play as playSfx } from '../helpers/audioManager.js';
 import DomSceneBase from './ui/DomSceneBase.js';
 import { ELEMENTS, elementByKey, elementsNavHTML, energyParticlesHTML } from './ui/elementCatalog.js';
@@ -33,8 +31,6 @@ export default class CardsScene extends DomSceneBase {
     }
 
     create() {
-        const { width, height } = this.scale;
-
         const particles = energyParticlesHTML();
 
         const sideOrbs = ELEMENTS.map(el => `

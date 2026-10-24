@@ -192,6 +192,24 @@ test('GameMatch.checkVictoryConditions detecta las 6 esencias', () => {
     assert.equal(match.checkVictoryConditions(), 'player');
 });
 
+test('GameMatch usa el modo y los requisitos de gemas seleccionados', () => {
+    const requirements = Object.fromEntries(Object.values(CARD_TYPES).map((type) => [type, 1]));
+    const match = new GameMatch({
+        config: GAME_CONFIG,
+        mode: { usesGems: true },
+        gemRequirements: requirements
+    });
+
+    Object.values(CARD_TYPES).forEach((type, index) => {
+        place(match.player, index, type);
+        match.player.gems.counts[type] = 1;
+    });
+
+    assert.equal(match.checkVictoryConditions(), 'player');
+    assert.deepEqual(match.player.gems.requirements, requirements);
+    assert.deepEqual(match.opponent.gems.requirements, requirements);
+});
+
 test('GameMatch.useEssencePower ejecuta AGUA (Rescate) vía EssencePowerService', () => {
     const match = makeMatch();
     match.startPlayerTurn();

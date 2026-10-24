@@ -423,6 +423,223 @@ function buildVignetteTexture(scene) {
     scene.textures.addCanvas(BOARD_TEXTURES.vignette, canvas);
 }
 
+/* ------------------------------------------------------------------ *
+ * Fondo cinematográfico
+ * ------------------------------------------------------------------ */
+
+const BACKDROP_TEXTURE = 'art-battle-backdrop';
+
+/**
+ * Pinta una silueta de pinar sobre una línea de horizonte.
+ * @param {CanvasRenderingContext2D} ctx
+ */
+function paintPineLine(ctx, W, baseY, color, { min = 34, max = 96, step = 26 } = {}) {
+    let seed = 0x9e3779b9;
+    const rnd = () => {
+        seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+        return seed / 4294967296;
+    };
+    ctx.fillStyle = color;
+    for (let x = -20; x < W + 20; x += step) {
+        const h = min + rnd() * (max - min);
+        const w = h * (0.42 + rnd() * 0.16);
+        ctx.beginPath();
+        ctx.moveTo(x, baseY);
+        ctx.lineTo(x + w * 0.5, baseY - h);
+        ctx.lineTo(x + w, baseY);
+        ctx.closePath();
+        ctx.fill();
+    }
+}
+
+/**
+ * Genera una sola vez el fondo del campo: cielo nocturno degradado, luna,
+ * cordilleras, castillo, bosque y cristales en los extremos. Es una textura
+ * de canvas para mantener el coste de dibujado en un único sprite.
+ * @param {Phaser.Scene} scene
+ * @param {number} W
+ * @param {number} H
+ */
+function buildBackdropTexture(scene, W, H) {
+    if (scene.textures.exists(BACKDROP_TEXTURE)) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+
+    // Cielo nocturno con transición azul-violeta.
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, '#02040c');
+    sky.addColorStop(0.34, '#070d22');
+    sky.addColorStop(0.55, '#101a38');
+    sky.addColorStop(0.72, '#1a1733');
+    sky.addColorStop(1, '#050711');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, H);
+
+    // Estrellas y polvo estelar.
+    let seed = 0x1234abcd;
+    const rnd = () => {
+        seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+        return seed / 4294967296;
+    };
+    for (let i = 0; i < 180; i++) {
+        const x = rnd() * W;
+        const y = rnd() * H * 0.54;
+        const r = rnd() * 1.5 + 0.3;
+        ctx.fillStyle = `rgba(${190 + Math.floor(rnd() * 50)}, ${205 + Math.floor(rnd() * 40)}, 255, ${0.18 + rnd() * 0.55})`;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Luna con halo frío.
+    const moonX = W * 0.735;
+    const moonY = H * 0.19;
+    const moonR = 86;
+    const halo = ctx.createRadialGradient(moonX, moonY, moonR * 0.6, moonX, moonY, moonR * 3.4);
+    halo.addColorStop(0, 'rgba(214,230,255,0.34)');
+    halo.addColorStop(0.35, 'rgba(140,170,255,0.12)');
+    halo.addColorStop(1, 'rgba(80,110,220,0)');
+    ctx.fillStyle = halo;
+    ctx.fillRect(moonX - moonR * 3.4, moonY - moonR * 3.4, moonR * 6.8, moonR * 6.8);
+
+    const moon = ctx.createRadialGradient(moonX - 22, moonY - 26, 8, moonX, moonY, moonR);
+    moon.addColorStop(0, '#fffdf2');
+    moon.addColorStop(0.45, '#e8ecff');
+    moon.addColorStop(1, '#9fb4e8');
+    ctx.fillStyle = moon;
+    ctx.beginPath();
+    ctx.arc(moonX, moonY, moonR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(90,110,170,0.13)';
+    [[-24, 8, 16], [20, -18, 11], [10, 32, 8], [-36, 32, 7]].forEach(([dx, dy, r]) => {
+        ctx.beginPath();
+        ctx.arc(moonX + dx, moonY + dy, r, 0, Math.PI * 2);
+        ctx.fill();
+    });
+
+    // Cordillera lejana.
+    const ridge = (base, color, points) => {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(0, base);
+        points.forEach(([x, y]) => ctx.lineTo(x, y));
+        ctx.lineTo(W, base);
+        ctx.closePath();
+        ctx.fill();
+    };
+    ridge(H * 0.55, 'rgba(13,23,46,0.92)', [
+        [0, 470], [120, 330], [230, 424], [360, 286], [500, 408], [650, 310],
+        [790, 420], [930, 300], [1080, 404], [1230, 318], [1390, 410], [1510, 336], [W, 430]
+    ]);
+    ridge(H * 0.58, 'rgba(7,13,28,0.98)', [
+        [0, 530], [150, 410], [300, 492], [470, 382], [620, 500], [800, 406],
+        [960, 506], [1140, 400], [1300, 500], [1460, 424], [W, 510]
+    ]);
+
+    // Castillo en la cresta izquierda: torres, almenas y ventanas encendidas.
+    const castleX = W * 0.19;
+    const castleBase = H * 0.47;
+    ctx.fillStyle = '#050811';
+    ctx.fillRect(castleX - 76, castleBase - 70, 152, 70);
+    [[-66, -118, 34], [-20, -150, 28], [38, -102, 30], [72, -136, 24]].forEach(([dx, dy, tw]) => {
+        const tx = castleX + dx;
+        const ty = castleBase + dy;
+        ctx.fillRect(tx - tw / 2, ty, tw, castleBase - ty);
+        ctx.beginPath();
+        ctx.moveTo(tx - tw / 2 - 5, ty);
+        ctx.lineTo(tx, ty - 30);
+        ctx.lineTo(tx + tw / 2 + 5, ty);
+        ctx.closePath();
+        ctx.fill();
+        for (let i = -1; i <= 1; i++) {
+            ctx.fillRect(tx + i * (tw / 3) - 3, ty - 4, 6, 8);
+        }
+    });
+    ctx.fillStyle = 'rgba(255,196,110,0.72)';
+    [[-66, -62], [-22, -98], [38, -50], [72, -84]].forEach(([dx, dy]) => {
+        ctx.fillRect(castleX + dx - 2, castleBase + dy, 4, 8);
+    });
+    // Puente y luz del castillo.
+    ctx.strokeStyle = 'rgba(6,9,18,0.9)';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(castleX - 40, castleBase);
+    ctx.quadraticCurveTo(castleX, castleBase + 26, castleX + 40, castleBase);
+    ctx.stroke();
+
+    // Bosque de siluetas en el horizonte.
+    paintPineLine(ctx, W, H * 0.58, 'rgba(6,12,22,0.96)', { min: 46, max: 118, step: 30 });
+    paintPineLine(ctx, W, H * 0.60, 'rgba(3,7,14,0.98)', { min: 32, max: 78, step: 24 });
+
+    // Niebla baja violeta/azul.
+    const mist = ctx.createLinearGradient(0, H * 0.52, 0, H * 0.72);
+    mist.addColorStop(0, 'rgba(92,120,210,0)');
+    mist.addColorStop(0.45, 'rgba(82,104,190,0.14)');
+    mist.addColorStop(1, 'rgba(60,70,150,0)');
+    ctx.fillStyle = mist;
+    ctx.fillRect(0, H * 0.50, W, H * 0.26);
+
+    // Acantilados laterales con cristales.
+    const paintCliff = (flip) => {
+        ctx.save();
+        if (flip) {
+            ctx.translate(W, 0);
+            ctx.scale(-1, 1);
+        }
+        const g = ctx.createLinearGradient(0, H * 0.62, 0, H);
+        g.addColorStop(0, 'rgba(4,8,18,0)');
+        g.addColorStop(0.45, 'rgba(5,9,20,0.88)');
+        g.addColorStop(1, 'rgba(2,4,10,1)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.moveTo(0, H);
+        ctx.lineTo(0, H * 0.66);
+        ctx.lineTo(48, H * 0.70);
+        ctx.lineTo(104, H * 0.62);
+        ctx.lineTo(164, H * 0.76);
+        ctx.lineTo(238, H * 0.72);
+        ctx.lineTo(292, H * 0.88);
+        ctx.lineTo(320, H);
+        ctx.closePath();
+        ctx.fill();
+
+        const shards = [[72, 0.69, 26, 74], [126, 0.72, 18, 52], [196, 0.79, 30, 92], [254, 0.83, 16, 48]];
+        shards.forEach(([x, yf, w, h]) => {
+            const y = H * yf;
+            const shard = ctx.createLinearGradient(x, y - h, x, y);
+            shard.addColorStop(0, 'rgba(190,225,255,0.92)');
+            shard.addColorStop(0.35, 'rgba(92,146,255,0.66)');
+            shard.addColorStop(1, 'rgba(48,40,110,0.25)');
+            ctx.fillStyle = shard;
+            ctx.beginPath();
+            ctx.moveTo(x, y - h);
+            ctx.lineTo(x + w * 0.46, y - h * 0.22);
+            ctx.lineTo(x + w * 0.20, y);
+            ctx.lineTo(x - w * 0.26, y - h * 0.30);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(210,240,255,0.35)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        });
+        ctx.restore();
+    };
+    paintCliff(false);
+    paintCliff(true);
+
+    // Resplandor mágico central tras la arena.
+    const aura = ctx.createRadialGradient(W / 2, H * 0.50, 40, W / 2, H * 0.50, W * 0.40);
+    aura.addColorStop(0, 'rgba(96,86,190,0.20)');
+    aura.addColorStop(0.55, 'rgba(58,60,150,0.08)');
+    aura.addColorStop(1, 'rgba(20,20,60,0)');
+    ctx.fillStyle = aura;
+    ctx.fillRect(0, 0, W, H);
+
+    scene.textures.addCanvas(BACKDROP_TEXTURE, canvas);
+}
+
 /**
  * Genera (una sola vez) todas las texturas procedurales del tablero:
  * slots por bando, marco genérico de respaldo y los 18 marcos elementales
@@ -513,50 +730,50 @@ function addArenaFloor(g, W, H) {
 /** Emblema hexagonal central con anillo giratorio, radios y halo. */
 function addCentralEmblem(container, scene, cx, cy) {
     const rotor = scene.add.graphics();
-    rotor.lineStyle(2, GOLD.glow, 0.38).strokeCircle(0, 0, 118);
-    rotor.lineStyle(1, GOLD.glow, 0.20).strokeCircle(0, 0, 94);
+    rotor.lineStyle(2, GOLD.glow, 0.42).strokeCircle(0, 0, 38);
+    rotor.lineStyle(1, GOLD.glow, 0.22).strokeCircle(0, 0, 31);
     for (let a = 0; a < 12; a++) {
         const ang = (a * Math.PI) / 6;
-        rotor.lineStyle(2, GOLD.rune, a % 3 === 0 ? 0.48 : 0.16)
-            .lineBetween(Math.cos(ang) * 96, Math.sin(ang) * 96, Math.cos(ang) * 118, Math.sin(ang) * 118);
+        rotor.lineStyle(1.5, GOLD.rune, a % 3 === 0 ? 0.55 : 0.18)
+            .lineBetween(Math.cos(ang) * 31, Math.sin(ang) * 31, Math.cos(ang) * 38, Math.sin(ang) * 38);
     }
     rotor.setPosition(cx, cy).setDepth(0);
     container.add(rotor);
 
     const core = scene.add.graphics();
-    // Hexágono.
-    const R = 62;
+    // Hexágono compacto, dimensionado para el hueco entre ambas filas.
+    const R = 21;
     const hex = [];
     for (let i = 0; i < 6; i++) {
         const a = (i * Math.PI) / 3 - Math.PI / 6;
         hex.push([Math.cos(a) * R, Math.sin(a) * R]);
     }
-    core.fillStyle(GOLD.glow, 0.10);
+    core.fillStyle(GOLD.glow, 0.12);
     core.beginPath();
     core.moveTo(hex[0][0], hex[0][1]);
     for (let i = 1; i < 6; i++) core.lineTo(hex[i][0], hex[i][1]);
     core.closePath();
     core.fillPath();
-    core.lineStyle(3, GOLD.rune, 0.70);
+    core.lineStyle(2, GOLD.rune, 0.75);
     core.strokePoints(hex.map(([x, y]) => new Phaser.Geom.Point(x, y)), true, true);
-    core.lineStyle(2, GOLD.glow, 0.45).strokeCircle(0, 0, 40);
-    core.fillStyle(GOLD.rune, 0.95).fillCircle(0, 0, 6);
-    core.fillStyle(GOLD.glow, 0.16).fillCircle(0, 0, 24);
+    core.lineStyle(1, GOLD.glow, 0.48).strokeCircle(0, 0, 13);
+    core.fillStyle(GOLD.rune, 0.95).fillCircle(0, 0, 4);
+    core.fillStyle(GOLD.glow, 0.18).fillCircle(0, 0, 9);
     core.setPosition(cx, cy).setDepth(0);
 
     if (scene.textures.exists('fx-glow')) {
         const halo = scene.add.image(cx, cy, 'fx-glow')
             .setTint(GOLD.rune)
             .setBlendMode(Phaser.BlendModes.ADD)
-            .setScale(3.6)
-            .setAlpha(0.18)
+            .setScale(1.35)
+            .setAlpha(0.20)
             .setDepth(-1);
         container.add(halo);
-        scene.tweens.add({ targets: halo, alpha: { from: 0.12, to: 0.30 }, duration: 2200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        scene.tweens.add({ targets: halo, alpha: { from: 0.12, to: 0.34 }, duration: 2200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     }
 
     container.add(core);
-    scene.tweens.add({ targets: rotor, angle: 360, duration: 90000, repeat: -1 });
+    scene.tweens.add({ targets: rotor, angle: 360, duration: 60000, repeat: -1 });
 }
 
 /** Estandarte del bando, junto a su campo, con rótulo de elemento. */
@@ -603,13 +820,102 @@ function addCenterDivider(container, scene, cx, cy, W) {
     container.add(g);
 }
 
-function addRowFrame(g, positions, yCenter, palette) {
-    const left = Math.min(...positions) - 70;
-    const right = Math.max(...positions) + 70;
-    const top = yCenter - 86;
-    const height = 172;
-    g.lineStyle(2, palette.glow, 0.50).strokeRoundedRect(left, top, right - left, height, 24);
-    g.lineStyle(1, palette.rune, 0.26).strokeRoundedRect(left + 9, top + 9, right - left - 18, height - 18, 18);
+/**
+ * Dibuja el sigilo vectorial de un elemento (sin emojis) para grabarlo en la
+ * piedra de la arena.
+ * @param {Phaser.GameObjects.Graphics} g
+ * @param {string} type
+ * @param {number} x
+ * @param {number} y
+ * @param {number} s
+ * @param {number} color
+ */
+function drawElementSigil(g, type, x, y, s, color) {
+    const a = 0.46;
+    g.fillStyle(color, a * 0.22);
+    g.fillCircle(x, y, s * 0.92);
+    g.lineStyle(1.5, color, a);
+    g.strokeCircle(x, y, s * 0.92);
+
+    switch (type) {
+        case CARD_TYPES.FUEGO:
+            g.fillStyle(color, a);
+            g.fillTriangle(x, y - s * 0.62, x - s * 0.48, y + s * 0.38, x + s * 0.48, y + s * 0.38);
+            g.fillStyle(0x05070e, 0.85);
+            g.fillTriangle(x, y - s * 0.02, x - s * 0.22, y + s * 0.30, x + s * 0.22, y + s * 0.30);
+            break;
+        case CARD_TYPES.AGUA:
+            g.fillStyle(color, a);
+            g.fillTriangle(x, y + s * 0.62, x - s * 0.48, y - s * 0.34, x + s * 0.48, y - s * 0.34);
+            g.fillStyle(0x05070e, 0.7);
+            g.fillCircle(x, y + s * 0.02, s * 0.18);
+            break;
+        case CARD_TYPES.PLANTA:
+            g.fillStyle(color, a);
+            g.fillEllipse(x - s * 0.25, y - s * 0.08, s * 0.58, s * 0.28);
+            g.fillEllipse(x + s * 0.25, y + s * 0.12, s * 0.58, s * 0.28);
+            g.lineStyle(2, color, a);
+            g.lineBetween(x, y - s * 0.52, x, y + s * 0.56);
+            break;
+        case CARD_TYPES.LUZ:
+            g.fillStyle(color, a);
+            g.fillCircle(x, y, s * 0.26);
+            g.lineStyle(2, color, a);
+            for (let i = 0; i < 8; i++) {
+                const ang = (i * Math.PI) / 4;
+                g.lineBetween(
+                    x + Math.cos(ang) * s * 0.42, y + Math.sin(ang) * s * 0.42,
+                    x + Math.cos(ang) * s * 0.70, y + Math.sin(ang) * s * 0.70
+                );
+            }
+            break;
+        case CARD_TYPES.SOMBRA:
+            g.lineStyle(4, color, a);
+            g.beginPath();
+            g.arc(x, y, s * 0.48, Math.PI * 0.30, Math.PI * 1.70);
+            g.strokePath();
+            g.fillStyle(color, a * 0.55);
+            g.fillCircle(x + s * 0.18, y - s * 0.05, s * 0.20);
+            break;
+        default: {
+            const r = s * 0.62;
+            g.fillStyle(color, a);
+            g.fillPoints([
+                new Phaser.Geom.Point(x, y - r), new Phaser.Geom.Point(x + r * 0.30, y - r * 0.30),
+                new Phaser.Geom.Point(x + r, y), new Phaser.Geom.Point(x + r * 0.30, y + r * 0.30),
+                new Phaser.Geom.Point(x, y + r), new Phaser.Geom.Point(x - r * 0.30, y + r * 0.30),
+                new Phaser.Geom.Point(x - r, y), new Phaser.Geom.Point(x - r * 0.30, y - r * 0.30)
+            ], true);
+            g.fillStyle(0x05070e, 0.8);
+            g.fillCircle(x, y, s * 0.16);
+        }
+    }
+}
+
+/**
+ * Banda de seis sigilos elementales grabada en el divisor central. Se reparte
+ * a ambos lados del emblema para que quede visible entre las dos filas.
+ */
+function addElementSigilRing(g, cx, cy) {
+    const offsets = [-286, -188, -92, 92, 188, 286];
+    ELEMENT_ORDER.forEach((type, i) => {
+        drawElementSigil(g, type, cx + offsets[i], cy, 12, themeFor(type).color);
+    });
+    // Remates dorados junto al emblema.
+    g.fillStyle(GOLD.rune, 0.55);
+    g.fillPoints(diamondPoints(cx - 56, cy, 4), true);
+    g.fillPoints(diamondPoints(cx + 56, cy, 4), true);
+}
+
+function addRowFrame(g, positions, yCenter, palette, cardWidth = SLOT_W, cardHeight = SLOT_H) {
+    const framePadding = Math.max(12, Math.round(cardWidth * 0.16));
+    const left = Math.min(...positions) - framePadding;
+    const right = Math.max(...positions) + framePadding;
+    const height = cardHeight + framePadding * 2;
+    const top = yCenter - height / 2;
+    const cornerRadius = Math.max(16, Math.round(framePadding * 1.1));
+    g.lineStyle(2, palette.glow, 0.50).strokeRoundedRect(left, top, right - left, height, cornerRadius);
+    g.lineStyle(1, palette.rune, 0.26).strokeRoundedRect(left + 8, top + 8, right - left - 16, height - 16, cornerRadius * 0.72);
     g.fillStyle(palette.rune, 0.85);
     [[left, top], [right, top], [left, top + height], [right, top + height]]
         .forEach(([x, y]) => g.fillPoints(diamondPoints(x, y, 6), true));
@@ -668,7 +974,7 @@ function addElementBeacon(container, scene, x, y, type, { flip = false } = {}) {
         fontFamily: 'Georgia, "Times New Roman", serif', fontSize: '20px',
         color: '#ffffff', stroke: '#000000', strokeThickness: 3
     }).setOrigin(0.5).setTint(theme.light);
-    try { glyphText.setTint(theme.light); } catch (e) { /* ignore */ }
+    try { glyphText.setTint(theme.light); } catch { /* ignore */ }
     container.add(glyphText);
 
     if (scene.textures.exists('fx-glow')) {
@@ -686,7 +992,7 @@ function addElementBeacon(container, scene, x, y, type, { flip = false } = {}) {
 }
 
 /** Cordillera + ruinas al fondo (tras la arena, trasluce por los bordes). */
-function addRuins(container, scene, W, H) {
+function _addRuins(container, scene, W, H) {
     const g = scene.add.graphics();
 
     // Cordillera profunda (tono azulado, muy tenue).
@@ -713,7 +1019,7 @@ function addRuins(container, scene, W, H) {
     g.beginPath(); g.arc(190, 214, 40, Math.PI, Math.PI * 1.75); g.strokePath();
     g.beginPath(); g.arc(1020, 214, 46, Math.PI * 1.25, Math.PI * 2); g.strokePath();
     g.fillStyle(0xcfa76d, 0.10);
-    pillars.forEach(([x, base, top]) => g.fillRect(x - 1.5, top, 3, 10));
+    pillars.forEach(([x, _base, top]) => g.fillRect(x - 1.5, top, 3, 10));
     container.add(g);
 
     // Cordillera inferior (para el borde del jugador).
@@ -763,35 +1069,51 @@ function addAmbientMotes(container, scene, W, H) {
  * Compone la arena cinematográfica del campo de batalla. Todo el adorno se
  * agrupa en un contenedor que la escena destruye al reiniciar la partida.
  * @param {Phaser.Scene} scene
- * @param {{width?:number, height?:number, depth?:number}} [opts]
+ * @param {{width?:number, height?:number, depth?:number, layout?:object, photoKey?:string}} [opts]
  * @returns {Phaser.GameObjects.Container}
  */
 export function createArena(scene, opts = {}) {
     ensureFxTextures(scene);
     ensureBoardTextures(scene);
-
     const W = opts.width ?? scene.scale.width;
     const H = opts.height ?? scene.scale.height;
+
+    // Solo generar backdrop procedural si no vamos a usar foto.
+    if (!(opts.photoKey && scene.textures.exists(opts.photoKey))) {
+        buildBackdropTexture(scene, W, H);
+    }
+
     const CX = W / 2;
     const CY = H / 2;
-    const opponentFieldY = H * 0.45 - 70;
-    const playerFieldY = H * 0.55 + 70;
+    const layout = opts.layout || null;
+    const opponentFieldY = layout?.opponentFieldY ?? (H * 0.45 - 70);
+    const playerFieldY = layout?.playerFieldY ?? (H * 0.55 + 70);
 
     const container = scene.add.container(0, 0).setDepth(opts.depth ?? -0.4);
 
-    // Atmósfera base: capa oscura que aplaca el vídeo de fondo para que el
-    // tablero y las cartas destaquen, con luz cálida superior y fría inferior.
-    const atmosphere = scene.add.graphics();
-    atmosphere.fillStyle(0x030510, 0.66).fillRect(0, 0, W, H);
-    atmosphere.fillStyle(0xff6b35, 0.035).fillRect(0, 0, W, 260);
-    atmosphere.fillStyle(0x35c6ff, 0.035).fillRect(0, H - 260, W, 260);
-    container.add(atmosphere);
+    // Fondo: usar foto de la arena si existe, si no usar backdrop procedural.
+    if (opts.photoKey && scene.textures.exists(opts.photoKey)) {
+        const tex = scene.textures.get(opts.photoKey).getSourceImage();
+        if (tex && tex.width && tex.height) {
+            const scale = Math.max(W / tex.width, H / tex.height);
+            container.add(scene.add.image(CX, CY, opts.photoKey).setDisplaySize(tex.width * scale, tex.height * scale));
+        } else {
+            container.add(scene.add.image(CX, CY, opts.photoKey).setDisplaySize(W, H));
+        }
+    } else {
+        container.add(scene.add.image(CX, CY, BACKDROP_TEXTURE).setDisplaySize(W, H));
+    }
 
-    // Cordillera y ruinas de fondo (tras la losa, se ve por los bordes).
-    addRuins(container, scene, W, H);
+    // Atmósfera base: capa oscura que asienta el fondo y separa la arena.
+    const atmosphere = scene.add.graphics();
+    atmosphere.fillStyle(0x030510, 0.20).fillRect(0, 0, W, H);
+    atmosphere.fillStyle(0xff6b35, 0.018).fillRect(0, 0, W, 220);
+    atmosphere.fillStyle(0x35c6ff, 0.022).fillRect(0, H - 220, W, 220);
+    container.add(atmosphere);
 
     const floor = scene.add.graphics();
     addArenaFloor(floor, W, H);
+    addElementSigilRing(floor, CX, CY);
     container.add(floor);
 
     addCenterDivider(container, scene, CX, CY, W);
@@ -807,32 +1129,40 @@ export function createArena(scene, opts = {}) {
 
     // Marcos ornamentales sobre las filas reales (mismos cálculos que los slots).
     const frames = scene.add.graphics();
-    const positions = calculateRowPositions({ numItems: 6, itemWidth: SLOT_W, itemSpacing: SLOT_GAP, containerWidth: W });
-    addRowFrame(frames, positions, opponentFieldY, OWNER_THEME.opponent);
-    addRowFrame(frames, positions, playerFieldY, OWNER_THEME.player);
+    const fieldWidth = layout?.cardField?.width ?? SLOT_W;
+    const fieldHeight = layout?.cardField?.height ?? SLOT_H;
+    const fieldGap = layout?.fieldGap ?? SLOT_GAP;
+    const positions = calculateRowPositions({ numItems: 6, itemWidth: fieldWidth, itemSpacing: fieldGap, containerWidth: W });
+    addRowFrame(frames, positions, opponentFieldY, OWNER_THEME.opponent, fieldWidth, fieldHeight);
+    addRowFrame(frames, positions, playerFieldY, OWNER_THEME.player, fieldWidth, fieldHeight);
     container.add(frames);
 
-    // Estandartes de bando junto a cada campo.
-    addOwnerBanner(container, scene, 260, opponentFieldY - 108, 'opponent');
-    addOwnerBanner(container, scene, W - 260, opponentFieldY - 108, 'opponent');
-    addOwnerBanner(container, scene, 260, playerFieldY + 108, 'player');
-    addOwnerBanner(container, scene, W - 260, playerFieldY + 108, 'player');
+    // Estandartes de bando (opcionales; el HUD ya rotula ambos campos).
+    if (opts.withBanners) {
+        addOwnerBanner(container, scene, 260, opponentFieldY - 108, 'opponent');
+        addOwnerBanner(container, scene, W - 260, opponentFieldY - 108, 'opponent');
+        addOwnerBanner(container, scene, 260, playerFieldY + 108, 'player');
+        addOwnerBanner(container, scene, W - 260, playerFieldY + 108, 'player');
+    }
 
-    // Balizas elementales: 3 junto al campo rival, 3 junto al del jugador.
-    const topTypes = [CARD_TYPES.FUEGO, CARD_TYPES.LUZ, CARD_TYPES.AGUA];
-    const bottomTypes = [CARD_TYPES.PLANTA, CARD_TYPES.ESPIRITU, CARD_TYPES.SOMBRA];
-    addElementBeacon(container, scene, 96, opponentFieldY - 40, topTypes[0], { flip: true });
-    addElementBeacon(container, scene, W - 96, opponentFieldY - 40, topTypes[1], { flip: true });
-    addElementBeacon(container, scene, 96, opponentFieldY + 40, topTypes[2], { flip: true });
-    addElementBeacon(container, scene, W - 96, playerFieldY + 40, bottomTypes[0]);
-    addElementBeacon(container, scene, 96, playerFieldY - 40, bottomTypes[1]);
-    addElementBeacon(container, scene, W - 96, playerFieldY - 40, bottomTypes[2]);
+    // Balizas elementales opcionales. Por defecto se omiten: los seis
+    // elementos viven en los paneles laterales del HUD, sin iconos flotantes.
+    if (opts.withBeacons) {
+        const topTypes = [CARD_TYPES.FUEGO, CARD_TYPES.LUZ, CARD_TYPES.AGUA];
+        const bottomTypes = [CARD_TYPES.PLANTA, CARD_TYPES.ESPIRITU, CARD_TYPES.SOMBRA];
+        addElementBeacon(container, scene, 96, opponentFieldY - 40, topTypes[0], { flip: true });
+        addElementBeacon(container, scene, W - 96, opponentFieldY - 40, topTypes[1], { flip: true });
+        addElementBeacon(container, scene, 96, opponentFieldY + 40, topTypes[2], { flip: true });
+        addElementBeacon(container, scene, W - 96, playerFieldY + 40, bottomTypes[0]);
+        addElementBeacon(container, scene, 96, playerFieldY - 40, bottomTypes[1]);
+        addElementBeacon(container, scene, W - 96, playerFieldY - 40, bottomTypes[2]);
+    }
 
     // Motas de energía ambiental.
     addAmbientMotes(container, scene, W, H);
 
     // Viñeta de cierre: oscurece los bordes por encima del resto de la arena.
-    container.add(scene.add.image(CX, CY, BOARD_TEXTURES.vignette).setDisplaySize(W * 1.32, H * 1.32).setAlpha(0.9));
+    container.add(scene.add.image(CX, CY, BOARD_TEXTURES.vignette).setDisplaySize(W * 1.28, H * 1.28).setAlpha(0.82));
 
     return container;
 }

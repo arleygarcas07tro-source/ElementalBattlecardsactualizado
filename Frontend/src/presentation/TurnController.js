@@ -23,6 +23,10 @@ export default class TurnController {
         this.ctx = ctx;
         this.scene = ctx.scene;
         this.turnTimer = null; // Referencia al temporizador del turno
+        this.matchTimer = null;
+        this.matchTimeRemaining = 0;
+        this.turnDeadline = null;
+        this.matchDeadline = null;
         this._pendingDestroys = new Set(); // Destrucciones en curso (idempotencia)
     }
 
@@ -33,11 +37,13 @@ export default class TurnController {
         const turn = this.ctx.turn;
         if (turn.state === 'pre-start') {
             console.log('[GameScene] ¡La partida ha comenzado!', { player: this.ctx.playerData?.username || 'Jugador' });
+            if (this.startMatchTimer() === false) return;
+            this.emitTurnCounters();
 
             // En modo LAN, solo el host comienza su turno, el guest espera
             if (this.ctx.isLAN) {
                 if (this.ctx.playerRole === 'host') {
-                    this.startPlayerTurn();
+                    this.startPlayerTurn(this.ctx.gameStartData?.startedAt);
                 } else {
                     // El guest espera su turno
                     turn.beginOpponentWait();
@@ -46,7 +52,7 @@ export default class TurnController {
                 }
             } else {
                 // Modo local o vs bot: el jugador siempre empieza
-                this.startPlayerTurn();
+                this.startPlayerTurn(this.ctx.gameStartData?.startedAt);
             }
         } else {
             console.log('[GameScene] start-game ignorado', { estadoActual: turn.state });
@@ -56,7 +62,7 @@ export default class TurnController {
     /**
      * Inicia el turno del jugador, reseteando flags y activando el temporizador.
      */
-    startPlayerTurn() {
+    startPlayerTurn(turnStartedAt = null) {
         const { turn, interaction, player } = this.ctx;
         // El motor resuelve la Convergencia (victoria/cancelación) y arranca el turno.
         const start = this.ctx.match.startPlayerTurn();
@@ -67,6 +73,7 @@ export default class TurnController {
         }
 
         console.log('[GameScene] Inicio del turno del JUGADOR', { turnNumber: turn.playerTurnNumber, mustAttack: turn.playerMustAttackThisTurn });
+        this.emitTurnCounters();
         this.scene.events.emit('update-turn-indicator', 'player');
         // Emitimos el estado del contador obligatorio para que la UI lo muestre
         this.scene.events.emit('update-attack-counter', 'player', turn.playerTurnsSinceLastAttack + 1, turn.playerMustAttackThisTurn);
@@ -76,13 +83,7 @@ export default class TurnController {
         // Procesar cooldowns y restricciones por nivel de las cartas del jugador
         interaction.preparePlayerFieldForTurn();
 
-        // --- TEMPORIZADOR REDUCIDO A 12s ---
-        if (this.turnTimer) this.turnTimer.destroy();
-        this.turnTimer = this.scene.time.addEvent({
-            delay: GAME_CONFIG.TURN_TIME_LIMIT_MS,
-            callback: this._playerTimedOut,
-            callbackScope: this
-        });
+        this.startTurnTimer('player', turnStartedAt);
 
         // Si está obligado a atacar y NO tiene cartas en campo: saltar el turno y reiniciar contador.
         const playerHasFieldCards = player.field.hasAny();
@@ -97,7 +98,7 @@ export default class TurnController {
     /**
      * Inicia y ejecuta la lógica del turno del oponente.
      */
-    startOpponentTurn() {
+    startOpponentTurn(turnStartedAt = null) {
         const { turn, interaction, botRunner } = this.ctx;
         // El motor aplica Conducto/Convergencia y arranca el turno del oponente.
         const start = this.ctx.match.startOpponentTurn();
@@ -106,12 +107,14 @@ export default class TurnController {
             this.endGame(start.winner);
             return;
         }
+        this.emitTurnCounters();
 
         // Limpieza de restricciones de ataque por nivel al comenzar el turno (regla central en LevelAttackRule)
         interaction.prepareOpponentFieldForTurn();
 
         // El cupo de acciones del rival se repone completo al empezar su turno.
         this.emitActionsLeft('opponent', turn.opponentActionsLeft);
+        this.startTurnTimer('opponent', turnStartedAt);
 
         // MODO LAN: no ejecutar IA, solo esperar acciones del oponente remoto
         if (this.ctx.isLAN) {
@@ -133,9 +136,9 @@ export default class TurnController {
         console.log('[GameScene] Cambio de turno recibido', { currentTurn: data.currentTurn, data });
         // Verificar si es nuestro turno
         if (data.currentTurn === this.ctx.playerRole) {
-            this.startPlayerTurn();
+            this.startPlayerTurn(data.turnStartedAt);
         } else {
-            this.startOpponentTurn();
+            this.startOpponentTurn(data.turnStartedAt);
         }
     }
 
@@ -168,7 +171,7 @@ export default class TurnController {
      * @param {number} remaining Acciones restantes.
      */
     emitActionsLeft(owner, remaining) {
-        this.scene.events.emit('update-actions-left', owner, remaining, GAME_CONFIG.ACTIONS_PER_TURN);
+        this.scene.events.emit('update-actions-left', owner, remaining, this.ctx.match.config.ACTIONS_PER_TURN);
     }
 
     /**
@@ -181,6 +184,11 @@ export default class TurnController {
     afterPlayerAction() {
         const { turn } = this.ctx;
         const remaining = turn.playerActionsLeft;
+        const winner = this.checkVictoryConditions();
+        if (winner) {
+            this.endGame(winner, this.ctx.match.lastVictoryResult.reason);
+            return remaining;
+        }
         this.emitActionsLeft('player', remaining);
         if (remaining <= 0) {
             console.log('[GameScene] Cuota de acciones agotada: el turno del JUGADOR termina');
@@ -206,7 +214,7 @@ export default class TurnController {
             turnNumber: turn.playerTurnNumber
         });
 
-        if (this.turnTimer) this.turnTimer.destroy();
+        this.clearTurnTimer();
         // Comprobamos inactividad y actualizamos contadores de ataque
         const turnReport = forcedAttackSkip
             ? turn.finishForcedAttackSkip()
@@ -225,7 +233,12 @@ export default class TurnController {
         // Comprobamos condiciones de victoria antes de pasar el turno
         const winner = this.checkVictoryConditions();
         if (winner) {
-            this.endGame(winner);
+            this.endGame(winner, this.ctx.match.lastVictoryResult.reason);
+            return;
+        }
+        if (!winner && this.ctx.gameMode?.maxTurns
+            && this.ctx.match.lastVictoryResult.reason === 'bothTurnLimits') {
+            this.endGame(null, 'bothTurnLimits');
             return;
         }
 
@@ -249,6 +262,7 @@ export default class TurnController {
     endOpponentTurn(opponentActed = null) {
         const { turn } = this.ctx;
         if (turn.state !== 'opponent-turn') return;
+        this.clearTurnTimer();
 
         const acted = opponentActed === null ? turn.opponentHasActed : opponentActed;
         // Comprobamos inactividad del oponente y actualizamos contadores de ataque
@@ -262,7 +276,11 @@ export default class TurnController {
         // Comprobamos condiciones de victoria
         const winner = this.checkVictoryConditions();
         if (winner) {
-            this.endGame(winner);
+            this.endGame(winner, this.ctx.match.lastVictoryResult.reason);
+            return;
+        }
+        if (!winner && this.ctx.match.lastVictoryResult.reason === 'bothTurnLimits') {
+            this.endGame(null, 'bothTurnLimits');
             return;
         }
 
@@ -279,13 +297,9 @@ export default class TurnController {
      */
     update() {
         const { turn } = this.ctx;
-        if (turn.state === 'player-turn' && this.turnTimer) {
-            // Usamos getProgress() para tener un valor de 0 a 1 y lo multiplicamos por el total.
-            // Math.ceil asegura que el último segundo se muestre como '1' en lugar de '0'.
-            const totalSeconds = GAME_CONFIG.TURN_TIME_LIMIT_MS / 1000;
-            const remainingTime = Math.ceil((1 - this.turnTimer.getProgress()) * totalSeconds);
-            // Emitimos un evento para que la UI actualice el contador
-            this.scene.events.emit('update-timer', remainingTime);
+        if (this.turnDeadline && (turn.state === 'player-turn' || turn.state === 'opponent-turn')) {
+            const remainingTime = Math.max(0, Math.ceil((this.turnDeadline - Date.now()) / 1000));
+            this.scene.events.emit('update-timer', turn.state === 'player-turn' ? remainingTime : 0);
         } else if (turn.state !== 'game-over') {
             // Si no es el turno del jugador, nos aseguramos que el timer esté en 0
             this.scene.events.emit('update-timer', 0);
@@ -299,6 +313,62 @@ export default class TurnController {
      */
     checkVictoryConditions() {
         return this.ctx.match.checkVictoryConditions();
+    }
+
+    startMatchTimer() {
+        const duration = this.ctx.gameMode?.matchTimeMs;
+        if (!duration || this.matchTimer) return true;
+
+        const serverStart = Number(this.ctx.gameStartData?.startedAt);
+        const startedAt = Number.isFinite(serverStart) && serverStart > 0 ? serverStart : Date.now();
+        this.matchDeadline = startedAt + duration;
+        this.matchTimeRemaining = Math.max(0, Math.ceil((this.matchDeadline - Date.now()) / 1000));
+        this.scene.events.emit('update-match-timer', this.matchTimeRemaining);
+        if (this.matchTimeRemaining === 0) {
+            this.endGame(null, 'timeExpired');
+            return false;
+        }
+        this.matchTimer = setInterval(() => {
+            if (this.ctx.turn.state === 'game-over') return;
+            this.matchTimeRemaining = Math.max(0, Math.ceil((this.matchDeadline - Date.now()) / 1000));
+            this.scene.events.emit('update-match-timer', this.matchTimeRemaining);
+            if (this.matchTimeRemaining === 0) this.endGame(null, 'timeExpired');
+        }, 200);
+        return true;
+    }
+
+    emitTurnCounters() {
+        const { turn } = this.ctx;
+        this.scene.events.emit(
+            'update-turn-counter',
+            turn.playerTurnNumber,
+            turn.opponentTurnNumber,
+            this.ctx.gameMode?.maxTurns || null
+        );
+    }
+
+    startTurnTimer(owner, turnStartedAt = null) {
+        this.clearTurnTimer();
+        const duration = this.ctx.match.config.TURN_TIME_LIMIT_MS;
+        const serverStart = Number(turnStartedAt);
+        const startedAt = Number.isFinite(serverStart) && serverStart > 0 ? serverStart : Date.now();
+        this.turnDeadline = startedAt + duration;
+        this.turnTimer = setInterval(() => {
+            if (this.ctx.turn.state === 'game-over') return;
+            if (Date.now() < this.turnDeadline) return;
+            this.clearTurnTimer();
+            if (owner === 'player' && this.ctx.turn.state === 'player-turn') {
+                this._playerTimedOut();
+            } else if (owner === 'opponent' && this.ctx.turn.state === 'opponent-turn') {
+                this.endOpponentTurn(false);
+            }
+        }, 100);
+    }
+
+    clearTurnTimer() {
+        if (this.turnTimer) clearInterval(this.turnTimer);
+        this.turnTimer = null;
+        this.turnDeadline = null;
     }
 
     /**
@@ -335,11 +405,16 @@ export default class TurnController {
      * Finaliza la partida y muestra un mensaje de victoria/derrota.
      * @param {string} winner El ganador de la partida ('player' u 'opponent').
      */
-    endGame(winner) {
+    endGame(winner, reason = null) {
         const { turn, player, playerData } = this.ctx;
         turn.state = 'game-over';
-        if (this.turnTimer) this.turnTimer.destroy();
+        this.clearTurnTimer();
+        if (this.matchTimer) {
+            clearInterval(this.matchTimer);
+            this.matchTimer = null;
+        }
         this.scene.events.emit('update-timer', 0); // Limpia el contador en la UI
+        this.scene.events.emit('update-match-timer', 0);
 
         console.log('[GameScene] Fin de la partida. Ganador:', winner);
 
@@ -367,7 +442,7 @@ export default class TurnController {
         this.scene.input.enabled = false;
 
         // Emitimos un evento para que la UIScene muestre la pantalla de fin de juego.
-        this.scene.events.emit('game-over', winner);
+        this.scene.events.emit('game-over', winner, reason);
     }
 
     /**
@@ -431,7 +506,7 @@ export default class TurnController {
             console.warn(`[GameScene] destroyCard fallo: no existe modelo ni visual para owner=${owner.id} slot=${fieldIndex} id=${instanceId}`);
             // intentar buscar visual por índice
             const fallback = this.scene.children.list.find(child => {
-                try { return child.getData && child.getData('fieldIndex') === fieldIndex; } catch (e) { return false; }
+                try { return child.getData && child.getData('fieldIndex') === fieldIndex; } catch { return false; }
             });
             if (fallback && fallback.destroy) {
                 console.log('[GameScene] destroyCard: eliminando visual fallback en índice', fieldIndex);
@@ -512,7 +587,7 @@ export default class TurnController {
                         }
                     }
                 }
-            } catch (e) { /* ignore metadata check errors */ }
+            } catch { /* ignore metadata check errors */ }
 
             turn.onBlockingAnimationStarted();
             console.log('[GameScene] Animación de destrucción iniciada. Bloqueos activos:', turn.blockingAnimations);
@@ -557,7 +632,7 @@ export default class TurnController {
             const slot = this.scene['player_battle_slots'][fieldIndex];
             if (slot) {
                 // Asegurarnos de restaurar como dropZone para permitir jugar cartas en él
-                try { slot.setInteractive({ dropZone: true }); } catch (e) { slot.setInteractive(); }
+                try { slot.setInteractive({ dropZone: true }); } catch { slot.setInteractive(); }
             }
             renderer.refreshPlayerHand(player.hand);
         }
@@ -583,12 +658,11 @@ export default class TurnController {
     }
 
     /**
-     * Destruye el temporizador de turno si sigue activo (apagado de escena).
+     * Destruye los temporizadores de turno y partida al apagar la escena.
      */
     destroyTimer() {
-        if (this.turnTimer) {
-            this.turnTimer.destroy();
-            this.turnTimer = null;
-        }
+        this.clearTurnTimer();
+        if (this.matchTimer) clearInterval(this.matchTimer);
+        this.matchTimer = null;
     }
 }

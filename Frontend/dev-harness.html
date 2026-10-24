@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<title>Dev harness</title>
+<style>html,body{margin:0;height:100%;background:#111;overflow:hidden}#game-container{width:100vw;height:100vh}</style>
+</head>
+<body>
+<div id="game-container"></div>
+<script type="module">
+import Phaser from 'phaser';
+import BootScene from '/src/scenes/bootScene.js';
+import PreloaderScene from '/src/scenes/Preloader.js';
+import GameScene from '/src/scenes/GameScene.js';
+import UIScene from '/src/scenes/uiScene.js';
+
+const params = new URLSearchParams(location.search);
+const W = Number(params.get('w') || 1600);
+const H = Number(params.get('h') || 900);
+
+const config = {
+    type: Phaser.AUTO,
+    backgroundColor: '#1a1a1a',
+    dom: { createContainer: true },
+    width: W,
+    height: H,
+    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+    parent: 'game-container',
+    render: { antialias: true, roundPixels: false, powerPreference: 'high-performance', batchSize: 4096 },
+    fps: { min: 30, target: 60, smoothStep: true },
+    title: 'Elemental Battlecards - Dev',
+    scene: [BootScene, PreloaderScene, GameScene, UIScene]
+};
+
+const game = new Phaser.Game(config);
+window.game = game;
+game.events.once('ready', () => {
+    game.scene.stop('BootScene');
+    game.scene.stop('Preloader');
+    game.scene.start('GameScene', {
+        playerData: { username: 'Invocador' },
+        vsBot: true,
+        botDifficulty: 4,
+        gameMode: 'gemas',
+        objectiveDifficulty: 3
+    });
+    setTimeout(() => {
+        const s = game.scene.getScene('GameScene');
+        if (s) s.events.emit('start-game');
+    }, 1200);
+});
+</script>
+</body>
+</html>

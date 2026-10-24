@@ -1,4 +1,3 @@
-import Phaser from 'phaser';
 import { setMusicVolume, setEffectsVolume, play as playSfx } from '../helpers/audioManager.js';
 import DomSceneBase from './ui/DomSceneBase.js';
 import { elementsNavHTML, energyParticlesHTML } from './ui/elementCatalog.js';
@@ -26,8 +25,6 @@ export default class SettingsScene extends DomSceneBase {
     }
 
     create() {
-        const { width, height } = this.scale;
-
         const particles = energyParticlesHTML();
 
         const elementsNavHtml = elementsNavHTML();
