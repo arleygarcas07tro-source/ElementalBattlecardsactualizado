@@ -18,6 +18,8 @@ const SFX = {
     death:    { type: 'sawtooth', frequency: 150, attack: 0.02, decay: 0.45, duration: 0.50, volume: 0.45 },
     fusion:   { type: 'sine', frequency: 260, attack: 0.02, decay: 0.30, duration: 0.40, volume: 0.50 },
     firework: { type: 'noise', duration: 0.25, attack: 0.01, decay: 0.22, band: 900, volume: 0.45 },
+    'bomb-drop': { type: 'sine', frequency: 150, attack: 0.01, decay: 0.18, duration: 0.22, volume: 0.22 },
+    explosion: { type: 'noise', duration: 0.55, attack: 0.004, decay: 0.50, band: 420, volume: 0.95 },
     victory:  { type: 'triangle', frequency: 523, attack: 0.02, decay: 0.50, duration: 0.60, volume: 0.40 },
     defeat:   { type: 'sawtooth', frequency: 110, attack: 0.05, decay: 0.80, duration: 0.80, volume: 0.40 }
 };

@@ -10,6 +10,7 @@ import RemoteEffectApplier from '../presentation/RemoteEffectApplier.js';
 import TurnController from '../presentation/TurnController.js';
 import { createArena } from '../helpers/battlefieldArt.js';
 import { createBattleLayout } from '../helpers/battleLayout.js';
+import BattlefieldBombs from '../helpers/battlefieldBombs.js';
 import { getGemRequirements } from '../game/objectivesCatalog.js';
 import { getGameMode } from '../game/gameModes.js';
 
@@ -112,6 +113,12 @@ export default class GameScene extends Phaser.Scene {
     }
 
     create() {
+        // Detener el bombardeo ambiental de una partida anterior.
+        if (this.bombs) {
+            this.bombs.stop();
+            this.bombs = null;
+        }
+
         // Limpieza de objetos visuales de partidas previas (si la escena se reutiliza)
         try {
             // Tomamos una copia porque destroy modifica children.list
@@ -299,6 +306,9 @@ export default class GameScene extends Phaser.Scene {
         // Bandejas ornamentales de ambas manos.
         renderer.createBoardDecor();
 
+        // Bombardeo ambiental puramente decorativo sobre el campo.
+        this.bombs = new BattlefieldBombs(this, this.layout).start();
+
         // ---------- ZONA DE MANO DEL OPONENTE (4 espacios) ----------
         renderer.createSlotsRow(renderer.layout.opponentHandY, 'opponent-slots');
         renderer.createCardsRow(renderer.layout.opponentHandY, 'opponent-cards', this.opponent.hand);
@@ -334,6 +344,11 @@ export default class GameScene extends Phaser.Scene {
             // remover listeners propios
             this.events.off('start-game');
             this.events.off('request-essence-power');
+            // detener el bombardeo ambiental
+            if (this.bombs) {
+                this.bombs.stop();
+                this.bombs = null;
+            }
             // detener la UIScene si estÃ¡ activa
             if (this.scene.isActive('UIScene')) this.scene.stop('UIScene');
             // destruir temporizador si sigue activo
