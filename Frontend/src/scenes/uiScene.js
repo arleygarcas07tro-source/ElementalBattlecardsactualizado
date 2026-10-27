@@ -65,34 +65,8 @@ export default class UIScene extends Phaser.Scene {
         this.gameMode = getGameMode(this.gameScene?.gameMode?.id || data.gameMode?.id);
 
         const { width, height } = this.scale;
-        this.W = width;
-        this.H = height;
         this.layout = this.gameScene?.layout || createBattleLayout(width, height, { usesGems: this.gameMode.usesGems });
-
-        // Reloj de turno: centrado sobre el área de juego.
-        this.turnTimerPos = this.layout.turnTimer;
-
-        // --- Construccion del HUD ---
-        this.createProfiles();
-        this.createPhaseBanner();
-        this.createButtons();
-        this.createTurnTimer();
-        this.createMatchTimer();
-        this.createEssenceOrbs();
-        this.createGemPanels();
-
-        // --- TOAST CENTRAL (feedback de poderes de esencia y convergencia) ---
-        this.powerToastText = this.add.text(width / 2, this.H * 0.50, '', {
-            fontSize: '20px',
-            fontFamily: 'Georgia, serif',
-            color: '#ffd700',
-            fontStyle: 'bold',
-            align: 'center',
-            wordWrap: { width: 900 },
-            backgroundColor: 'rgba(20,0,40,0.78)',
-            padding: { x: 16, y: 9 },
-            shadow: { offsetX: 2, offsetY: 2, color: '#000', blur: 3, fill: true }
-        }).setOrigin(0.5).setDepth(1001).setVisible(false);
+        this._createHud(width, height);
 
         // --- LISTENER DE EVENTOS ---
         this.gameScene.events.on('update-timer', this.updateTimer, this);
@@ -106,7 +80,10 @@ export default class UIScene extends Phaser.Scene {
         this.gameScene.events.on('essence-power-failed', this.handleEssencePowerFailed, this);
         this.gameScene.events.on('gems-spent', this.handleGemsSpent, this);
         this.gameScene.events.on('update-actions-left', this.handleActionsLeft, this);
+        this.gameScene.events.on('gameplay-message', this.handleGameplayMessage, this);
         this.gameScene.events.on('convergence-status', this.handleConvergenceStatus, this);
+        this.gameScene.events.on('layout-resized', this.handleLayoutResized, this);
+        this.gameScene.events.on('start-game-failed', this.handleStartGameFailed, this);
 
         const objectives = this.gameScene.getObjectivesPayload?.();
         if (objectives) this.handleObjectivesReady(objectives);
@@ -133,15 +110,90 @@ export default class UIScene extends Phaser.Scene {
                 this.gameScene.events.off('essence-power-failed', this.handleEssencePowerFailed, this);
                 this.gameScene.events.off('gems-spent', this.handleGemsSpent, this);
                 this.gameScene.events.off('update-actions-left', this.handleActionsLeft, this);
+                this.gameScene.events.off('gameplay-message', this.handleGameplayMessage, this);
                 this.gameScene.events.off('convergence-status', this.handleConvergenceStatus, this);
+                this.gameScene.events.off('layout-resized', this.handleLayoutResized, this);
+                this.gameScene.events.off('start-game-failed', this.handleStartGameFailed, this);
                 // Nos aseguramos de eliminar también el listener del contador de ataque
                 // para evitar que la UI de una partida anterior reaccione a eventos de una nueva.
                 this.gameScene.events.off('update-attack-counter');
                 this.gameScene.events.off('update-turn-counter');
+                this.startButton = null;
             }
         });
 
         this.events.off('end-player-turn');
+    }
+
+    _createHud(width, height) {
+        this.W = width;
+        this.H = height;
+        this.turnTimerPos = this.layout.turnTimer;
+        this.playerOrbs = {};
+        this.opponentOrbs = {};
+        this.gemIcons = { player: {}, opponent: {} };
+        this.gemShelves = {};
+        this.gemTotals = {};
+        this.profileTexts = { player: null, opponent: null };
+        this.attackCounterTexts = {};
+        this.actionsTexts = {};
+
+        this.createProfiles();
+        this.createPhaseBanner();
+        this.createButtons();
+        this.createTurnTimer();
+        this.createMatchTimer();
+        this.createEssenceOrbs();
+        this.createGemPanels();
+
+        this.powerToastText = this.add.text(width / 2, height * 0.5, '', {
+            fontSize: '20px',
+            fontFamily: 'Georgia, serif',
+            color: '#ffd700',
+            fontStyle: 'bold',
+            align: 'center',
+            wordWrap: { width: Math.min(900, width - 32) },
+            backgroundColor: 'rgba(20,0,40,0.78)',
+            padding: { x: 16, y: 9 },
+            shadow: { offsetX: 2, offsetY: 2, color: '#000', blur: 3, fill: true }
+        }).setOrigin(0.5).setDepth(1001).setVisible(false);
+
+        this.refreshProfiles();
+        const objectives = this.gameScene.getObjectivesPayload?.();
+        if (objectives) this.handleObjectivesReady(objectives);
+
+        const turn = this.gameScene.turn;
+        if (turn) {
+            if (turn.state === 'player-turn' || turn.state === 'opponent-turn') {
+                this.handleTurnIndicator(turn.state === 'player-turn' ? 'player' : 'opponent');
+            }
+            this.handleActionsLeft('player', turn.playerActionsLeft, GAME_CONFIG.ACTIONS_PER_TURN);
+            this.handleActionsLeft('opponent', turn.opponentActionsLeft, GAME_CONFIG.ACTIONS_PER_TURN);
+            if (this.turnCounterText) {
+                this.turnCounterText.setText(this.gameMode.maxTurns
+                    ? `TÚ ${turn.playerTurnNumber}/${this.gameMode.maxTurns} · RIVAL ${turn.opponentTurnNumber}/${this.gameMode.maxTurns}`
+                    : `T${turn.playerTurnNumber}`);
+            }
+            for (const type of ELEMENTS) {
+                if (this.gameScene.player?.essences?.has(type)) this.handleEssenceActivation('player', type);
+                if (this.gameScene.opponent?.essences?.has(type)) this.handleEssenceActivation('opponent', type);
+            }
+            this.handleConvergenceStatus({
+                player: turn.playerConvergenceArmed,
+                opponent: turn.opponentConvergenceArmed
+            });
+        }
+
+        const controller = this.gameScene.ctx?.turnController;
+        if (Number.isFinite(controller?.lastDisplayedTurnTime)) this.updateTimer(controller.lastDisplayedTurnTime);
+        if (controller?.matchTimeRemaining > 0) this.updateMatchTimer(controller.matchTimeRemaining);
+    }
+
+    handleLayoutResized(layout) {
+        if (!layout) return;
+        this.children.removeAll(true);
+        this.layout = layout;
+        this._createHud(layout.width, layout.height);
     }
 
     /**
@@ -316,7 +368,8 @@ export default class UIScene extends Phaser.Scene {
             this.add.rectangle(px + 6, py, 5, 20, COLORS.goldBright).setDepth(1001)
         ];
 
-        const pauseZone = this.add.zone(px, py, pr * 2 + 10, pr * 2 + 10).setOrigin(0.5)
+        const hitSize = Math.max(pr * 2 + 10, 44);
+        const pauseZone = this.add.zone(px, py, hitSize, hitSize).setOrigin(0.5)
             .setInteractive({ useHandCursor: true }).setDepth(1002);
         pauseZone.on('pointerover', () => pauseBars.forEach(bar => bar.setFillStyle(0xffffff)));
         pauseZone.on('pointerout', () => pauseBars.forEach(bar => bar.setFillStyle(COLORS.goldBright)));
@@ -334,6 +387,8 @@ export default class UIScene extends Phaser.Scene {
         const by = sb.y + bh / 2;
 
         const startContainer = this.add.container(bx, by).setDepth(5);
+        this.startButton = startContainer;
+        startContainer.setVisible(this._canStartMatch());
         const startBg = this.add.graphics();
         startBg.fillStyle(0x0c2a12, 0.94);
         startBg.fillRoundedRect(-bw / 2, -bh / 2, bw, bh, 12);
@@ -347,7 +402,7 @@ export default class UIScene extends Phaser.Scene {
         playIcon.fillTriangle(-bw / 2 + 22, -8, -bw / 2 + 22, 8, -bw / 2 + 34, 0);
 
         const startText = this.add.text(8, 0, 'INICIAR PARTIDA', {
-            fontFamily: 'Georgia, serif', fontSize: '19px', fontStyle: 'bold',
+            fontFamily: 'Georgia, serif', fontSize: `${Math.max(13, Math.round(19 * this.layout.scale))}px`, fontStyle: 'bold',
             color: '#d8ffe6', stroke: '#000', strokeThickness: 4
         }).setOrigin(0.5);
 
@@ -356,9 +411,30 @@ export default class UIScene extends Phaser.Scene {
         startContainer.on('pointerover', () => startContainer.setScale(1.04));
         startContainer.on('pointerout', () => startContainer.setScale(1));
         startContainer.on('pointerdown', () => {
+            if (!this._canStartMatch()) return;
             this.gameScene.events.emit('start-game');
             startContainer.setVisible(false);
         });
+    }
+
+    /**
+     * Solo el host LAN (o el jugador local) puede iniciar el combate.
+     * @returns {boolean}
+     */
+    _canStartMatch() {
+        if (this.gameScene.turn?.state !== 'pre-start') return false;
+        if (!this.gameScene.isLAN) return true;
+        return this.gameScene.playerRole === 'host';
+    }
+
+    /**
+     * Restaura el botón si el servidor rechaza el inicio.
+     * @param {string} [message]
+     */
+    handleStartGameFailed(message) {
+        if (!this.startButton || this.gameScene.turn?.state !== 'pre-start') return;
+        this.startButton.setVisible(this._canStartMatch());
+        if (message) this.showToast(message, 2400);
     }
 
     createTurnTimer() {
@@ -883,7 +959,8 @@ export default class UIScene extends Phaser.Scene {
             playerEssences: 'Las 6 esencias han sido activadas',
             opponentEssences: 'El rival activó las 6 esencias',
             playerTurnLimit: 'Se agotaron tus turnos sin cumplir el objetivo',
-            opponentTurnLimit: 'El rival agotó sus turnos'
+            opponentTurnLimit: 'El rival agotó sus turnos',
+            convergence: 'Control de campo: 6 elementos'
         };
 
         const _overlay = track(this.add.rectangle(0, 0, width, height, 0x000000, 0.75).setOrigin(0).setDepth(100));
@@ -908,7 +985,7 @@ export default class UIScene extends Phaser.Scene {
             resultText = '¡Has Ganado!';
             resultColor = '#49d17a';
         } else if (winner === 'opponent') {
-            resultText = '¡Has Perdido!';
+            resultText = '¡Has perdido!';
             resultColor = '#ff5a3c';
         } else if (reason === 'timeExpired') {
             resultText = '¡Tiempo Agotado!';
@@ -922,7 +999,7 @@ export default class UIScene extends Phaser.Scene {
             color: resultColor, stroke: '#000', strokeThickness: 6
         }).setOrigin(0.5).setDepth(102));
 
-        const reasonLabel = (reason && REASON_LABELS[reason]) || '';
+        const reasonLabel = this.describeGameOverReason(winner, reason, REASON_LABELS);
         if (reasonLabel) {
             track(this.add.text(width / 2, height / 2 + 22, reasonLabel, {
                 fontSize: '18px', color: '#ffd75a', fontStyle: 'italic',
@@ -961,8 +1038,37 @@ export default class UIScene extends Phaser.Scene {
             modalObjects.forEach((obj) => { if (obj) obj.destroy(); });
             this.scene.stop('GameScene');
             this.scene.stop('UIScene');
-            this.scene.start('HomeScenes');
+            this.scene.start('HomeScenes', { playerData: this.playerData });
         });
+    }
+
+    /**
+     * Traduce el motivo del resultado desde la perspectiva del jugador local.
+     * @param {'player'|'opponent'|null} winner
+     * @param {string|null} reason
+     * @param {object} labels
+     * @returns {string}
+     */
+    describeGameOverReason(winner, reason, labels = {}) {
+        if (!reason) return '';
+        if (reason === 'convergence') {
+            return winner === 'opponent'
+                ? 'El rival completó el mazo con los 6 elementos'
+                : 'Completaste el mazo con los 6 elementos';
+        }
+        if (winner === 'opponent') {
+            const defeatLabels = {
+                playerInactive: 'El rival ganó por tu inactividad',
+                opponentEssences: 'El rival completó las 6 esencias',
+                opponentObjectives: 'El rival cumplió las gemas y el control de campo',
+                playerTurnLimit: 'Agotaste tus turnos sin cumplir el objetivo',
+                opponentTurnLimit: 'El rival agotó sus turnos',
+                bothTurnLimits: 'Ambos jugadores agotaron sus turnos',
+                timeExpired: 'Se agotó el tiempo: ambos pierden'
+            };
+            if (defeatLabels[reason]) return defeatLabels[reason];
+        }
+        return labels[reason] || '';
     }
 
     buildGameOverDetail() {
@@ -1067,6 +1173,10 @@ export default class UIScene extends Phaser.Scene {
         const total = max || GAME_CONFIG.ACTIONS_PER_TURN;
         textObj.setText(`ACCIONES ${remaining}/${total}`);
         textObj.setColor(remaining > 0 ? '#8fd4ff' : '#ff6b6b');
+    }
+
+    handleGameplayMessage(message) {
+        this.showToast(message, 2200);
     }
 
     /**

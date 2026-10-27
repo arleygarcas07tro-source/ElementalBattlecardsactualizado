@@ -3,7 +3,9 @@ import { playFusionFx, playImpactFx, playDeathFx, playFireworksFx, TYPE_COLORS }
 import {
     SLOT_W,
     SLOT_GAP,
-    drawHandTray
+    drawHandTray,
+    ensureBoardTextures,
+    slotTextureKey
 } from '../helpers/battlefieldArt.js';
 import Card from '../game_objects/card.js';
 
@@ -36,6 +38,143 @@ export default class BoardRenderer {
             playerFieldY: this.scene.scale.height * 0.55 + 70
         };
         this.fx = { playFusionFx, playImpactFx, playDeathFx, playFireworksFx, TYPE_COLORS };
+    }
+
+    repositionAll(layout) {
+        if (!layout) return;
+        this.layout = layout;
+        if (layout.cardHand) this.cardHandSize = layout.cardHand;
+        if (layout.cardOpponentHand) this.cardOpponentHandSize = layout.cardOpponentHand;
+        if (layout.cardField) this.cardFieldSize = layout.cardField;
+
+        const cx = this.scene.scale.width / 2;
+        const px = this.layout.px || ((value) => Math.round(value * (this.layout.scale || 1)));
+
+        const handGap = this.layout.handGap || 10;
+        const trayWOpp = Math.round((this.cardOpponentHandSize.width * 4 + handGap * 3 + px(48)));
+        const trayWOppH = Math.round(this.cardOpponentHandSize.height + px(14));
+        if (this.scene['board-decor-opponent-tray']) {
+            try {
+                this.scene['board-decor-opponent-tray'].setPosition(cx, this.layout.opponentHandY);
+                if (this.scene['board-decor-opponent-tray'].setDisplaySize) {
+                    this.scene['board-decor-opponent-tray'].setDisplaySize(trayWOpp, trayWOppH);
+                }
+            } catch (e) { /* ignore */ }
+        }
+
+        const trayWPlayer = Math.round((this.cardHandSize.width * 4 + handGap * 3 + px(56)));
+        const trayWPlayerH = Math.round(this.cardHandSize.height + px(16));
+        if (this.scene['board-decor-player-tray']) {
+            try {
+                this.scene['board-decor-player-tray'].setPosition(cx, this.layout.playerHandY);
+                if (this.scene['board-decor-player-tray'].setDisplaySize) {
+                    this.scene['board-decor-player-tray'].setDisplaySize(trayWPlayer, trayWPlayerH);
+                }
+            } catch (e) { /* ignore */ }
+        }
+
+        // Reposicionar manos
+        if (this.scene['opponent-cards']) {
+            try {
+                const cards = this.scene['opponent-cards'];
+                const positionsX = calculateRowPositions({
+                    numItems: cards.length,
+                    itemWidth: this.cardOpponentHandSize.width,
+                    itemSpacing: cards.length > 1 ? (this.layout.handGap || 10) : 0,
+                    containerWidth: this.scene.scale.width
+                });
+                cards.forEach((card, i) => {
+                    if (!card) return;
+                    card.setPosition(positionsX[i], this.layout.opponentHandY);
+                    card.setDisplaySize(this.cardOpponentHandSize.width, this.cardOpponentHandSize.height);
+                    if (card.setData) card.setData('startPosition', { x: positionsX[i], y: this.layout.opponentHandY });
+                });
+            } catch (e) { /* ignore */ }
+        }
+        if (this.scene['player-cards']) {
+            try {
+                const cards = this.scene['player-cards'];
+                const positionsX = calculateRowPositions({
+                    numItems: cards.length,
+                    itemWidth: this.cardHandSize.width,
+                    itemSpacing: cards.length > 1 ? (this.layout.handGap || 10) : 0,
+                    containerWidth: this.scene.scale.width
+                });
+                cards.forEach((card, i) => {
+                    if (!card) return;
+                    card.setPosition(positionsX[i], this.layout.playerHandY);
+                    card.setDisplaySize(this.cardHandSize.width, this.cardHandSize.height);
+                    if (card.setData) card.setData('startPosition', { x: positionsX[i], y: this.layout.playerHandY });
+                });
+            } catch (e) { /* ignore */ }
+        }
+
+        // Reposicionar campos
+        if (this.scene['opponent_battle_slots']) {
+            try {
+                const slots = this.scene['opponent_battle_slots'];
+                const positionsX = calculateRowPositions({
+                    numItems: slots.length,
+                    itemWidth: this.cardFieldSize.width,
+                    itemSpacing: this.layout.fieldGap || 16,
+                    containerWidth: this.scene.scale.width,
+                    centerX: this.layout.fieldCenterX
+                });
+                slots.forEach((slot, i) => {
+                    if (!slot) return;
+                    slot.setPosition(positionsX[i], this.layout.opponentFieldY);
+                    slot.setDisplaySize(this.cardFieldSize.width, this.cardFieldSize.height);
+                    this.repositionFieldArt('opponent_battle_slots', i, positionsX[i], this.layout.opponentFieldY);
+                });
+            } catch (e) { /* ignore */ }
+        }
+        if (this.scene['player_battle_slots']) {
+            try {
+                const slots = this.scene['player_battle_slots'];
+                const positionsX = calculateRowPositions({
+                    numItems: slots.length,
+                    itemWidth: this.cardFieldSize.width,
+                    itemSpacing: this.layout.fieldGap || 16,
+                    containerWidth: this.scene.scale.width,
+                    centerX: this.layout.fieldCenterX
+                });
+                slots.forEach((slot, i) => {
+                    if (!slot) return;
+                    slot.setPosition(positionsX[i], this.layout.playerFieldY);
+                    slot.setDisplaySize(this.cardFieldSize.width, this.cardFieldSize.height);
+                    this.repositionFieldArt('player_battle_slots', i, positionsX[i], this.layout.playerFieldY);
+                });
+            } catch (e) { /* ignore */ }
+        }
+
+        // Reposicionar cartas en campo
+        try {
+            const fieldCards = this.scene.children.list.filter(c => c.getData && c.getData('isCardOnField'));
+            const getSlotPos = (ownerIsOpponent, idx) => {
+                if (idx === undefined || idx === null) return null;
+                const slots = ownerIsOpponent ? this.scene['opponent_battle_slots'] : this.scene['player_battle_slots'];
+                if (slots && slots[idx]) return slots[idx];
+                return null;
+            };
+            fieldCards.forEach(card => {
+                if (!card) return;
+                const idx = card.getData('fieldIndex');
+                const isOpp = card.getData('isOpponentCard');
+                const slot = getSlotPos(isOpp, idx);
+                if (slot) {
+                    card.setPosition(slot.x, slot.y);
+                    card.setDisplaySize(this.cardFieldSize.width, this.cardFieldSize.height);
+                    card.setData('startPosition', { x: slot.x, y: slot.y });
+                }
+            });
+        } catch (e) { /* ignore */ }
+    }
+
+    repositionFieldArt(rowName, index, x, y) {
+        const art = this.scene.children.list.find(child => child.name === `${rowName}-${index}-art`);
+        if (!art) return;
+        art.setPosition(x, y);
+        art.setDisplaySize(this.cardFieldSize.width + 10, this.cardFieldSize.height + 10);
     }
 
     /**
@@ -78,28 +217,23 @@ export default class BoardRenderer {
         const isField = name.startsWith('player_battle_slots') || name.startsWith('opponent_battle_slots');
         const isOpponent = name.startsWith('opponent');
         const cardSize = isField ? this.cardFieldSize : (isOpponent ? this.cardOpponentHandSize : this.cardHandSize);
+        if (isField) ensureBoardTextures(this.scene);
         const slotWidth = isField ? this.cardFieldSize.width : SLOT_W;
         const slotSpacing = isField ? (this.layout.fieldGap || SLOT_GAP) : SLOT_GAP;
         const positionsX = calculateRowPositions({
             numItems: numSlots,
             itemWidth: slotWidth,
             itemSpacing: slotSpacing,
-            containerWidth: this.scene.scale.width
+            containerWidth: this.scene.scale.width,
+            ...(isField ? { centerX: this.layout.fieldCenterX } : {})
         });
-        const divisionColor = isOpponent ? 0xff7657 : 0x65c8ff;
-
         for (let i = 0; i < numSlots; i++) {
             if (isField) {
-                const division = this.scene.add.graphics();
-                division.lineStyle(1.5, divisionColor, 0.42);
-                division.strokeRoundedRect(
-                    positionsX[i] - cardSize.width / 2,
-                    y - cardSize.height / 2,
-                    cardSize.width,
-                    cardSize.height,
-                    8
-                );
-                division.setDepth(-0.25).setName(`${name}-${i}-division`);
+                this.scene.add.image(positionsX[i], y, slotTextureKey(isOpponent ? 'opponent' : 'player'))
+                    .setDisplaySize(cardSize.width + 10, cardSize.height + 10)
+                    .setAlpha(0.68)
+                    .setDepth(-0.3)
+                    .setName(`${name}-${i}-art`);
             }
 
             const slot = this.scene.add.image(positionsX[i], y, 'slot')
@@ -109,6 +243,7 @@ export default class BoardRenderer {
 
             // Si es un slot del campo de batalla del jugador, lo hacemos una zona de drop
             if (name === 'player_battle_slots') {
+                slot.setData('fieldIndex', i);
                 slot.setInteractive({ dropZone: true }); // CORRECCIÓN: Aseguramos que sea dropzone
                 // Le añadimos un listener para cuando se haga clic en él
                 slot.on('pointerdown', () => {

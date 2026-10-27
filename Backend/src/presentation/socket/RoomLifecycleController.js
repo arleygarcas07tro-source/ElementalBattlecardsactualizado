@@ -61,18 +61,52 @@ class RoomLifecycleController {
     }
 
     this.io.to(code).emit('player_joined', {
+      code,
       players: result.room.playerCount(),
       canStart: result.canStart,
+      gameMode: result.room.gameMode,
+      hostId: this.roomService.hostId(result.room),
+      guestId: this.roomService.guestId(result.room),
+    });
+  }
+
+  startGame(socket, data, cb) {
+    const callback = typeof data === 'function' ? data : cb;
+    const code = socket.roomCode;
+    const room = code ? this.roomService.getRoom(code) : null;
+
+    if (!room) {
+      if (typeof callback === 'function') {
+        callback({ success: false, message: 'Sala no encontrada.' });
+      }
+      return;
+    }
+
+    if (this.roomService.hostId(room) !== socket.id) {
+      if (typeof callback === 'function') {
+        callback({ success: false, message: 'Solo el anfitrión puede iniciar la partida.' });
+      }
+      return;
+    }
+
+    if (!room.canStart()) {
+      if (typeof callback === 'function') {
+        callback({ success: false, message: 'La sala debe tener dos jugadores.' });
+      }
+      return;
+    }
+
+    this.io.to(code).emit('game_start', {
+      currentTurn: 'host',
+      hostId: this.roomService.hostId(room),
+      guestId: this.roomService.guestId(room),
+      gameMode: room.gameMode,
+      startedAt: Date.now(),
     });
 
-    if (result.canStart) {
-      this.io.to(code).emit('game_start', {
-        currentTurn: 'host',
-        hostId: this.roomService.hostId(result.room),
-        guestId: this.roomService.guestId(result.room),
-        gameMode: result.room.gameMode,
-        startedAt: Date.now(),
-      });
+    this.logger.info(`Partida iniciada en sala ${code} por ${socket.id} (host)`);
+    if (typeof callback === 'function') {
+      callback({ success: true, code });
     }
   }
 

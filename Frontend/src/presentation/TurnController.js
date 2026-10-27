@@ -36,6 +36,7 @@ export default class TurnController {
      */
     beginMatch() {
         const turn = this.ctx.turn;
+        if (turn.state === 'game-over') return;
         if (turn.state === 'pre-start') {
             console.log('[GameScene] ¡La partida ha comenzado!', { player: this.ctx.playerData?.username || 'Jugador' });
             if (this.startMatchTimer() === false) return;
@@ -65,11 +66,12 @@ export default class TurnController {
      */
     startPlayerTurn(turnStartedAt = null) {
         const { turn, interaction, player } = this.ctx;
+        if (turn.state === 'game-over') return;
         // El motor resuelve la Convergencia (victoria/cancelación) y arranca el turno.
         const start = this.ctx.match.startPlayerTurn();
         if (start && start.winner) {
             console.log('[GameScene] CONVERGENCIA: el jugador conservó los 6 tipos un turno completo.');
-            this.endGame(start.winner);
+            this.endGame(start.winner, start.reason);
             return;
         }
 
@@ -101,11 +103,12 @@ export default class TurnController {
      */
     startOpponentTurn(turnStartedAt = null) {
         const { turn, interaction, botRunner } = this.ctx;
+        if (turn.state === 'game-over') return;
         // El motor aplica Conducto/Convergencia y arranca el turno del oponente.
         const start = this.ctx.match.startOpponentTurn();
         if (start && start.winner) {
             console.log('[GameScene] CONVERGENCIA: el oponente conservó los 6 tipos un turno completo.');
-            this.endGame(start.winner);
+            this.endGame(start.winner, start.reason);
             return;
         }
         this.emitTurnCounters();
@@ -134,6 +137,7 @@ export default class TurnController {
      * @param {{currentTurn: string}} data
      */
     handleTurnChanged(data) {
+        if (this.ctx.turn.state === 'game-over') return;
         console.log('[GameScene] Cambio de turno recibido', { currentTurn: data.currentTurn, data });
         // Verificar si es nuestro turno
         if (data.currentTurn === this.ctx.playerRole) {
@@ -410,10 +414,13 @@ export default class TurnController {
 
     /**
      * Finaliza la partida y muestra un mensaje de victoria/derrota.
-     * @param {string} winner El ganador de la partida ('player' u 'opponent').
+     * @param {string|null} winner El ganador de la partida ('player' u 'opponent').
+     * @param {string|null} [reason=null] Motivo del resultado.
+     * @param {{broadcast?: boolean}} [options]
      */
-    endGame(winner, reason = null) {
+    endGame(winner, reason = null, { broadcast = true } = {}) {
         const { turn, player, playerData } = this.ctx;
+        if (turn.state === 'game-over') return;
         turn.state = 'game-over';
         this.clearTurnTimer();
         if (this.matchTimer) {
@@ -422,6 +429,10 @@ export default class TurnController {
         }
         this.scene.events.emit('update-timer', 0); // Limpia el contador en la UI
         this.scene.events.emit('update-match-timer', 0);
+
+        if (this.ctx.isLAN && broadcast && this.ctx.lan) {
+            this.ctx.lan.emitGameEvent({ type: 'game_over', winner, reason });
+        }
 
         console.log('[GameScene] Fin de la partida. Ganador:', winner);
 
@@ -619,8 +630,8 @@ export default class TurnController {
 
             renderer.playDeath(cardObject, fxCardData, finishDeath);
 
-            // Red de seguridad: la animación dura 340 ms; 650 ms lo cubre con margen.
-            this.scene.time.delayedCall(650, finishDeath);
+            // Margen de seguridad sobre la animación de destrucción.
+            this.scene.time.delayedCall(400, finishDeath);
         }
 
         // Si tenemos modelo, mover a cementerio con la misma lógica previa

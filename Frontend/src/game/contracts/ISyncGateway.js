@@ -1,6 +1,14 @@
 import { assertContract } from '../../core/assertContract.js';
 
-const METHODS = ['onGameEvent', 'onTurnChanged', 'emitGameEvent', 'emitEndTurn'];
+const METHODS = [
+    'onGameEvent',
+    'onTurnChanged',
+    'onGameStart',
+    'offGameStart',
+    'emitGameEvent',
+    'emitEndTurn',
+    'startGame'
+];
 
 /**
  * Contrato del gateway de sincronización de red. La escena y el

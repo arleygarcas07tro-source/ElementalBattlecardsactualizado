@@ -1,5 +1,18 @@
 import CardHealthService from './CardHealthService.js';
 
+const INVERTED_REASONS = Object.freeze({
+    playerInactive: 'opponentInactive',
+    opponentInactive: 'playerInactive',
+    playerEssences: 'opponentEssences',
+    opponentEssences: 'playerEssences',
+    playerObjectives: 'opponentObjectives',
+    opponentObjectives: 'playerObjectives',
+    playerFieldControl: 'opponentFieldControl',
+    opponentFieldControl: 'playerFieldControl',
+    playerTurnLimit: 'opponentTurnLimit',
+    opponentTurnLimit: 'playerTurnLimit'
+});
+
 /**
  * Traductor de eventos remotos LAN a comandos de dominio (GameMatch).
  *
@@ -63,6 +76,7 @@ export default class LANEventRouter {
             case 'fuse_from_hand': return this._routeFuseFromHand(payload, isRemotePlayer, isOpponentAction);
             case 'attack': return this._routeAttack(payload, isRemotePlayer, isOpponentAction);
             case 'direct_attack': return this._routeDirectAttack(payload, isRemotePlayer, isOpponentAction);
+            case 'game_over': return this._routeGameOver(payload);
             default: return null;
         }
     }
@@ -134,5 +148,17 @@ export default class LANEventRouter {
             essenceType: payload.essenceType,
             isOpponentAction
         };
+    }
+
+    _routeGameOver(payload) {
+        const winner = payload.winner === 'player'
+            ? 'opponent'
+            : payload.winner === 'opponent'
+                ? 'player'
+                : null;
+        const reason = payload.reason
+            ? (INVERTED_REASONS[payload.reason] || payload.reason)
+            : null;
+        return { kind: 'game-over', winner, reason };
     }
 }

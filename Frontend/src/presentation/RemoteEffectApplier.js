@@ -143,6 +143,11 @@ export default class RemoteEffectApplier {
                 break;
             }
 
+            case 'game-over': {
+                turnController.endGame(effect.winner ?? null, effect.reason ?? null, { broadcast: false });
+                break;
+            }
+
             case 'direct-attack': {
                 const attackerObj = this.scene.children.list.find(c =>
                     c.getData('isOpponentCard') &&

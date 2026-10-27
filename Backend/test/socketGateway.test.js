@@ -107,7 +107,7 @@ test('SocketGateway.handleJoinRoom rechaza un código inválido', () => {
   assert.equal(response.success, false);
 });
 
-test('SocketGateway.handleJoinRoom une al guest y emite game_start', () => {
+test('SocketGateway.handleJoinRoom une al guest sin iniciar la partida automáticamente', () => {
   const { io } = makeGateway();
 
   const { guest, code } = connectPair(io);
@@ -116,7 +116,75 @@ test('SocketGateway.handleJoinRoom une al guest y emite game_start', () => {
   assert.equal(guest.playerRole, 'guest');
   const events = io.emitted.map((e) => e.event);
   assert.ok(events.includes('player_joined'));
-  assert.ok(events.includes('game_start'));
+  assert.ok(!events.includes('game_start'));
+
+  const joined = io.emitted.find((e) => e.event === 'player_joined');
+  assert.equal(joined.room, code);
+  assert.deepEqual(joined.payload, {
+    code,
+    players: 2,
+    canStart: true,
+    gameMode: 'clasico',
+    hostId: 'host',
+    guestId: 'guest',
+  });
+});
+
+test('SocketGateway.handleJoinRoom comparte el modo elegido por el host', () => {
+  const { io } = makeGateway();
+  const host = makeFakeSocket('host');
+  const guest = makeFakeSocket('guest');
+  io.connect(host);
+  io.connect(guest);
+
+  let code = null;
+  host._handlers.create_room({ gameMode: 'gemas' }, (response) => { code = response.code; });
+  guest._handlers.join_room({ code }, () => {});
+
+  const joined = io.emitted.find((e) => e.event === 'player_joined');
+  assert.equal(joined.payload.gameMode, 'gemas');
+});
+
+test('SocketGateway.handleStartGame inicia la partida para ambos jugadores', () => {
+  const { io } = makeGateway();
+  const { host, code } = connectPair(io);
+
+  let response = null;
+  host._handlers.start_game({}, (r) => { response = r; });
+
+  assert.equal(response.success, true);
+  assert.equal(response.code, code);
+  const starts = io.emitted.filter((e) => e.event === 'game_start');
+  assert.equal(starts.length, 1);
+  assert.equal(starts[0].room, code);
+  assert.equal(starts[0].payload.hostId, 'host');
+  assert.equal(starts[0].payload.guestId, 'guest');
+});
+
+test('SocketGateway.handleStartGame rechaza al guest', () => {
+  const { io } = makeGateway();
+  const { guest } = connectPair(io);
+
+  let response = null;
+  guest._handlers.start_game({}, (r) => { response = r; });
+
+  assert.equal(response.success, false);
+  assert.match(response.message, /anfitrión/);
+  assert.equal(io.emitted.filter((e) => e.event === 'game_start').length, 0);
+});
+
+test('SocketGateway.handleStartGame exige dos jugadores', () => {
+  const { io } = makeGateway();
+  const host = makeFakeSocket('host');
+  io.connect(host);
+  host._handlers.create_room(() => {});
+
+  let response = null;
+  host._handlers.start_game({}, (r) => { response = r; });
+
+  assert.equal(response.success, false);
+  assert.match(response.message, /dos jugadores/);
+  assert.equal(io.emitted.filter((e) => e.event === 'game_start').length, 0);
 });
 
 test('SocketGateway.handleGameEvent reenvía eventos válidos en sala completa', () => {
@@ -127,6 +195,21 @@ test('SocketGateway.handleGameEvent reenvía eventos válidos en sala completa',
 
   const relayed = host._emitted.filter((e) => e.event === 'game_event');
   assert.equal(relayed.length, 1);
+});
+
+test('SocketGateway.handleGameEvent reenvía game_over válido', () => {
+  const { io } = makeGateway();
+  const { host } = connectPair(io);
+
+  host._handlers.game_event({
+    type: 'game_over',
+    winner: 'player',
+    reason: 'opponentInactive',
+  });
+
+  const relayed = host._emitted.filter((e) => e.event === 'game_event');
+  assert.equal(relayed.length, 1);
+  assert.equal(relayed[0].payload.type, 'game_over');
 });
 
 test('SocketGateway.handleGameEvent ignora payloads inválidos', () => {

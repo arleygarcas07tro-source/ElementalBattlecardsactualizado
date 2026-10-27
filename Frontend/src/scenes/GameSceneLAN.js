@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { io } from 'socket.io-client';
+import { resolveBaseUrl } from '../helpers/networkConfig.js';
 
 export default class GameSceneLAN extends Phaser.Scene {
   constructor() {
@@ -14,65 +16,34 @@ export default class GameSceneLAN extends Phaser.Scene {
     this.socket = data.socket || null;
     this.playerRole = data.playerRole || null; // 'host' o 'guest'
     this.gameStartData = data.gameStartData || null;
-    // Modo de juego: viene del evento game_start (o directo desde el host).
+    // Modo de juego: viene del evento player_joined (o directo desde el host).
     this.gameMode = (data.gameMode) || (this.gameStartData && this.gameStartData.gameMode) || 'clasico';
   }
 
   create() {
-    // Determinar backend URL por si el socket no fue pasado
-    const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
-    let SERVER_URL = null;
-    if (params.has('backend')) {
-      SERVER_URL = params.get('backend');
-    } else if (typeof window !== 'undefined' && window.BACKEND_URL) {
-      SERVER_URL = window.BACKEND_URL;
-    } else if (typeof window !== 'undefined') {
-      SERVER_URL = `http://${location.hostname}:3001`;
-    } else {
-      SERVER_URL = 'http://localhost:3001';
-    }
-
     if (!this.socket) {
-      // crear socket si no se pasó desde la escena anterior
-      // cargamos dinámicamente para evitar cargarlo si no es necesario
-      try {
-        const { io } = require('socket.io-client');
-        this.socket = io(SERVER_URL);
-      } catch (e) {
-        console.error('No se pudo inicializar socket.io-client en GameSceneLAN', e);
-        this.scene.start('GameScene', { playerData: this.playerData });
-        return;
-      }
+      this.socket = io(resolveBaseUrl());
     }
 
-    // Asegurar que estamos en la sala
-    if (this.roomCode) {
-      // intentar unirse si no estamos en la sala ya
-      this.socket.emit('join_room', { code: this.roomCode }, (res) => {
-        if (!res || !res.success) {
-          console.warn('No se pudo unir a la sala desde GameSceneLAN:', res && res.message);
-        }
-        // lanzamos la escena de juego principal y le pasamos el socket, roomCode y rol
-        this.scene.start('GameScene', { 
-          playerData: this.playerData, 
-          roomCode: this.roomCode, 
-          socket: this.socket, 
-          isLAN: true,
-          playerRole: this.playerRole,
-          gameMode: this.gameMode,
-          gameStartData: this.gameStartData
-        });
-      });
-    } else {
-      // Si no hay código, simplemente arrancar GameScene en modo LAN (sin room)
-      this.scene.start('GameScene', { 
-        playerData: this.playerData, 
-        roomCode: null, 
-        socket: this.socket, 
-        isLAN: true,
-        playerRole: this.playerRole,
-        gameMode: this.gameMode
-      });
+    // Si el host inicia mientras el guest aún carga GameScene, guardamos el
+    // game_start para que no se pierda antes de que exista su listener.
+    const earlyGameStart = { data: this.gameStartData || null, handler: null };
+    if (this.socket) {
+      earlyGameStart.handler = (payload) => {
+        earlyGameStart.data = payload;
+      };
+      this.socket.on('game_start', earlyGameStart.handler);
     }
+
+    this.scene.start('GameScene', {
+      playerData: this.playerData,
+      roomCode: this.roomCode,
+      socket: this.socket,
+      isLAN: true,
+      playerRole: this.playerRole,
+      gameMode: this.gameMode,
+      gameStartData: this.gameStartData,
+      earlyGameStart
+    });
   }
 }

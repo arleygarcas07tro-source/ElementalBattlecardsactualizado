@@ -30,6 +30,6 @@ export const GAME_CONFIG = {
     ESSENCES_TO_WIN: 6,
     // La victoria por 6 tipos exige conservarlos durante un turno rival completo.
     CONVERGENCE_TURNS_TO_WIN: 1,
-    // Pausa del bot entre una acción y la siguiente dentro del mismo turno.
-    BOT_NEXT_ACTION_DELAY_MS: 700,
+    // Pausa breve para leer la acción del bot sin frenar el ritmo de la partida.
+    BOT_NEXT_ACTION_DELAY_MS: 250,
 };

@@ -10,7 +10,12 @@ function makeSocket() {
         handlers,
         emitted,
         on(event, handler) { handlers[event] = handler; },
-        emit(event, payload) { emitted.push([event, payload]); }
+        off(event, handler) {
+            if (handlers[event] === handler) delete handlers[event];
+        },
+        emit(event, payload, callback) {
+            emitted.push(callback ? [event, payload, callback] : [event, payload]);
+        }
     };
 }
 
@@ -25,6 +30,41 @@ test('LANClient: registra handlers de game_event y turn_changed', () => {
 
     assert.equal(socket.handlers.game_event, onGame);
     assert.equal(socket.handlers.turn_changed, onTurn);
+});
+
+test('LANClient: registra y elimina el handler de game_start', () => {
+    const socket = makeSocket();
+    const client = new LANClient(socket, 'host');
+
+    const onStart = () => {};
+    client.onGameStart(onStart);
+
+    assert.equal(socket.handlers.game_start, onStart);
+
+    client.offGameStart(onStart);
+    assert.equal(socket.handlers.game_start, undefined);
+});
+
+test('LANClient: startGame solo lo solicita el host', () => {
+    const socket = makeSocket();
+    const client = new LANClient(socket, 'host');
+    let response = null;
+
+    assert.equal(client.startGame((r) => { response = r; }), true);
+    assert.equal(socket.emitted[0][0], 'start_game');
+    assert.deepEqual(socket.emitted[0][1], {});
+    assert.equal(response, null);
+});
+
+test('LANClient: startGame rechaza al guest sin emitir', () => {
+    const socket = makeSocket();
+    const client = new LANClient(socket, 'guest');
+    let response = null;
+
+    assert.equal(client.startGame((r) => { response = r; }), false);
+    assert.equal(socket.emitted.length, 0);
+    assert.equal(response.success, false);
+    assert.match(response.message, /anfitrión/);
 });
 
 test('LANClient: emitGameEvent adjunta actor y playerRole', () => {
@@ -47,9 +87,12 @@ test('LANClient: emitEndTurn notifica al servidor con el rol', () => {
 
 test('LANClient: sin socket no emite eventos', () => {
     const client = new LANClient(null, 'host');
+    let response = null;
 
     assert.equal(client.emitGameEvent({ type: 'attack' }), false);
     assert.equal(client.emitEndTurn(), false);
+    assert.equal(client.startGame((r) => { response = r; }), false);
+    assert.equal(response.success, false);
 });
 
 test('LANClient: sin rol explícito playerRole queda null', () => {
@@ -70,4 +113,5 @@ test('LANClient: si el socket lanza al emitir, devuelve false sin propagar', () 
 
     assert.equal(client.emitGameEvent({ type: 'attack' }), false);
     assert.equal(client.emitEndTurn(), false);
+    assert.equal(client.startGame(() => {}), false);
 });

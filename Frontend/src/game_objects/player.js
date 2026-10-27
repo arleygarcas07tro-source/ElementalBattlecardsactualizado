@@ -132,6 +132,10 @@ export default class Player {
             console.warn('[Player.fuseCards] Índices fuera de rango:', draggedIndex, targetIndex);
             return null;
         }
+        if (draggedIndex === targetIndex) {
+            console.warn('[Player.fuseCards] No se puede fusionar una carta consigo misma:', draggedIndex);
+            return null;
+        }
 
         const card1 = this.field.get(draggedIndex);
         const card2 = this.field.get(targetIndex);
@@ -159,6 +163,7 @@ export default class Player {
 
         // Actualizamos el campo: la nueva carta ocupa el lugar de la carta objetivo.
         // El slot de la carta arrastrada se vacía.
+        this.field.clearAt(draggedIndex);
         this.field.set(targetIndex, newCardInstance);
         // Regla de gemas: la carta fusionada aporta una gema de su elemento.
         this.registerGem(newCardInstance);

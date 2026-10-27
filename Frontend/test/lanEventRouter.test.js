@@ -104,6 +104,35 @@ test('LANEventRouter: direct_attack remoto devuelve el efecto sin mutar el turno
     assert.equal(result.effects[0].attackerIndex, 3);
 });
 
+test('LANEventRouter: traduce game_over al punto de vista local', () => {
+    const { router } = makeRouter('host');
+
+    const result = router.route({
+        type: 'game_over',
+        playerRole: 'guest',
+        winner: 'player',
+        reason: 'opponentInactive'
+    });
+
+    assert.equal(result.effects[0].kind, 'game-over');
+    assert.equal(result.effects[0].winner, 'opponent');
+    assert.equal(result.effects[0].reason, 'playerInactive');
+});
+
+test('LANEventRouter: conserva el empate en game_over', () => {
+    const { router } = makeRouter('host');
+
+    const result = router.route({
+        type: 'game_over',
+        playerRole: 'guest',
+        winner: null,
+        reason: 'timeExpired'
+    });
+
+    assert.equal(result.effects[0].winner, null);
+    assert.equal(result.effects[0].reason, 'timeExpired');
+});
+
 test('LANEventRouter: ignora tipos de evento no manejados', () => {
     const { router } = makeRouter('host');
 

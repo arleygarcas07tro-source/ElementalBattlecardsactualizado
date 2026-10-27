@@ -38,10 +38,12 @@ export const GAME_RULES_HTML = `
             </ul>
             <p><strong>Efecto del nivel en combate:</strong></p>
             <ul>
-                <li>El daño base de un ataque neutral es del 25%.</li>
-                <li>Cada nivel del atacante añade 5%: nivel 1 causa 25%, nivel 2 causa 30% y nivel 3 causa 35% de daño neutral.</li>
+                <li>El daño base depende del nivel del atacante y del defensor:</li>
+                <li>Nivel 1 causa 5% a nivel 1, 5% a nivel 2 y 2% a nivel 3.</li>
+                <li>Nivel 2 causa 35% a nivel 1, 10% a nivel 2 y 25% a nivel 3.</li>
+                <li>Nivel 3 causa 50% a nivel 1, 45% a nivel 2 y 10% a nivel 3.</li>
                 <li>La ventaja elemental suma 15% de daño; la desventaja resta 15%.</li>
-                <li>El nivel del defensor no modifica este bono. El daño mínimo es 5% y el máximo, 100%.</li>
+                <li>Los bonus de esencias se suman al daño. El daño final va de 0% a 100%.</li>
                 <li>La carta defensora pierde vida con cada ataque y se destruye al llegar a 0%.</li>
             </ul>
         </li>

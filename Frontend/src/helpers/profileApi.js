@@ -2,21 +2,7 @@
 // Responsabilidad: hablar con /api/profile adjuntando el JWT; no conoce Phaser.
 // Si no hay sesión (sin token), todas las operaciones son no-op (modo offline).
 
-const DEFAULT_PORT = 3001;
-
-function resolveBaseUrl() {
-    if (typeof window !== 'undefined') {
-        const params = new URLSearchParams(window.location.search);
-        const fromQuery = params.get('backend');
-        if (fromQuery) return fromQuery.replace(/\/$/, '');
-        if (window.BACKEND_URL) return String(window.BACKEND_URL).replace(/\/$/, '');
-        const host = window.location.hostname || 'localhost';
-        return `http://${host}:${DEFAULT_PORT}`;
-    }
-    return `http://localhost:${DEFAULT_PORT}`;
-}
-
-const BASE_URL = resolveBaseUrl();
+import { buildApiUrl } from './networkConfig.js';
 
 function getToken() {
     try {
@@ -34,7 +20,7 @@ async function request(path, options = {}) {
     const token = getToken();
     if (!token) return null;
 
-    const response = await fetch(`${BASE_URL}/api/profile${path}`, {
+    const response = await fetch(buildApiUrl(`profile${path}`), {
         ...options,
         headers: {
             'Content-Type': 'application/json',

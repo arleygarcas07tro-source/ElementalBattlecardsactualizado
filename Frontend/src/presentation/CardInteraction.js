@@ -127,7 +127,7 @@ export default class CardInteraction {
         this.scene.tweens.add({
             targets: cardObject,
             y: cardObject.getData('startPosition').y + yShift,
-            duration: 150,
+            duration: 90,
             ease: 'Power1'
         });
     }
@@ -152,7 +152,7 @@ export default class CardInteraction {
                 targets: cardToDeselect,
                 x: startPosition.x,
                 y: startPosition.y,
-                duration: 200,
+                duration: 100,
                 ease: 'Power1'
             });
         } else {
@@ -167,20 +167,27 @@ export default class CardInteraction {
      */
     handlePlayCard(cardObject, dropZone) {
         const { turn, player, renderer, playerData, debugSync } = this.ctx;
+        if (!cardObject || !dropZone || cardObject.getData('isCardOnField')) return;
         // Bloquear jugadas si no es el turno del jugador, ya gastó su cupo de
         // acciones o hay una animación bloqueante en curso.
         if (!this.ctx.turnController.canPlayerActNow()) {
+            const message = turn.state !== 'player-turn'
+                ? 'Espera tu turno para colocar una carta.'
+                : 'No tienes acciones disponibles ahora. Espera a que termine la acción actual.';
+            this.scene.events.emit('gameplay-message', message);
             console.log('[GameScene] No puedes gastar una acción ahora mismo.');
             return;
         }
         if (turn.playerMustAttackThisTurn) {
+            this.scene.events.emit('gameplay-message', 'Estás obligado a atacar antes de colocar o fusionar cartas.');
             console.log('[GameScene] Estás obligado a atacar este turno. No puedes colocar cartas.');
             return;
         }
 
         // Obtenemos los datos de la carta seleccionada y el índice del slot.
-        const cardDataFromHand = this.selectedCard.cardData;
-        const fieldIndex = parseInt(dropZone.name.split('-')[1]);
+        const cardDataFromHand = cardObject.getData('cardData') || cardObject.cardData;
+        const fieldIndex = dropZone.getData('fieldIndex');
+        if (!cardDataFromHand || !Number.isInteger(fieldIndex)) return;
         const targetCardData = player.field.get(fieldIndex);
 
         console.log('[GameScene] Intento de jugar carta en slot', { slotIndex: fieldIndex, cardFromHand: cardDataFromHand && { id: cardDataFromHand.id, instanceId: cardDataFromHand.instanceId, type: cardDataFromHand.type, level: cardDataFromHand.level } });
@@ -202,74 +209,62 @@ export default class CardInteraction {
                 return; // No hacemos nada más, dragend la devolverá.
             }
 
-            // Actualizamos el cardData del objeto visual con los datos del modelo (incluye instanceId)
-            this.selectedCard.cardData = cardPlayed;
-            // Asegurar que el sprite y su metadata usan el instanceId definitivo
-            if (cardPlayed && cardPlayed.instanceId) {
-                try { this.selectedCard.setName(cardPlayed.instanceId); } catch {}
-                try { this.selectedCard.setData('instanceId', cardPlayed.instanceId); } catch {}
-            }
+            const playedCardObject = cardObject;
+            playedCardObject.cardData = cardPlayed;
+            playedCardObject.setData('cardData', cardPlayed);
+            playedCardObject.setData('instanceId', cardPlayed.instanceId);
+            playedCardObject.setName(cardPlayed.instanceId);
+            playedCardObject.setData('isCardOnField', true);
+            playedCardObject.setData('fieldIndex', fieldIndex);
+            playedCardObject.setData('isRevealed', false);
+            playedCardObject.setData('startPosition', { x: dropZone.x, y: dropZone.y });
+            playedCardObject.setSelectedVisual?.(false, false);
+            if (playedCardObject.input) playedCardObject.input.enabled = false;
+            this.scene.tweens.killTweensOf(playedCardObject);
+            this.selectedCard = null;
+            this.scene['player-cards'] = this.scene['player-cards'].filter(card => card !== playedCardObject);
+            playedCardObject.setDisplaySize(renderer.cardFieldSize.width, renderer.cardFieldSize.height);
 
-            // Detenemos cualquier animación activa en la carta seleccionada
-            if (this.selectedCard.activeTween) {
-                this.selectedCard.activeTween.stop();
-            }
+            this.ctx.match.consumePlayerAction();
+            turn.onBlockingAnimationStarted();
+            let playFinished = false;
+            const finishPlay = () => {
+                if (playFinished) return;
+                playFinished = true;
+                if (playedCardObject.active && playedCardObject.input) {
+                    playedCardObject.input.enabled = true;
+                    playedCardObject.input.cursor = 'pointer';
+                }
 
-            // Animamos la carta para que se mueva al slot
+                player.drawCard();
+                playSfx('card', this.scene);
+                playSfx('draw', this.scene);
+                renderer.refreshPlayerHand(player.hand);
+                renderer.updateDeckCounts(player.deck.getCardsCount(), this.ctx.opponent.deck.getCardsCount());
+
+                console.log('[GameScene] Jugador colocó carta en el campo', { cardId: cardPlayed.id, instanceId: cardPlayed.instanceId, type: cardPlayed.type, level: cardPlayed.level, fieldIndex });
+                recordCollectedCard((playerData && playerData.username) || 'Jugador', cardPlayed.type, cardPlayed.level);
+                if (this.ctx.isLAN && this.ctx.socket) {
+                    if (debugSync) console.log('[GameScene][debug] emitiendo play_card payload', { payload: { type: 'play_card', card: cardPlayed, fieldIndex }, timestamp: Date.now() });
+                    this.ctx.lan.emitGameEvent({ type: 'play_card', card: cardPlayed, fieldIndex });
+                }
+
+                this.ctx.turnController.afterPlayerAction();
+                this.ctx.turnController.animationComplete();
+            };
+
             this.scene.tweens.add({
-                targets: this.selectedCard,
+                targets: playedCardObject,
                 x: dropZone.x,
                 y: dropZone.y,
-                duration: 150,
+                duration: 100,
                 ease: 'Power1',
-                onComplete: () => {
-                    // Toda la lógica que ocurre después de jugar la carta se mueve aquí,
-                    // dentro del 'onComplete' de la animación.
-
-                    // 1. Actualizamos las propiedades de la carta para reflejar que está en el campo.
-                    // Ahora es seguro llamar a setInteractive porque la carta no ha sido destruida.
-                    if (!this.selectedCard.input) {
-                        this.selectedCard.setInteractive();
-                    }
-                    this.selectedCard.input.cursor = 'pointer';
-                    this.selectedCard.setData('isCardOnField', true);
-                    this.selectedCard.setData('cardData', cardPlayed);
-                    if (cardPlayed && cardPlayed.instanceId) {
-                        try { this.selectedCard.setName(cardPlayed.instanceId); } catch {}
-                        try { this.selectedCard.setData('instanceId', cardPlayed.instanceId); } catch {}
-                    }
-                    this.selectedCard.setData('fieldIndex', fieldIndex);
-                    this.selectedCard.setData('isRevealed', false);
-                    this.selectedCard.setData('startPosition', { x: dropZone.x, y: dropZone.y });
-
-                    // 2. La carta jugada ya no es parte de la mano visual.
-                    this.scene['player-cards'] = this.scene['player-cards'].filter(card => card !== this.selectedCard);
-                    this.deselectCard(false); // Deseleccionamos sin animar.
-
-                    // 3. Robamos, refrescamos la mano y actualizamos contadores.
-                    player.drawCard();
-                    playSfx('card', this.scene);
-                    playSfx('draw', this.scene);
-                    renderer.refreshPlayerHand(player.hand);
-                    renderer.updateDeckCounts(player.deck.getCardsCount(), this.ctx.opponent.deck.getCardsCount());
-
-                    // 4. Marcamos la acción y cerramos el turno si el cupo se agotó.
-                    this.ctx.match.consumePlayerAction();
-                    console.log('[GameScene] Jugador colocó carta en el campo', { cardId: cardPlayed.id, instanceId: cardPlayed.instanceId, type: cardPlayed.type, level: cardPlayed.level, fieldIndex });
-                    // Registrar la carta como coleccionada.
-                    recordCollectedCard((playerData && playerData.username) || 'Jugador', cardPlayed.type, cardPlayed.level);
-                    // Emitir evento de juego a oponente si estamos en LAN
-                    if (this.ctx.isLAN && this.ctx.socket) {
-                        if (debugSync) console.log('[GameScene][debug] emitiendo play_card payload', { payload: { type: 'play_card', card: cardPlayed, fieldIndex }, timestamp: Date.now() });
-                        this.ctx.lan.emitGameEvent({ type: 'play_card', card: cardPlayed, fieldIndex });
-                    }
-
-                    this.ctx.turnController.afterPlayerAction();
-                }
+                onComplete: finishPlay
             });
 
         // Escenario 2: El slot está OCUPADO.
         } else {
+            this.scene.events.emit('gameplay-message', 'Ese espacio del campo ya está ocupado.');
             console.log(`Slot ${fieldIndex} ocupado. No se puede jugar la carta aquí. La carta volverá a la mano.`);
             // No hacemos nada. La bandera 'dropped' sigue en false y el evento 'dragend' la devolverá.
         }
@@ -410,13 +405,13 @@ export default class CardInteraction {
             this.scene.tweens.add({
                 targets: fusedCardObject,
                 alpha: { from: 0, to: 1 },
-                duration: 380,
+                duration: 200,
                 ease: 'Power2',
                 onComplete: finishFusion
             });
 
-            // Red de seguridad: fade-in 380 ms cubierto con margen amplio.
-            this.scene.time.delayedCall(1300, finishFusion);
+            // Margen de seguridad por si el tween no completa.
+            this.scene.time.delayedCall(600, finishFusion);
         });
     }
 
@@ -505,13 +500,13 @@ export default class CardInteraction {
             this.scene.tweens.add({
                 targets: fusedCardObject,
                 alpha: { from: 0, to: 1 },
-                duration: 380,
+                duration: 200,
                 ease: 'Power2',
                 onComplete: finishFusion
             });
 
-            // Red de seguridad: fade-in 380 ms cubierto con margen amplio.
-            this.scene.time.delayedCall(1300, finishFusion);
+            // Margen de seguridad por si el tween no completa.
+            this.scene.time.delayedCall(600, finishFusion);
         });
     }
 

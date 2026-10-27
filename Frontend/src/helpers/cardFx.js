@@ -133,8 +133,8 @@ export function playFusionFx(scene, config, onComplete) {
     // Pulso de absorción en la carta objetivo mientras la fuente converge.
     scene.tweens.add({
         targets: targetCard,
-        scale: targetCard.scale * 1.12,
-        duration: 220,
+        scale: targetCard.scale * 1.1,
+        duration: 170,
         yoyo: true,
         ease: 'Sine.easeInOut'
     });
@@ -145,7 +145,7 @@ export function playFusionFx(scene, config, onComplete) {
         x: targetX,
         y: targetY,
         scale: sourceCard.scale * 1.1,
-        duration: 240,
+        duration: 170,
         ease: 'Sine.easeIn',
         onComplete: () => {
             // Fase 2 — impacto: destello + partículas del tipo.
@@ -156,12 +156,12 @@ export function playFusionFx(scene, config, onComplete) {
             if (targetCard && targetCard.active) targetCard.setVisible(false);
 
             // Fase 3 — limpieza de los objetos originales.
-            scene.time.delayedCall(180, finish);
+            scene.time.delayedCall(90, finish);
         }
     });
 
     // Red de seguridad: garantiza finish() aunque la fuente muera en vuelo.
-    scene.time.delayedCall(750, finish);
+    scene.time.delayedCall(500, finish);
 
     // Efecto de sonido de la fusión.
     playSfx('fusion', scene);
@@ -301,7 +301,7 @@ export function playDeathFx(scene, cardObject, cardData, onComplete) {
         scale: cardObject.scale * 1.15,
         alpha: { from: 1, to: 0 },
         angle: cardObject.angle + 14,
-        duration: 340,
+        duration: 220,
         ease: 'Power2',
         onComplete: () => {
             if (cardObject && cardObject.active && cardObject.destroy) cardObject.destroy();

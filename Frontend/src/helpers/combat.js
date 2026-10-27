@@ -1,22 +1,29 @@
 import { ADVANTAGES } from './constants.js';
 import CardHealthService from '../game/CardHealthService.js';
 
+const LEVEL_DAMAGE = [
+    [5, 5, 2],
+    [35, 10, 25],
+    [50, 45, 10]
+];
+
 /**
- * Calcula daño según el elemento y el nivel de la carta atacante.
- * El daño neutral empieza en 25%; cada nivel del atacante añade 5%.
- * La ventaja elemental añade 15% y la desventaja resta 15%.
+ * Calcula el daño base por nivel de atacante y defensor, más el modificador
+ * elemental y los bonus activos.
  * @param {object} attacker Carta atacante.
  * @param {object} defender Carta defensora; su vida se actualiza.
  * @param {{bonusDamage?: number}} [options]
- * @returns {{winner: string, loser: string, damage: number, defenderHealth: number, destroyed: boolean}}
+ * @returns {number} Daño entero entre 0% y 100%.
  */
 export function calculateAttackDamage(attacker, defender, { bonusDamage = 0 } = {}) {
-    const attackerLevel = Math.max(1, Number(attacker.level) || 1);
+    const attackerLevel = Math.max(1, Math.min(3, Math.floor(Number(attacker.level) || 1)));
+    const defenderLevel = Math.max(1, Math.min(3, Math.floor(Number(defender.level) || 1)));
     const attackerAdvantage = ADVANTAGES[attacker.type] === defender.type;
     const defenderAdvantage = ADVANTAGES[defender.type] === attacker.type;
     const elementModifier = attackerAdvantage ? 15 : defenderAdvantage ? -15 : 0;
-    const rawDamage = 25 + (attackerLevel - 1) * 5 + elementModifier + bonusDamage;
-    return Math.max(5, Math.min(100, Math.round(rawDamage)));
+    const baseDamage = LEVEL_DAMAGE[attackerLevel - 1][defenderLevel - 1];
+    const rawDamage = baseDamage + elementModifier + bonusDamage;
+    return Math.max(0, Math.min(100, Math.round(rawDamage)));
 }
 
 export function resolveCombat(attacker, defender, options = {}) {

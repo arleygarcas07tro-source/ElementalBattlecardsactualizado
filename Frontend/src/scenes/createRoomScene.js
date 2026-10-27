@@ -3,16 +3,19 @@ import { io } from 'socket.io-client';
 import DomSceneBase from './ui/DomSceneBase.js';
 import { loadVideoIfNeeded, createVideoBackground } from './ui/videoBackground.js';
 import { listGameModes } from '../game/gameModes.js';
+import { resolveBaseUrl } from '../helpers/networkConfig.js';
 
 export default class CreateRoomScene extends DomSceneBase {
     constructor() {
         super("CreateRoomScene");
         this.playerData = null;
         this.selectedMode = 'clasico';
+        this.transitioningToBattlefield = false;
     }
 
     init(data) {
-        this.playerData = data;
+        const payload = data || {};
+        this.playerData = payload.playerData || payload;
     }
 
     preload() {
@@ -529,7 +532,7 @@ export default class CreateRoomScene extends DomSceneBase {
                         </div>
                     </div>
 
-                    <button class="btn-primary solid" id="btn-start">Iniciar partida</button>
+                    <button class="btn-primary solid" id="btn-start">Crear sala</button>
                 </section>
 
                 <!-- RIGHT: JOIN ROOM PANEL -->
@@ -589,32 +592,32 @@ export default class CreateRoomScene extends DomSceneBase {
         // BUTTONS
         const exitBtn = node.querySelector(".btn-exit");
         const startBtn = node.querySelector("#btn-start");
+        const setStartButton = (enabled, label) => {
+            if (!startBtn) return;
+            startBtn.disabled = !enabled;
+            startBtn.textContent = label;
+        };
+        const hideStartButton = () => {
+            if (!startBtn) return;
+            startBtn.style.display = 'none';
+        };
+        const showHostStartButton = () => {
+            if (!startBtn) return;
+            startBtn.style.display = '';
+        };
         if (exitBtn) this.track(exitBtn, () => {
-            // Use start to ensure the scene is launched/returned to reliably
-            this.scene.start("HomeScenes");
+            this.scene.start("HomeScenes", { playerData: this.playerData });
         }, 'click');
 
         // Inicializar socket después de que el DOM exista
-        // Determinar URL del backend (prioridad):
-        // 1) Parametro de query ?backend=http://IP:PORT
-        // 2) Variable global `window.BACKEND_URL` (útil para VS Code previews)
-        // 3) Por defecto usar location.hostname con puerto 3001
-        const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
-        let SERVER_URL = null;
-        if (params.has('backend')) {
-            SERVER_URL = params.get('backend');
-        } else if (typeof window !== 'undefined' && window.BACKEND_URL) {
-            SERVER_URL = window.BACKEND_URL;
-        } else if (typeof window !== 'undefined') {
-            SERVER_URL = `http://${location.hostname}:3001`;
-        } else {
-            SERVER_URL = 'http://localhost:3001';
-        }
+        const SERVER_URL = resolveBaseUrl();
         console.log('Usando BACKEND_URL =', SERVER_URL);
         this.socket = io(SERVER_URL);
         this.currentRoom = null;
         this.playersInRoom = 0;
         this.playerRole = null; // 'host' o 'guest'
+        this.transitioningToBattlefield = false;
+        this.keepSocket = false;
 
         this.socket.on('connect', () => {
             console.log('Socket conectado (cliente):', this.socket.id);
@@ -643,32 +646,28 @@ export default class CreateRoomScene extends DomSceneBase {
             updateCodeUI(code);
         });
 
-        this.socket.on('player_joined', ({ players, canStart }) => {
+        this.socket.on('player_joined', ({ code, players, canStart, gameMode, hostId }) => {
             this.playersInRoom = players || (this.playersInRoom + 1);
             const playersEl = this.domUI.node.querySelector('#players-count');
             if (playersEl) playersEl.textContent = `${this.playersInRoom}/2`;
             const statusEl = this.domUI.node.querySelector('#room-status');
-            if (statusEl) statusEl.textContent = 'Jugador conectado';
-            
-            // Si la sala está completa y podemos iniciar, el botón cambia de texto
-            if (canStart) {
-                const startBtn = this.domUI.node.querySelector('#btn-start');
-                if (startBtn) startBtn.textContent = 'Iniciar Partida';
+            if (statusEl) statusEl.textContent = canStart ? 'Sala lista' : 'Jugador conectado';
+            this.currentRoom = code || this.currentRoom;
+
+            if (!this.playerRole && hostId) {
+                this.playerRole = this.socket.id === hostId ? 'host' : 'guest';
             }
-        });
-        
-        // Listener para cuando el juego puede comenzar automáticamente
-        this.socket.on('game_start', (data) => {
-            console.log('Juego iniciando...', data);
-            this.keepSocket = true;
-            this.scene.start('GameSceneLAN', { 
-                roomCode: this.currentRoom, 
-                socket: this.socket, 
-                playerData: this.playerData,
-                playerRole: this.playerRole,
-                gameMode: (data && data.gameMode) || this.selectedMode,
-                gameStartData: data
-            });
+
+            if (this.playerRole === 'guest') {
+                hideStartButton();
+            } else {
+                showHostStartButton();
+                setStartButton(false, canStart ? 'Sala lista' : 'Esperando jugador...');
+            }
+
+            if (canStart) {
+                this.enterBattlefield({ code, gameMode, hostId });
+            }
         });
 
         this.socket.on('player_left', () => {
@@ -677,46 +676,29 @@ export default class CreateRoomScene extends DomSceneBase {
             if (playersEl) playersEl.textContent = `${this.playersInRoom}/2`;
             const statusEl = this.domUI.node.querySelector('#room-status');
             if (statusEl) statusEl.textContent = 'Esperando jugador...';
+            if (this.playerRole === 'host') setStartButton(false, 'Esperando jugador...');
         });
 
         this.socket.on('game_event', (payload) => {
             console.log('Evento de juego recibido:', payload);
         });
 
-        // flag para decidir si mantener socket al cambiar de escena
-        this.keepSocket = false;
-
         if (startBtn) this.track(startBtn, () => {
-            // Si no hay sala, crearla; si ya existe y hay 2 jugadores, iniciar escena de juego
-            if (!this.currentRoom) {
-                this.socket.emit('create_room', { gameMode: this.selectedMode }, (res) => {
-                    if (res && res.success && res.code) {
-                        console.log('Sala creada con código', res.code, 'rol:', res.role);
-                        this.playerRole = res.role; // Guardar rol (host)
-                        // UI se actualiza por el evento 'room_created'
-                        // también actualizamos inmediatamente por si el evento llega después
-                        updateCodeUI(res.code);
-                        // NO iniciamos escena inmediatamente, esperamos a que se una el segundo jugador
-                        // El evento 'game_start' iniciará la escena automáticamente
-                    } else {
-                        console.error('Error creando sala', res);
-                    }
-                });
-            } else {
-                // Si ya estamos en una sala y hay 2 jugadores, iniciar manualmente
-                if (this.playersInRoom >= 2) {
-                    this.keepSocket = true;
-                    this.scene.start('GameSceneLAN', { 
-                        roomCode: this.currentRoom, 
-                        socket: this.socket, 
-                        playerData: this.playerData,
-                        playerRole: this.playerRole,
-                        gameMode: this.selectedMode
-                    });
-                } else {
-                    console.log('Esperando al segundo jugador antes de iniciar.');
-                }
+            if (this.currentRoom) {
+                console.log('La sala pasará al campo automáticamente cuando esté completa.');
+                return;
             }
+
+            this.socket.emit('create_room', { gameMode: this.selectedMode }, (res) => {
+                if (res && res.success && res.code) {
+                    console.log('Sala creada con código', res.code, 'rol:', res.role);
+                    this.playerRole = res.role;
+                    updateCodeUI(res.code);
+                    setStartButton(false, 'Esperando jugador...');
+                } else {
+                    console.error('Error creando sala', res);
+                }
+            });
         }, 'click');
 
         const joinBtn = node.querySelector('#btn-join');
@@ -747,10 +729,9 @@ export default class CreateRoomScene extends DomSceneBase {
                     if (res && res.success) {
                         console.log('Entré a la sala', res.code, 'rol:', res.role);
                         this.currentRoom = res.code;
-                        this.playerRole = res.role; // Guardar rol (guest)
+                        this.playerRole = res.role;
                         this.playersInRoom = 2;
-                        // NO iniciamos escena inmediatamente
-                        // El evento 'game_start' del servidor iniciará la escena para ambos jugadores
+                        hideStartButton();
                     } else {
                         console.error('No se pudo unir a la sala:', res && res.message);
                         alert(res && res.message ? res.message : 'No se pudo unir a la sala');
@@ -785,9 +766,48 @@ export default class CreateRoomScene extends DomSceneBase {
         }
     }
 
+    /**
+     * Pasa al campo en PREPARADO cuando la sala está completa. El combate no
+     * comienza aquí: eso ocurre después con el game_start del servidor.
+     * @param {{code?: string, gameMode?: string, hostId?: string}} [data]
+     */
+    enterBattlefield({ code, gameMode, hostId } = {}) {
+        if (this.transitioningToBattlefield) return;
+
+        const roomCode = code || this.currentRoom;
+        const role = this.playerRole
+            || (hostId && this.socket && this.socket.id === hostId ? 'host' : null);
+        if (!roomCode || !role) return;
+
+        this.transitioningToBattlefield = true;
+        this.keepSocket = true;
+        this.playerRole = role;
+        this.detachRoomSocketListeners();
+
+        this.scene.start('GameSceneLAN', {
+            roomCode,
+            socket: this.socket,
+            playerData: this.playerData,
+            playerRole: role,
+            gameMode: gameMode || this.selectedMode,
+            gameStartData: null
+        });
+    }
+
+    /**
+     * Elimina los listeners del lobby antes de compartir el socket con el campo.
+     */
+    detachRoomSocketListeners() {
+        if (!this.socket) return;
+        ['room_created', 'player_joined', 'player_left', 'game_event'].forEach((event) => {
+            this.socket.off(event);
+        });
+    }
+
     onShutdown() {
         // Desconectar socket si existe y no queremos mantenerlo (por ejemplo al cerrar la UI).
         if (this.socket && !this.keepSocket) {
+            this.detachRoomSocketListeners();
             try {
                 this.socket.disconnect();
             } catch {

@@ -28,6 +28,8 @@
             align-items: center;
             min-height: 100vh;
             height: 100vh;
+            height: 100svh;
+            height: 100dvh;
             overflow: hidden;
             overscroll-behavior: none;
             -webkit-tap-highlight-color: transparent;
@@ -40,6 +42,7 @@
             width: 100vw;
             height: 100vh;
             height: 100svh;
+            height: 100dvh;
             position: absolute;
             top: 0;
             left: 0;
@@ -53,6 +56,57 @@
         #game-container canvas {
             display: block;
             touch-action: manipulation;
+        }
+        #orientation-screen {
+            position: fixed;
+            inset: 0;
+            z-index: 2000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right))
+                max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+            box-sizing: border-box;
+            background:
+                radial-gradient(ellipse at 50% 35%, rgba(47, 69, 94, 0.62), transparent 58%),
+                rgba(6, 9, 17, 0.97);
+            color: #f2e9d3;
+            text-align: center;
+        }
+        #orientation-screen .orientation-card {
+            width: min(100%, 360px);
+            padding: 28px 24px;
+            border: 1px solid rgba(214, 180, 110, 0.5);
+            border-radius: 18px;
+            background: linear-gradient(145deg, rgba(20, 28, 42, 0.96), rgba(11, 15, 25, 0.98));
+            box-shadow: 0 20px 70px rgba(0, 0, 0, 0.55), inset 0 1px rgba(255, 255, 255, 0.06);
+        }
+        #orientation-screen .orientation-icon {
+            width: 58px;
+            height: 72px;
+            margin: 0 auto 18px;
+            color: #e8cf8f;
+            animation: rotate-device 2.4s ease-in-out infinite;
+        }
+        #orientation-screen h1 {
+            margin: 0 0 10px;
+            font: 700 clamp(20px, 5vw, 26px)/1.2 Georgia, serif;
+            letter-spacing: 0.03em;
+        }
+        #orientation-screen p {
+            margin: 0;
+            color: #bcc7d7;
+            font: 15px/1.55 Georgia, serif;
+        }
+        @keyframes rotate-device {
+            0%, 15% { transform: rotate(0deg); }
+            55%, 85% { transform: rotate(90deg); }
+            100% { transform: rotate(90deg); }
+        }
+        @media (orientation: portrait) and (max-width: 900px) {
+            body.game-active #orientation-screen {
+                display: flex;
+            }
         }
         /* Pantalla de carga visible de inmediato mientras el bundle JS se descarga.
            #game-container la muestra y main.js la elimina cuando Phaser está listo. */
@@ -110,6 +164,18 @@
         <div id="splash-screen" aria-hidden="true">
             <p class="splash-title">Elemental Battlecards</p>
             <div class="splash-spinner"></div>
+        </div>
+    </div>
+    <div id="orientation-screen" role="status" aria-live="polite">
+        <div class="orientation-card">
+            <svg class="orientation-icon" viewBox="0 0 58 72" fill="none" aria-hidden="true">
+                <rect x="12" y="4" width="34" height="64" rx="7" stroke="currentColor" stroke-width="3" />
+                <path d="M23 12h12M26 59h6" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+                <path d="M4 23a27 27 0 0 1 43-11M54 49A27 27 0 0 1 11 60" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
+                <path d="m43 7 5 5-7 2M15 66l-5-5 7-2" fill="currentColor" />
+            </svg>
+            <h1>Gira tu dispositivo</h1>
+            <p>La arena se disfruta mejor en horizontal. Gira la pantalla para continuar la partida.</p>
         </div>
     </div>
     <script type="module" src="/src/main.js"></script>

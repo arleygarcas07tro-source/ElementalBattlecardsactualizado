@@ -23,11 +23,13 @@ const config = {
     type: Phaser.AUTO,
     backgroundColor: '#1a1a1a',
     dom: { createContainer: true },
-    width: 1600,
-    height: 900,
+    width: document.getElementById('game-container').clientWidth || window.innerWidth,
+    height: document.getElementById('game-container').clientHeight || window.innerHeight,
     scale: {
-        mode: Phaser.Scale.FIT,
-        autoCenter: Phaser.Scale.CENTER_BOTH
+        mode: Phaser.Scale.RESIZE,
+        autoCenter: Phaser.Scale.CENTER_BOTH,
+        width: document.getElementById('game-container').clientWidth || window.innerWidth,
+        height: document.getElementById('game-container').clientHeight || window.innerHeight
     },
     parent: 'game-container',
     // Ajustes de renderizado para buen rendimiento en cualquier dispositivo

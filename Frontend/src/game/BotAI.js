@@ -92,17 +92,17 @@ export default class BotAI {
      */
     computeActionDelay() {
         switch (this.difficulty) {
-            case 6: return between(200, 400);
-            case 7: return between(150, 300);
-            case 8: return between(100, 200);
-            case 9: return 50;
+            case 6: return between(150, 250);
+            case 7: return between(120, 200);
+            case 8: return between(80, 140);
+            case 9: return 40;
             case 10: return 0;
-            case 1: return between(1500, 2500);
-            case 2: return between(1000, 1800);
-            case 3: return 800;
-            case 4: return between(400, 700);
-            case 5: return 300;
-            default: return 800;
+            case 1: return between(800, 1400);
+            case 2: return between(500, 900);
+            case 3: return 300;
+            case 4: return between(250, 400);
+            case 5: return 180;
+            default: return 300;
         }
     }
 
@@ -164,7 +164,7 @@ export default class BotAI {
             for (const defender of revealedDefenders) {
                 const damage = calculateAttackDamage(attacker.card, defender.card);
                 let currentScore = damage;
-                if (damage >= CardHealthService.current(defender.card)) {
+                if (damage >= CardHealthService.percent(defender.card)) {
                     currentScore += 20 + defender.card.level * 2;
                 }
                 currentScore += this.scoreModifier;

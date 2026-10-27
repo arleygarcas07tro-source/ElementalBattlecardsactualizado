@@ -357,7 +357,10 @@ export default class HomeScenes extends DomSceneBase {
                 flex-direction: column;
                 gap: 18px;
                 overflow-y: auto;
+                scrollbar-width: none;
+                -ms-overflow-style: none;
             }
+            .main-content::-webkit-scrollbar { display: none; }
             .cards-header { text-align: center; padding-top: 6px; }
             .cards-subtitle {
                 margin: 0;

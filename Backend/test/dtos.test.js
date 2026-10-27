@@ -25,6 +25,13 @@ test('GameEventRequest: acepta tipos permitidos con índices en rango', () => {
   assert.equal(GameEventRequest.fromPayload({ type: 'fuse_from_hand', targetIndex: 2 }).isValid(), true);
   assert.equal(GameEventRequest.fromPayload({ type: 'attack', attackerIndex: 1, defenderIndex: 2 }).isValid(), true);
   assert.equal(GameEventRequest.fromPayload({ type: 'direct_attack', attackerIndex: 3 }).isValid(), true);
+  assert.equal(GameEventRequest.fromPayload({ type: 'game_over', winner: 'player', reason: 'opponentInactive' }).isValid(), true);
+  assert.equal(GameEventRequest.fromPayload({ type: 'game_over', winner: null, reason: 'timeExpired' }).isValid(), true);
+});
+
+test('GameEventRequest: rechaza game_over con ganador inválido', () => {
+  assert.equal(GameEventRequest.fromPayload({ type: 'game_over', winner: 'host', reason: 'opponentInactive' }).isValid(), false);
+  assert.equal(GameEventRequest.fromPayload({ type: 'game_over', reason: 'opponentInactive' }).isValid(), false);
 });
 
 test('GameEventRequest: rechaza payload vacío o tipo desconocido', () => {

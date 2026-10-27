@@ -8,6 +8,7 @@ const ALLOWED_TYPES = [
   'fuse_from_hand',
   'attack',
   'direct_attack',
+  'game_over',
 ];
 
 /**
@@ -55,6 +56,11 @@ class GameEventRequest {
         return validIndex(p.attackerIndex) && validIndex(p.defenderIndex);
       case 'direct_attack':
         return validIndex(p.attackerIndex);
+      case 'game_over': {
+        const validWinner = p.winner === null || p.winner === 'player' || p.winner === 'opponent';
+        const validReason = p.reason === null || p.reason === undefined || typeof p.reason === 'string';
+        return validWinner && validReason;
+      }
       default:
         return false;
     }

@@ -10,6 +10,18 @@ test('BotAI: dificultad por defecto 3 y threshold 5', () => {
 
     assert.equal(bot.difficulty, 3);
     assert.equal(bot.getAttackThreshold(), 5);
+    assert.equal(bot.actionDelay, 300);
+    assert.equal(GAME_CONFIG.BOT_NEXT_ACTION_DELAY_MS, 250);
+});
+
+test('BotAI: mantiene una breve pausa acorde a la dificultad', () => {
+    const easyBot = new BotAI(1);
+    const standardBot = new BotAI(4);
+    const hardBot = new BotAI(8);
+
+    assert.ok(easyBot.actionDelay >= 800 && easyBot.actionDelay <= 1400);
+    assert.ok(standardBot.actionDelay >= 250 && standardBot.actionDelay <= 400);
+    assert.ok(hardBot.actionDelay >= 80 && hardBot.actionDelay <= 140);
 });
 
 test('BotAI: dificultad máxima sin delay y con bonus de puntuación', () => {
@@ -54,7 +66,7 @@ test('BotAI: findBestAttack puede dañar cartas neutrales sin mutar su vida', ()
 
     assert.equal(best.attacker.index, 0);
     assert.equal(best.defender.index, 0);
-    assert.equal(best.score, 25);
+    assert.equal(best.score, 5);
     assert.equal(best.defender.card.health, undefined);
 });
 

@@ -26,6 +26,7 @@ class SocketGateway {
 
       socket.on('create_room', this.guard('create_room', (data, cb) => this.roomLifecycle.createRoom(socket, data, cb)));
       socket.on('join_room', this.guard('join_room', (data, cb) => this.roomLifecycle.joinRoom(socket, data, cb)));
+      socket.on('start_game', this.guard('start_game', (data, cb) => this.roomLifecycle.startGame(socket, data, cb)));
       socket.on('game_event', this.guard('game_event', (payload) => this.gameplay.gameEvent(socket, payload)));
       socket.on('end_turn', this.guard('end_turn', () => this.gameplay.endTurn(socket)));
       socket.on('disconnect', this.guard('disconnect', () => this.roomLifecycle.disconnect(socket)));

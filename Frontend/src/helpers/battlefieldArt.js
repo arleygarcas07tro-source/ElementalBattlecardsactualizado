@@ -1132,7 +1132,13 @@ export function createArena(scene, opts = {}) {
     const fieldWidth = layout?.cardField?.width ?? SLOT_W;
     const fieldHeight = layout?.cardField?.height ?? SLOT_H;
     const fieldGap = layout?.fieldGap ?? SLOT_GAP;
-    const positions = calculateRowPositions({ numItems: 6, itemWidth: fieldWidth, itemSpacing: fieldGap, containerWidth: W });
+    const positions = calculateRowPositions({
+        numItems: 6,
+        itemWidth: fieldWidth,
+        itemSpacing: fieldGap,
+        containerWidth: W,
+        centerX: layout?.fieldCenterX
+    });
     addRowFrame(frames, positions, opponentFieldY, OWNER_THEME.opponent, fieldWidth, fieldHeight);
     addRowFrame(frames, positions, playerFieldY, OWNER_THEME.player, fieldWidth, fieldHeight);
     container.add(frames);

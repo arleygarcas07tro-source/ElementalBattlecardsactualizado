@@ -155,7 +155,7 @@ export default class AttackController {
             y: targetY,
             scaleX: baseScaleX * 1.18,
             scaleY: baseScaleY * 0.9,
-            duration: 180,
+            duration: 120,
             ease: 'Sine.easeIn',
             onComplete: () => {
                 // Fase 2 — impacto: shake de cámara, destello, ondas y retroceso del defensor.
@@ -170,7 +170,7 @@ export default class AttackController {
                     this.scene.tweens.add({
                         targets: defenderCard,
                         y: defenderCard.y + direction * 26,
-                        duration: 130,
+                        duration: 100,
                         yoyo: true,
                         ease: 'Sine.easeOut'
                     });
@@ -225,13 +225,13 @@ export default class AttackController {
                     y: homePosition.y,
                     scaleX: baseScaleX,
                     scaleY: baseScaleY,
-                    duration: 200,
+                    duration: 130,
                     ease: 'Power2',
                     onComplete: finalizeAttack
                 });
 
                 // Red de seguridad por si el atacante muere durante la secuencia.
-                this.scene.time.delayedCall(1000, finalizeAttack);
+                this.scene.time.delayedCall(600, finalizeAttack);
             }
         });
     }

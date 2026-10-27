@@ -30,6 +30,22 @@ export default class LANClient {
     }
 
     /**
+     * Suscribe un manejador al inicio de partida validado por el servidor.
+     * @param {(data: object) => void} handler
+     */
+    onGameStart(handler) {
+        if (this.socket) this.socket.on('game_start', handler);
+    }
+
+    /**
+     * Elimina el manejador de inicio de partida.
+     * @param {(data: object) => void} handler
+     */
+    offGameStart(handler) {
+        if (this.socket) this.socket.off('game_start', handler);
+    }
+
+    /**
      * Emite un evento de juego al oponente remoto.
      * Adjunta automáticamente actor y playerRole al payload.
      * @param {object} payload Datos del evento (incluye `type`).
@@ -67,6 +83,37 @@ export default class LANClient {
             return true;
         } catch (e) {
             console.warn('[LANClient] No se pudo emitir fin de turno:', e);
+            return false;
+        }
+    }
+
+    /**
+     * Solicita al servidor el inicio de partida. Solo el host puede hacerlo.
+     * @param {(response: object) => void} [callback]
+     * @returns {boolean} true si la solicitud se emitió.
+     */
+    startGame(callback) {
+        const respond = (response) => {
+            if (typeof callback === 'function') callback(response);
+        };
+
+        if (this.playerRole !== 'host') {
+            respond({ success: false, message: 'Solo el anfitrión puede iniciar la partida.' });
+            return false;
+        }
+
+        if (!this.socket) {
+            console.warn('[LANClient] Sin socket: no se pudo solicitar start_game');
+            respond({ success: false, message: 'Sin conexión con el servidor.' });
+            return false;
+        }
+
+        try {
+            this.socket.emit('start_game', {}, respond);
+            return true;
+        } catch (e) {
+            console.warn('[LANClient] No se pudo solicitar el inicio de partida:', e);
+            respond({ success: false, message: 'No se pudo iniciar la partida.' });
             return false;
         }
     }

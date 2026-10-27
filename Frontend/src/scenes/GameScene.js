@@ -65,6 +65,7 @@ export default class GameScene extends Phaser.Scene {
         this.roomCode = data.roomCode || null;
         this.playerRole = data.playerRole || null;
         this.gameStartData = data.gameStartData || null;
+        this.earlyGameStart = data.earlyGameStart || null;
         this.vsBot = !!data.vsBot;
         this.bot = GameComposer.createBot({ difficulty: data.botDifficulty || 3 }); // 1-10, default: Normal (3)
         this.gameMode = getGameMode(data.gameMode);
@@ -113,7 +114,12 @@ export default class GameScene extends Phaser.Scene {
     }
 
     create() {
-        // Detener el bombardeo ambiental de una partida anterior.
+        document.body.classList.add('game-active');
+        // Recalcular layout al redimensionar
+        this.scale.off('resize', this._onGameResize, this);
+        this.scale.on('resize', this._onGameResize, this);
+
+        // Detener the bombardeo ambiental de una partida anterior.
         if (this.bombs) {
             this.bombs.stop();
             this.bombs = null;
@@ -258,6 +264,7 @@ export default class GameScene extends Phaser.Scene {
             this.lan.onGameEvent((payload) => {
                 try {
                     this.ctx.remoteApplier.handle(payload);
+                    if (this.ctx.turn.state === 'game-over') return;
                     const winner = this.ctx.turnController.checkVictoryConditions();
                     if (winner) {
                         this.ctx.turnController.endGame(winner, this.match.lastVictoryResult.reason);
@@ -271,6 +278,20 @@ export default class GameScene extends Phaser.Scene {
 
             // Listener para cambios de turno
             this.lan.onTurnChanged((data) => this.ctx.turnController.handleTurnChanged(data));
+
+            // El combate solo comienza con el game_start validado por el servidor.
+            this._onServerGameStart = this._handleServerGameStart.bind(this);
+            this.lan.onGameStart(this._onServerGameStart);
+
+            // Cubre el game_start recibido mientras GameScene todavía cargaba.
+            if (this.earlyGameStart) {
+                if (this.earlyGameStart.handler) {
+                    this.socket.off('game_start', this.earlyGameStart.handler);
+                }
+                const earlyStart = this.earlyGameStart.data;
+                this.earlyGameStart = null;
+                if (earlyStart) this._handleServerGameStart(earlyStart);
+            }
         }
         // Lanza la escena de UI en paralelo para que se muestre por encima.
         // Si ya existe una instancia previa, detenerla primero para evitar duplicados.
@@ -362,7 +383,7 @@ export default class GameScene extends Phaser.Scene {
         // La partida no comienza hasta que la UI nos avise.
         // Evitar duplicar listeners si create() se llama varias veces.
         this.events.off('start-game');
-        this.events.on('start-game', () => this.ctx.turnController.beginMatch());
+        this.events.on('start-game', () => this._requestMatchStart());
 
         // Cleanup al apagar la escena: evitar listeners y escenas hijas corriendo.
         this.events.off('shutdown');
@@ -370,6 +391,11 @@ export default class GameScene extends Phaser.Scene {
             // remover listeners propios
             this.events.off('start-game');
             this.events.off('request-essence-power');
+            this.scale.off('resize', this._onGameResize, this);
+            if (this.lan && this._onServerGameStart) {
+                this.lan.offGameStart(this._onServerGameStart);
+            }
+            document.body.classList.remove('game-active');
             // detener el bombardeo ambiental
             if (this.bombs) {
                 this.bombs.stop();
@@ -386,11 +412,102 @@ export default class GameScene extends Phaser.Scene {
     }
 
     /**
+     * Solicita el inicio del combate. En LAN solo el host envía start_game;
+     * ambos esperan el game_start validado por el servidor.
+     */
+    _requestMatchStart() {
+        if (!this.ctx || this.ctx.turn.state !== 'pre-start') return;
+
+        if (!this.isLAN) {
+            this.ctx.turnController.beginMatch();
+            return;
+        }
+
+        if (this.playerRole !== 'host') {
+            this.events.emit('start-game-failed', 'Solo el anfitrión puede iniciar la partida.');
+            return;
+        }
+
+        if (!this.lan) {
+            this.events.emit('start-game-failed', 'Sin conexión con el servidor.');
+            return;
+        }
+
+        if (this._startRequestPending) return;
+        this._startRequestPending = true;
+        this.events.emit('start-game-requested');
+
+        this.lan.startGame((response) => {
+            this._startRequestPending = false;
+            if (!response || !response.success) {
+                this.events.emit(
+                    'start-game-failed',
+                    (response && response.message) || 'No se pudo iniciar la partida.'
+                );
+            }
+        });
+    }
+
+    /**
+     * Aplica el game_start del servidor. Los eventos repetidos se ignoran
+     * porque el estado de turno ya no está en pre-start.
+     * @param {object|null} data Payload validado por el servidor.
+     */
+    _handleServerGameStart(data) {
+        if (!this.ctx || this.ctx.turn.state !== 'pre-start') return;
+        this._startRequestPending = false;
+        this.gameStartData = data || null;
+        this.ctx.gameStartData = this.gameStartData;
+        this.ctx.turnController.beginMatch();
+        this.events.emit('match-started');
+    }
+
+    /**
      * Se ejecuta en cada frame. Delega en el controlador de turnos la
      * actualización del contador del temporizador.
      */
     update() {
         this.ctx.turnController.update();
+    }
+
+    _onGameResize(gameSize) {
+        if (!gameSize) return;
+        const { width, height } = gameSize;
+        if (!width || !height) return;
+
+        this.layout = createBattleLayout(width, height, { usesGems: this.gameMode?.usesGems });
+        this.cardHandSize = this.layout.cardHand;
+        this.cardOpponentHandSize = this.layout.cardOpponentHand;
+        this.cardFieldSize = this.layout.cardField;
+
+        if (this.ctx) {
+            this.ctx.layout = this.layout;
+        }
+
+        if (!this.ctx?.renderer) return;
+
+        this.ctx.renderer.layout = this.layout;
+        this.ctx.renderer.cardHandSize = this.cardHandSize;
+        this.ctx.renderer.cardOpponentHandSize = this.cardOpponentHandSize;
+        this.ctx.renderer.cardFieldSize = this.cardFieldSize;
+        this.ctx.renderer.repositionAll(this.layout);
+
+        if (this.arena?.active) this.arena.destroy();
+        this.arena = createArena(this, {
+            width,
+            height,
+            depth: -0.4,
+            layout: this.layout,
+            photoKey: 'arena-photo'
+        });
+        this.board = this.arena;
+
+        if (this.bombs) {
+            this.bombs.stop();
+            this.bombs = new BattlefieldBombs(this, this.layout).start();
+        }
+
+        this.scene.get('UIScene')?.events?.emit('layout-resized', this.layout);
     }
 
     getObjectivesPayload() {

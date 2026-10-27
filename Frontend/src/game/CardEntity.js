@@ -23,7 +23,12 @@ export default class CardEntity {
     static create(definition, { owner = null, forceNewId = false } = {}) {
         if (!definition) return null;
         const instanceId = (!forceNewId && definition.instanceId) ? definition.instanceId : newId();
-        const entity = { ...definition, instanceId, health: CardHealthService.current(definition) };
+        const entity = {
+            ...definition,
+            instanceId,
+            maxHealth: CardHealthService.maxFor(definition),
+            health: CardHealthService.current(definition)
+        };
         if (owner) entity.owner = owner;
         return entity;
     }
@@ -54,9 +59,10 @@ export default class CardEntity {
             return null;
         }
         const fusedCard = CardEntity.create(definition);
-        fusedCard.health = secondCard
+        const percent = secondCard
             ? CardHealthService.fusionHealth(baseCard, secondCard)
-            : CardHealthService.current(baseCard);
+            : CardHealthService.percent(baseCard);
+        CardHealthService.setPercent(fusedCard, percent);
         return fusedCard;
     }
 

@@ -62,10 +62,10 @@ test('GameMatch.resolvePlayerAttack aplica daño por ventaja elemental', () => {
     const resolution = match.resolvePlayerAttack({ attackerIndex: 0, defenderIndex: 0 });
 
     assert.ok(resolution);
-    assert.equal(resolution.result.damage, 40);
-    assert.equal(resolution.result.defenderHealth, 60);
+    assert.equal(resolution.result.damage, 20);
+    assert.equal(resolution.result.defenderHealth, 80);
     assert.equal(resolution.result.winner, 'none');
-    assert.equal(match.opponent.field.get(0).health, 60);
+    assert.equal(match.opponent.field.get(0).health, 80);
     assert.equal(resolution.attackerIndex, 0);
     assert.equal(resolution.defenderIndex, 0);
 });
@@ -77,6 +77,18 @@ test('GameMatch.resolvePlayerAttack devuelve null fuera del turno del jugador', 
     place(match.opponent, 0, CARD_TYPES.PLANTA);
 
     assert.equal(match.resolvePlayerAttack({ attackerIndex: 0, defenderIndex: 0 }), null);
+});
+
+test('GameMatch.resolvePlayerAttack no aplica daño sin acciones disponibles', () => {
+    const match = makeMatch();
+    match.startPlayerTurn();
+    place(match.player, 0, CARD_TYPES.FUEGO);
+    place(match.opponent, 0, CARD_TYPES.PLANTA);
+    match.opponent.field.get(0).health = 100;
+    match.turn.playerActionsLeft = 0;
+
+    assert.equal(match.resolvePlayerAttack({ attackerIndex: 0, defenderIndex: 0 }), null);
+    assert.equal(match.opponent.field.get(0).health, 100);
 });
 
 test('GameMatch.markPlayerAttackConsumed marca la acción y agota Ráfaga', () => {

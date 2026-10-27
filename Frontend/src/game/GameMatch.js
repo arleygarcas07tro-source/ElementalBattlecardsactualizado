@@ -207,7 +207,7 @@ export default class GameMatch {
      * @returns {{result: object, attackerData: object, defenderData: object, attackerIndex: number, defenderIndex: number}|null}
      */
     resolvePlayerAttack({ attackerIndex, defenderIndex }) {
-        if (this.turn.state !== 'player-turn') return null;
+        if (this.turn.state !== 'player-turn' || !this.turn.canPlayerAct()) return null;
         const attackerData = this.player.field.get(attackerIndex);
         const defenderData = this.opponent.field.get(defenderIndex);
         if (!attackerData || !defenderData) return null;

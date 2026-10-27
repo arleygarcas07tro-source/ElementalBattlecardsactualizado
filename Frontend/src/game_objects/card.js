@@ -39,6 +39,7 @@ export default class Card extends Phaser.GameObjects.Sprite {
         this.type = cardData.type;
         this.level = cardData.level;
         this.elementColor = themeFor(this.type).color;
+        this.maxHealth = CardHealthService.maxFor(cardData);
         this.health = CardHealthService.ensure(cardData);
         this.isFaceDown = isFaceDown;
         this.gemBadge = null; // Distintivo de gema (nivel 3), si procede
@@ -187,6 +188,23 @@ export default class Card extends Phaser.GameObjects.Sprite {
         kill(this.selectedGlow); this.selectedGlow = null;
     }
 
+    setDisplaySize(width, height) {
+        super.setDisplaySize(width, height);
+        if (this.cardFrame) this.syncPresentation();
+        return this;
+    }
+
+    setTexture(key, frame, updateSize, updateOrigin) {
+        const hasFrame = Boolean(this.frame);
+        const displayWidth = hasFrame ? this.displayWidth : 0;
+        const displayHeight = hasFrame ? this.displayHeight : 0;
+        super.setTexture(key, frame, updateSize, updateOrigin);
+        if (displayWidth > 0 && displayHeight > 0) {
+            this.setDisplaySize(displayWidth, displayHeight);
+        }
+        return this;
+    }
+
     /** Mantiene marco, placa, sello, sombra y resplandor alineados con la carta. */
     syncPresentation() {
         const cx = this.x;
@@ -258,8 +276,9 @@ export default class Card extends Phaser.GameObjects.Sprite {
      * Es solo presentación: no altera posición ni escala (eso lo coordina
      * la escena), para no interferir con sus tweens.
      * @param {boolean} active
+     * @param {boolean} [animate=true]
      */
-    setSelectedVisual(active) {
+    setSelectedVisual(active, animate = true) {
         this.isSelected = !!active;
         if (!this.selectedGlow || !this.selectedGlow.scene) return;
         this.scene.tweens.killTweensOf(this.selectedGlow);
@@ -282,6 +301,10 @@ export default class Card extends Phaser.GameObjects.Sprite {
             if (this.cardFrame && this.cardFrame.scene) {
                 this.cardFrame.clearTint();
                 this.cardFrame.setBlendMode(Phaser.BlendModes.NORMAL);
+            }
+            if (!animate) {
+                this.selectedGlow.setAlpha(0);
+                return;
             }
             this.scene.tweens.add({
                 targets: this.selectedGlow,
@@ -314,33 +337,34 @@ export default class Card extends Phaser.GameObjects.Sprite {
     syncHealthIndicator() {
         if (!this.healthBar || !this.healthBar.scene || !this.healthText || !this.healthText.scene) return;
 
-        const health = CardHealthService.ensure(this.cardData);
+        const healthPercent = CardHealthService.percent(this.cardData);
         const cx = this.x;
         const cy = this.y;
         const u = Math.min(this.displayWidth / 132, this.displayHeight / 180);
         const left = cx - this.displayWidth / 2 + 7 * u;
         const top = cy - this.displayHeight / 2 + 6 * u;
+        const showHealth = this.visible && !this.isFaceDown;
 
-        this.healthText.setText(`${health}%`);
+        this.healthText.setText(`${healthPercent}%`);
         this.healthText.setPosition(left + 25 * u, top);
         this.healthText.setScale(u);
         this.healthText.setDepth(this.depth + 1.4);
-        this.healthText.setVisible(this.visible);
+        this.healthText.setVisible(showHealth);
         this.healthText.setAlpha(this.alpha);
 
         this.healthBar.setPosition(left, top + 17 * u);
         this.healthBar.setScale(u);
         this.healthBar.setDepth(this.depth + 1.3);
-        this.healthBar.setVisible(this.visible);
+        this.healthBar.setVisible(showHealth);
         this.healthBar.setAlpha(this.alpha);
 
-        if (this.renderedHealth !== health) {
-            const fillWidth = 46 * health / 100;
-            const fillColor = health > 60 ? 0x38e59a : health > 30 ? 0xffc857 : 0xff4f72;
+        if (this.renderedHealth !== healthPercent) {
+            const fillWidth = 46 * healthPercent / 100;
+            const fillColor = healthPercent > 60 ? 0x38e59a : healthPercent > 30 ? 0xffc857 : 0xff4f72;
             this.healthBar.clear();
             this.healthBar.fillStyle(0x05070e, 0.9).fillRoundedRect(0, 0, 46, 4, 2);
             this.healthBar.fillStyle(fillColor, 1).fillRoundedRect(0, 0, fillWidth, 4, 2);
-            this.renderedHealth = health;
+            this.renderedHealth = healthPercent;
         }
     }
 
